@@ -4,6 +4,8 @@ import PatcherClient from '@/components/PatcherClient';
 import { getGameBySlug, getTrainersForGame, getMappingsForTrainer } from '@/lib/supabase';
 import { Locale } from '@/lib/i18n';
 
+export const dynamic = 'force-dynamic';
+
 interface PatcherPageProps {
   params: Promise<{
     locale: string;

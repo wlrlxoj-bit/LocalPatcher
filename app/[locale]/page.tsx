@@ -3,6 +3,8 @@ import GamesListClient from '@/components/GamesListClient';
 import { getGames, getTrainersForGame } from '@/lib/supabase';
 import { Locale } from '@/lib/i18n';
 
+export const dynamic = 'force-dynamic';
+
 export default async function LocalePage({
   params,
 }: {
