@@ -109,13 +109,13 @@ export default function Header({ locale }: HeaderProps) {
           </div>
 
           {/* Sponsor Link Button */}
-          <a 
-            href="#" 
+          <Link 
+            href={`/${locale}/support`}
             className="hidden sm:flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-xs font-semibold text-indigo-400 hover:bg-indigo-500/20 transition-all duration-200"
           >
             <Heart className="w-3.5 h-3.5 fill-current" />
             <span>{t.sponsor}</span>
-          </a>
+          </Link>
 
           {/* Mobile Menu Button */}
           <button 
@@ -152,14 +152,14 @@ export default function Header({ locale }: HeaderProps) {
             >
               {t.aboutTab}
             </Link>
-            <a 
-              href="#" 
+            <Link 
+              href={`/${locale}/support`}
               onClick={() => setIsMobileMenuOpen(false)}
               className="flex items-center space-x-1 py-1.5 text-indigo-400 font-semibold"
             >
               <Heart className="w-4.5 h-4.5 fill-current mr-1" />
               <span>{t.sponsor}</span>
-            </a>
+            </Link>
           </nav>
         </div>
       )}

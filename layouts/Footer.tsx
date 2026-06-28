@@ -23,18 +23,18 @@ export default function Footer({ locale }: FooterProps) {
 
         {/* Right Side: Links */}
         <div className="flex flex-wrap gap-x-6 gap-y-2 justify-center md:justify-end min-w-[240px] text-slate-400">
-          <Link href={`/${locale}`} className="hover:text-slate-200 transition-colors">
+          <Link href={`/${locale}/terms`} className="hover:text-slate-200 transition-colors">
             {t.terms}
           </Link>
-          <Link href={`/${locale}`} className="hover:text-slate-200 transition-colors">
+          <Link href={`/${locale}/privacy`} className="hover:text-slate-200 transition-colors">
             {t.privacy}
           </Link>
-          <Link href={`/${locale}/guides`} className="hover:text-slate-200 transition-colors">
+          <Link href={`/${locale}/faq`} className="hover:text-slate-200 transition-colors">
             {t.faq}
           </Link>
-          <a href="#" className="hover:text-indigo-300 transition-colors text-indigo-400/90 font-semibold">
+          <Link href={`/${locale}/support`} className="hover:text-indigo-300 transition-colors text-indigo-400/90 font-semibold">
             {t.sponsor}
-          </a>
+          </Link>
         </div>
 
       </div>
