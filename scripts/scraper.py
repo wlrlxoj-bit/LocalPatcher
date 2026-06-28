@@ -387,7 +387,7 @@ def fetch_steam_meta(game_title: str):
     return default_meta
 
 def scrape_and_patch_trainer(post, db: Client):
-    """Scrapes specific trainer page, downloads binary, extracts offsets, and inserts to Supabase."""
+    """Scrapes specific trainer page, downloads binaries for ALL versions, extracts offsets, and inserts to Supabase."""
     print(f"[*] Processing: {post['title']} ({post['link']})")
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     
@@ -398,65 +398,21 @@ def scrape_and_patch_trainer(post, db: Client):
             
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Locate the download link (starts with /downloads/)
-        download_a = soup.select_one('a[href*="/downloads/"]')
+        # Locate all download links (starts with /downloads/)
+        download_anchors = soup.select('a[href*="/downloads/"]')
+        if not download_anchors:
+            print("[-] No download links found on page.")
+            return
+            
+        # Deduplicate URLs preserving order
+        seen_urls = set()
+        unique_downloads = []
+        for a in download_anchors:
+            url = a['href']
+            if url not in seen_urls:
+                seen_urls.add(url)
+                unique_downloads.append(a)
                 
-        if not download_a:
-            print("[-] No download link found on page.")
-            return
-            
-        download_url = download_a['href']
-        download_text = download_a.text.strip()
-        print(f"[+] Download link found: {download_url} ({download_text})")
-        
-        # Download binary bytes
-        dl_response = requests.get(download_url, headers=headers, timeout=30)
-        if dl_response.status_code != 200:
-            print("[-] Failed to download binary file.")
-            return
-            
-        file_bytes = dl_response.content
-        exe_bytes = None
-        
-        # Unzip if packaged
-        if download_url.endswith('.zip') or file_bytes[:2] == b'PK':
-            print("[*] Unzipping package to extract executable...")
-            with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
-                for name in z.namelist():
-                    if name.endswith('.exe'):
-                        exe_bytes = z.read(name)
-                        break
-        else:
-            exe_bytes = file_bytes
-            
-        if not exe_bytes or exe_bytes[:2] != b'MZ':
-            print("[-] Valid executable binary not found.")
-            return
-            
-        # Calculate file specs
-        original_file_size = len(exe_bytes)
-        original_file_hash = hashlib.sha256(exe_bytes).hexdigest()
-        print(f"[+] Size: {original_file_size} bytes, Hash: {original_file_hash}")
-        
-        # Parse PE header for security boundaries
-        text_section = parse_pe_binary(exe_bytes)
-        if not text_section:
-            print("[-] Executable parsing failed. Section boundaries mismatch.")
-            return
-            
-        # Scan cheat options string offset
-        mapping_details = scan_cheat_string_offset(exe_bytes)
-        if not mapping_details:
-            print("[-] Option labels buffer not found inside binary.")
-            return
-            
-        # Prevent Shellcode write block: verify mapping falls outside .text segment
-        text_start = text_section.PointerToRawData
-        text_end = text_start + text_section.SizeOfRawData
-        if text_start <= mapping_details['offset_dec'] < text_end:
-            print("[-] Security Warning: Mapping offset falls inside .text section. Operation blocked.")
-            return
-            
         # Check if game already exists in DB, otherwise insert new game
         game_res = db.table('games').select('id').eq('slug', post['slug']).execute()
         if game_res.data:
@@ -479,54 +435,111 @@ def scrape_and_patch_trainer(post, db: Client):
                 return
             game_id = insert_game.data[0]['id']
             
-        # Check if trainer version already exists
-        trainer_res = db.table('trainers').select('id').eq('original_file_hash', original_file_hash).execute()
-        if trainer_res.data:
-            print("[*] Trainer version already exists in database. Skipping.")
-            return
+        # Now process each version download link
+        for download_a in unique_downloads:
+            download_url = download_a['href']
+            download_text = download_a.text.strip()
+            print(f"[*] Version download link found: {download_url} ({download_text})")
             
-        # Parse version and option count from download link text for accuracy
-        # Example download_text: "Borderlands.4.v1.0-v1.8.1.Plus.45.Trainer-FLiNG"
-        v_match = re.search(r'v[0-9\.]+(?:-v[0-9\.]+)?', download_text)
-        version_str = v_match.group(0) if v_match else "v1.0"
-        
-        opt_match = re.search(r'Plus\.(\d+)', download_text)
-        option_count = int(opt_match.group(1)) if opt_match else 0
-        
-        final_version_str = f"{version_str} Plus {option_count}"
-        
-        # Insert Trainer specs
-        insert_trainer = db.table('trainers').insert({
-            'game_id': game_id,
-            'version_str': final_version_str,
-            'option_count': option_count,
-            'original_file_hash': original_file_hash,
-            'original_file_size': original_file_size,
-            'is_packed': False
-        }).execute()
-        
-        if not insert_trainer.data:
-            print("[-] Failed to insert trainer metadata.")
-            return
-        trainer_id = insert_trainer.data[0]['id']
-        
-        # Run translation engine
-        translated_text = process_translation_block(mapping_details['original_text'])
-        
-        # Write translation mappings to DB (instantly approved for automated site deployment)
-        db.table('translation_mappings').insert({
-            'trainer_id': trainer_id,
-            'offset_dec': mapping_details['offset_dec'],
-            'encoding': mapping_details['encoding'],
-            'original_text': mapping_details['original_text'],
-            'translated_text': translated_text,
-            'max_char_len': mapping_details['max_char_len'],
-            'language_code': 'ko',
-            'is_approved': True  # Instantly live approved
-        }).execute()
-        
-        print(f"[+] Successfully registered new trainer ID: {trainer_id} for Game ID: {game_id}!")
-        
+            try:
+                # Download binary bytes
+                dl_response = requests.get(download_url, headers=headers, timeout=30)
+                if dl_response.status_code != 200:
+                    print(f"[-] Failed to download binary from {download_url}")
+                    continue
+                    
+                file_bytes = dl_response.content
+                exe_bytes = None
+                
+                # Unzip if packaged
+                if download_url.endswith('.zip') or file_bytes[:2] == b'PK':
+                    print("[*] Unzipping package to extract executable...")
+                    with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
+                        for name in z.namelist():
+                            if name.endswith('.exe'):
+                                exe_bytes = z.read(name)
+                                break
+                else:
+                    exe_bytes = file_bytes
+                    
+                if not exe_bytes or exe_bytes[:2] != b'MZ':
+                    print("[-] Valid executable binary not found.")
+                    continue
+                    
+                # Calculate file specs
+                original_file_size = len(exe_bytes)
+                original_file_hash = hashlib.sha256(exe_bytes).hexdigest()
+                print(f"[+] Size: {original_file_size} bytes, Hash: {original_file_hash}")
+                
+                # Check if trainer version already exists in DB
+                trainer_res = db.table('trainers').select('id').eq('original_file_hash', original_file_hash).execute()
+                if trainer_res.data:
+                    print(f"[*] Trainer version {original_file_hash} already exists in database. Skipping.")
+                    continue
+                    
+                # Parse PE header for security boundaries
+                text_section = parse_pe_binary(exe_bytes)
+                if not text_section:
+                    print("[-] Executable parsing failed. Section boundaries mismatch.")
+                    continue
+                    
+                # Scan cheat options string offset
+                mapping_details = scan_cheat_string_offset(exe_bytes)
+                if not mapping_details:
+                    print("[-] Option labels buffer not found inside binary.")
+                    continue
+                    
+                # Prevent Shellcode write block: verify mapping falls outside .text segment
+                text_start = text_section.PointerToRawData
+                text_end = text_start + text_section.SizeOfRawData
+                if text_start <= mapping_details['offset_dec'] < text_end:
+                    print("[-] Security Warning: Mapping offset falls inside .text section. Operation blocked.")
+                    continue
+                    
+                # Parse version and option count from download link text for accuracy
+                v_match = re.search(r'v[0-9\.]+(?:-v[0-9\.]+)?', download_text)
+                version_str = v_match.group(0) if v_match else "v1.0"
+                
+                opt_match = re.search(r'Plus\.(\d+)', download_text)
+                option_count = int(opt_match.group(1)) if opt_match else 0
+                
+                final_version_str = f"{version_str} Plus {option_count}"
+                
+                # Insert Trainer specs
+                insert_trainer = db.table('trainers').insert({
+                    'game_id': game_id,
+                    'version_str': final_version_str,
+                    'option_count': option_count,
+                    'original_file_hash': original_file_hash,
+                    'original_file_size': original_file_size,
+                    'is_packed': False
+                }).execute()
+                
+                if not insert_trainer.data:
+                    print("[-] Failed to insert trainer metadata.")
+                    continue
+                trainer_id = insert_trainer.data[0]['id']
+                
+                # Run translation engine
+                translated_text = process_translation_block(mapping_details['original_text'])
+                
+                # Write translation mappings to DB (instantly approved for automated site deployment)
+                db.table('translation_mappings').insert({
+                    'trainer_id': trainer_id,
+                    'offset_dec': mapping_details['offset_dec'],
+                    'encoding': mapping_details['encoding'],
+                    'original_text': mapping_details['original_text'],
+                    'translated_text': translated_text,
+                    'max_char_len': mapping_details['max_char_len'],
+                    'language_code': 'ko',
+                    'is_approved': True  # Instantly live approved
+                }).execute()
+                
+                print(f"[+] Successfully registered new trainer ID: {trainer_id} for Game ID: {game_id}!")
+                
+            except Exception as e:
+                print(f"[-] Error processing download {download_url}: {e}")
+                
     except Exception as e:
         print(f"[-] Error processing page: {e}")
 
