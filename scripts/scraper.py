@@ -1,0 +1,407 @@
+import os
+import re
+import sys
+import hashlib
+import zipfile
+import io
+import requests
+from bs4 import BeautifulSoup
+import pefile
+from supabase import create_client, Client
+
+# Environment variables setup
+SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
+# Use Service Role Key for writing to DB securely in backend workflows, fallback to Anon Key
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+
+# Dictionary of common trainer translations for cost-free instant translation mapping
+COMMON_TRANSLATIONS = {
+    "infinite health": "무한 체력",
+    "infinite hp": "무한 체력",
+    "infinite stamina": "무한 스태미나",
+    "infinite items/ammo": "무한 아이템/탄약",
+    "items won't decrease": "아이템 감소 방지",
+    "healing items no cooldown": "회복 아이템 쿨타임 제거",
+    "grenades no cooldown": "수류탄 쿨타임 제거",
+    "no reload": "재장전 없음",
+    "super accuracy": "초정밀 사격",
+    "no recoil": "반동 없음",
+    "one hit kill": "원샷원킬",
+    "damage multiplier": "데미지 배율 설정",
+    "defense multiplier": "방어력 배율 설정",
+    "stealth mode": "은신 모드",
+    "edit money": "보유 돈 편집",
+    "infinite xp": "무한 경험치",
+    "xp multiplier": "경험치 획득 배율",
+    "infinite street cred": "무한 길거리 평판",
+    "street cred multiplier": "길거리 평판 배율",
+    "max skill xp/progression": "스킬 레벨 최대화 (진행도)",
+    "skill xp multiplier": "스킬 경험치 배율",
+    "edit attribute points": "특성 포인트 편집",
+    "edit perk points": "특전 포인트 편집",
+    "edit relic points": "릴릭 포인트 편집",
+    "ignore cyberware capacity": "사이버웨어 용량 제한 무시",
+    "set game speed": "게임 속도 조절",
+    "infinite ram": "무한 RAM",
+    "freeze breach protocol timer": "침투 프로토콜 타이머 고정",
+    "infinite components": "무한 제작 부품",
+    "infinite quickhack components": "무한 퀵핵 부품",
+    "edit max carrying weight": "최대 휴대 용량 편집",
+    "set movement speed": "이동 속도 설정",
+    "super jump": "슈퍼 점프",
+    "infinite double jumps": "무한 이단 점프",
+    "edit player level": "플레이어 레벨 편집",
+    "edit street cred level": "길거리 평판 레벨 편집",
+    "freeze daytime": "시간 흐름 고정",
+    "daytime +1 hour": "시간 1시간 전진",
+    "god mode/ignore hits": "갓 모드/피격 무시",
+    "infinite fp": "무한 FP",
+    "zero weight": "무게 제로",
+    "infinite item usage": "무한 아이템 사용",
+    "100% drop rate": "드롭율 100%",
+    "immune to all negative status": "모든 디버프 면역",
+    "super damage/one hit kill": "슈퍼 데미지/원샷원킬",
+    "infinite horse hp": "무한 탈것 HP",
+    "edit runes": "룬 편집",
+    "runes multiplier": "룬 획득 배율",
+    "won't lose runes when player dies": "사망 시 룬 분실 방지",
+    "enable fly mode": "비행 모드 활성화",
+    "fly up": "비행 상승",
+    "fly down": "비행 하강",
+    "freeze enemies position": "적 위치 고정",
+    "edit level": "레벨 에디트",
+    "edit vigor": "생명력 에디트",
+    "edit mind": "정신력 에디트",
+    "edit endurance": "지구력 에디트",
+    "edit strength": "근력 에디트",
+    "edit dexterity": "기량 에디트",
+    "edit intelligence": "지력 에디트",
+    "edit faith": "신앙 에디트",
+    "edit arcane": "신비 에디트",
+    "edit max hp": "최대 HP 에디트",
+    "edit max fp": "최대 FP 에디트",
+    "edit max stamina": "최대 스태미나 에디트",
+    "edit player stats": "스탯 에디터",
+    "check for updates": "업데이트 확인"
+}
+
+def translate_line(line: str) -> str:
+    """Translates a single cheat label line using dictionary mappings."""
+    # Pattern to parse: "Num 1 - Infinite Health **Note"
+    pattern = r"^([a-zA-Z0-9\+\s\.\-\*\/↑↓←→]+)\s*-\s*([^\*]+)(.*)$"
+    match = re.match(pattern, line.strip())
+    if not match:
+        return line  # Keep headers or notes as-is
+    
+    hotkey = match.group(1).strip()
+    label = match.group(2).strip()
+    notes = match.group(3).strip()
+    
+    # Try translating label
+    label_lower = label.lower().replace("'", "").strip()
+    translated_label = COMMON_TRANSLATIONS.get(label_lower, label)
+    
+    # Simple notes translation lookup
+    translated_notes = ""
+    if notes:
+        # Check if notes contains common patterns
+        notes_lower = notes.lower()
+        if "takes effect" in notes_lower:
+            translated_notes = " **효과 적용 시 수치가 갱신됩니다."
+        elif "activate before" in notes_lower:
+            translated_notes = " **사용하기 전에 활성화하십시오."
+        else:
+            translated_notes = notes # Fallback to original notes if not matched
+            
+    return f"{hotkey} - {translated_label}{translated_notes}"
+
+def process_translation_block(text: str) -> str:
+    """Splits a multi-line options string, translates each line, and pads with spaces to preserve length."""
+    lines = text.split("\n")
+    translated_lines = []
+    
+    for line in lines:
+        if not line:
+            translated_lines.append("")
+            continue
+        
+        orig_len = len(line)
+        trans_line = translate_line(line)
+        
+        # Apply Space Padding to synchronize string length in bytes/chars
+        if len(trans_line) < orig_len:
+            trans_line += " " * (orig_len - len(trans_line))
+        elif len(trans_line) > orig_len:
+            # Safely truncate to prevent adjacent memory override (Buffer Overflow protection)
+            trans_line = trans_line[:orig_len]
+            
+        translated_lines.append(trans_line)
+        
+    return "\n".join(translated_lines)
+
+def parse_pe_binary(exe_bytes: bytes):
+    """Parses PE header to verify safety and extract .text section boundaries."""
+    try:
+        pe = pefile.PE(data=exe_bytes)
+        text_section = None
+        for section in pe.sections:
+            if b'.text' in section.Name:
+                text_section = section
+                break
+        return text_section
+    except Exception as e:
+        print(f"[-] PE Header parsing failed: {e}")
+        return None
+
+def scan_cheat_string_offset(exe_bytes: bytes):
+    """Scans binary to detect the offset, encoding, and capacity of the hotkey options block."""
+    # Look for hotkey signatures in both UTF-16LE and ASCII formats
+    patterns = {
+        'UTF-16LE': b'N\x00u\x00m\x00 \x001\x00 \x00-\x00',
+        'ASCII': b'Num 1 -'
+    }
+    
+    for encoding, pattern in patterns.items():
+        offset = exe_bytes.find(pattern)
+        if offset != -1:
+            print(f"[+] Found hotkey signature pattern in {encoding} at offset {offset}")
+            
+            # Trace backwards to locate start of string (usually preceded by double newlines or nulls)
+            start_offset = offset
+            limit = max(0, offset - 1000)
+            
+            if encoding == 'UTF-16LE':
+                # Trace back UTF-16LE newlines \n\n (\n is \n\x00)
+                while start_offset > limit:
+                    if exe_bytes[start_offset:start_offset+4] == b'\n\x00\n\x00':
+                        start_offset += 4
+                        break
+                    start_offset -= 2
+            else:
+                while start_offset > limit:
+                    if exe_bytes[start_offset:start_offset+2] == b'\n\n':
+                        start_offset += 2
+                        break
+                    start_offset -= 1
+            
+            # Trace forwards to calculate total string capacity/buffer limit
+            end_offset = offset
+            max_limit = min(len(exe_bytes), offset + 8000)
+            
+            if encoding == 'UTF-16LE':
+                while end_offset < max_limit:
+                    # Check for double null terminal block
+                    if exe_bytes[end_offset:end_offset+4] == b'\x00\x00\x00\x00':
+                        break
+                    end_offset += 2
+            else:
+                while end_offset < max_limit:
+                    if exe_bytes[end_offset:end_offset+2] == b'\x00\x00':
+                        break
+                    end_offset += 1
+                    
+            max_char_len = (end_offset - start_offset) // (2 if encoding == 'UTF-16LE' else 1)
+            raw_bytes = exe_bytes[start_offset:end_offset]
+            original_text = raw_bytes.decode(encoding, errors='ignore')
+            
+            return {
+                'offset_dec': start_offset,
+                'encoding': encoding,
+                'max_char_len': max_char_len,
+                'original_text': original_text
+            }
+            
+    return None
+
+def fetch_recent_trainers():
+    """Scrapes FLiNG home page to detect recently posted/updated trainers."""
+    url = "https://flingtrainer.com/"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code != 200:
+            print(f"[-] Failed to scrape FLiNG index page: {response.status_code}")
+            return []
+            
+        soup = BeautifulSoup(response.text, 'html.parser')
+        trainer_posts = []
+        
+        # Scrape post title links
+        for a in soup.select('h2.entry-title a'):
+            title = a.text.strip()
+            link = a['href']
+            # Match games like "Cyberpunk 2077 v2.0 Trainer"
+            if "trainer" in link:
+                slug = link.split('/')[-2].replace("-trainer", "")
+                trainer_posts.append({
+                    'title': title,
+                    'link': link,
+                    'slug': slug
+                })
+        return trainer_posts
+    except Exception as e:
+        print(f"[-] Error scraping FLiNG feed: {e}")
+        return []
+
+def scrape_and_patch_trainer(post, db: Client):
+    """Scrapes specific trainer page, downloads binary, extracts offsets, and inserts to Supabase."""
+    print(f"[*] Processing: {post['title']} ({post['link']})")
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    
+    try:
+        response = requests.get(post['link'], headers=headers, timeout=10)
+        if response.status_code != 200:
+            return
+            
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Locate the attachment download link (e.g. .zip or .exe)
+        download_a = None
+        for a in soup.select('ul.attachment-list a'):
+            if ".zip" in a['href'] or ".exe" in a['href']:
+                download_a = a
+                break
+                
+        if not download_a:
+            print("[-] No download link found on page.")
+            return
+            
+        download_url = download_a['href']
+        print(f"[+] Download link found: {download_url}")
+        
+        # Download binary bytes
+        dl_response = requests.get(download_url, headers=headers, timeout=30)
+        if dl_response.status_code != 200:
+            print("[-] Failed to download binary file.")
+            return
+            
+        file_bytes = dl_response.content
+        exe_bytes = None
+        
+        # Unzip if packaged
+        if download_url.endswith('.zip') or file_bytes[:2] == b'PK':
+            print("[*] Unzipping package to extract executable...")
+            with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
+                for name in z.namelist():
+                    if name.endswith('.exe'):
+                        exe_bytes = z.read(name)
+                        break
+        else:
+            exe_bytes = file_bytes
+            
+        if not exe_bytes or exe_bytes[:2] != b'MZ':
+            print("[-] Valid executable binary not found.")
+            return
+            
+        # Calculate file specs
+        original_file_size = len(exe_bytes)
+        original_file_hash = hashlib.sha256(exe_bytes).hexdigest()
+        print(f"[+] Size: {original_file_size} bytes, Hash: {original_file_hash}")
+        
+        # Parse PE header for security boundaries
+        text_section = parse_pe_binary(exe_bytes)
+        if not text_section:
+            print("[-] Executable parsing failed. Section boundaries mismatch.")
+            return
+            
+        # Scan cheat options string offset
+        mapping_details = scan_cheat_string_offset(exe_bytes)
+        if not mapping_details:
+            print("[-] Option labels buffer not found inside binary.")
+            return
+            
+        # Prevent Shellcode write block: verify mapping falls outside .text segment
+        text_start = text_section.PointerToRawData
+        text_end = text_start + text_section.SizeOfRawData
+        if text_start <= mapping_details['offset_dec'] < text_end:
+            print("[-] Security Warning: Mapping offset falls inside .text section. Operation blocked.")
+            return
+            
+        # Check if game already exists in DB, otherwise insert new game
+        game_res = db.table('games').select('id').eq('slug', post['slug']).execute()
+        if game_res.data:
+            game_id = game_res.data[0]['id']
+        else:
+            # Create new game meta row
+            title_ko = post['title'].split('Trainer')[0].strip()
+            # Fetch default Steam cover template using clean Search
+            steam_appid = "1091500" # fallback to cyberpunk cover if appid unknown, or scrape Steam
+            cover_url = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{steam_appid}/header.jpg"
+            
+            insert_game = db.table('games').insert({
+                'title_en': post['title'].split('Trainer')[0].strip(),
+                'title_ko': title_ko,
+                'slug': post['slug'],
+                'cover_image_url': cover_url,
+                'anti_cheat': 'none',
+                'fling_url': post['link']
+            }).execute()
+            if not insert_game.data:
+                print("[-] Failed to create game meta.")
+                return
+            game_id = insert_game.data[0]['id']
+            
+        # Check if trainer version already exists
+        trainer_res = db.table('trainers').select('id').eq('original_file_hash', original_file_hash).execute()
+        if trainer_res.data:
+            print("[*] Trainer version already exists in database. Skipping.")
+            return
+            
+        # Parse version string from post title
+        version_match = re.search(r'v[0-9\.]+(?:-v[0-9\.]+)?\s+Plus\s+\d+', post['title'])
+        version_str = version_match.group(0) if version_match else "Plus " + str(post['title'].split('Plus')[-1].split(' ')[1])
+        
+        # Insert Trainer specs
+        insert_trainer = db.table('trainers').insert({
+            'game_id': game_id,
+            'version_str': version_str,
+            'original_file_hash': original_file_hash,
+            'original_file_size': original_file_size,
+            'is_packed': False
+        }).execute()
+        
+        if not insert_trainer.data:
+            print("[-] Failed to insert trainer metadata.")
+            return
+        trainer_id = insert_trainer.data[0]['id']
+        
+        # Run translation engine
+        translated_text = process_translation_block(mapping_details['original_text'])
+        
+        # Write translation mappings to DB (pending admin approval for SEO filter safety)
+        db.table('translation_mappings').insert({
+            'trainer_id': trainer_id,
+            'offset_dec': mapping_details['offset_dec'],
+            'encoding': mapping_details['encoding'],
+            'original_text': mapping_details['original_text'],
+            'translated_text': translated_text,
+            'max_char_len': mapping_details['max_char_len'],
+            'language_code': 'ko',
+            'is_approved': False # Requires admin approval before going live
+        }).execute()
+        
+        print(f"[+] Successfully registered new trainer ID: {trainer_id} for Game ID: {game_id}!")
+        
+    except Exception as e:
+        print(f"[-] Error processing page: {e}")
+
+def main():
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("[-] Supabase environment credentials not configured.")
+        sys.exit(1)
+        
+    db: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    print("[*] Scraper pipeline initialized. Monitoring FLiNG feed...")
+    
+    posts = fetch_recent_trainers()
+    if not posts:
+        print("[-] No new updates found.")
+        return
+        
+    # Process the most recent updates
+    for post in posts[:3]:
+        scrape_and_patch_trainer(post, db)
+
+if __name__ == "__main__":
+    main()
