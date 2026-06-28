@@ -39,15 +39,6 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
     setVisibleCount(18);
   }, [searchQuery]);
 
-  // Filter games based on search query (checks both English and Korean titles)
-  const filteredGames = games.filter(game => {
-    const query = searchQuery.toLowerCase();
-    return (
-      game.title_en.toLowerCase().includes(query) ||
-      game.title_ko.toLowerCase().includes(query)
-    );
-  });
-
   // Find the trainer for a specific game
   const getTrainerInfo = (gameId: number) => {
     const trainer = trainers.find(t => t.game_id === gameId);
@@ -56,6 +47,16 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
       count: trainer?.option_count || 0
     };
   };
+
+  // Filter games based on search query (checks both English and Korean titles) and option count
+  const filteredGames = games.filter(game => {
+    const query = searchQuery.toLowerCase();
+    return (
+      getTrainerInfo(game.id).count > 0 &&
+      (game.title_en.toLowerCase().includes(query) ||
+       game.title_ko.toLowerCase().includes(query))
+    );
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-12 flex flex-col items-center">

@@ -130,106 +130,141 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
       )}
 
       {/* Main Patcher Area */}
-      {selectedTrainer ? (
-        <div className="space-y-6">
-          {locale !== 'ko' && (
-            <div className="w-full p-4 rounded-xl border border-amber-500/20 bg-amber-950/20 text-amber-400 text-xs sm:text-sm flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-              <div>
-                {locale === 'ja' ? (
-                  "【翻訳対応言語に関するお知らせ】現在、パッチによる翻訳は「韓国語(ko)」のみサポートされています。本ページでパッチを適用すると、トレーナーのテキストが韓国語に翻訳されます。日本語は今後対応予定です。"
-                ) : (
-                  "【Translation Support Notice】Currently, the translation patch only supports Korean (ko). Applying the patch on this trainer will localize the option descriptions into Korean. Japanese and other languages are planned for future updates."
+      {selectedTrainer ? (() => {
+        const isUnpatchable = selectedTrainer.option_count === 0 || (mappingsMap[selectedTrainer.id] || []).length === 0;
+        return (
+          <div className="space-y-6">
+            {isUnpatchable ? (
+              <div className="w-full p-6 rounded-xl border border-rose-500/25 bg-rose-950/15 text-rose-300 flex flex-col md:flex-row items-center md:items-start gap-4 shadow-[0_0_30px_rgba(244,63,94,0.05)]">
+                <AlertTriangle className="w-8 h-8 shrink-0 text-rose-500 mt-0.5" />
+                <div className="flex-1 text-center md:text-left">
+                  <h3 className="font-bold text-lg text-white mb-2 font-outfit">
+                    {locale === 'ko' ? '한글 패치 미지원 안내' : locale === 'ja' ? 'パッチ非対応のお知らせ' : 'Patch Unavailable Notice'}
+                  </h3>
+                  <p className="text-sm leading-relaxed text-rose-200/80 mb-4">
+                    {locale === 'ko' 
+                      ? '본 게임의 트레이너는 내부 리소스가 압축 및 암호화(난독화)되어 있어 현재 웹상에서 한글 패치를 적용할 수 없습니다. 대신 공식 영문판 트레이너를 이용해 주시기 바랍니다.' 
+                      : locale === 'ja' 
+                        ? '本ゲームのトレーナーはリソースが暗号化されているため、韓国語パッチを適用できません。公式の英語版をご利用ください。' 
+                        : 'This trainer is encrypted/compressed and currently cannot be patched into Korean. Please download and use the official English version.'}
+                  </p>
+                  <a
+                    href={game.fling_url || 'https://flingtrainer.com/'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center bg-rose-500 hover:bg-rose-600 text-white font-bold px-4 py-2 rounded-xl shadow-lg shadow-rose-500/20 transition-all duration-200"
+                  >
+                    {locale === 'ko' 
+                      ? 'FLiNG 공식 다운로드 페이지 이동 ↗' 
+                      : locale === 'ja' 
+                        ? 'FLiNG公式ダウンロードへ ↗' 
+                        : 'Go to FLiNG Official Download ↗'}
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <>
+                {locale !== 'ko' && (
+                  <div className="w-full p-4 rounded-xl border border-amber-500/20 bg-amber-950/20 text-amber-400 text-xs sm:text-sm flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+                    <div>
+                      {locale === 'ja' ? (
+                        "【翻訳対応言語に関するお知らせ】現在、パッチによる翻訳は「韓国語(ko)」のみサポートされています。本ページでパッチを適用すると、トレーナーのテキストが韓国語に翻訳されます。日本語は今後対応予定です。"
+                      ) : (
+                        "【Translation Support Notice】Currently, the translation patch only supports Korean (ko). Applying the patch on this trainer will localize the option descriptions into Korean. Japanese and other languages are planned for future updates."
+                      )}
+                    </div>
+                  </div>
                 )}
+
+                <DropZone 
+                  locale={locale} 
+                  trainer={selectedTrainer} 
+                  allTrainers={trainers}
+                  mappingsMap={mappingsMap}
+                  onTrainerDetected={handleTrainerDetected}
+                />
+              </>
+            )}
+
+            {/* Quick instructions */}
+            <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/10 text-xs text-slate-400">
+              <h5 className="font-bold text-slate-300 uppercase tracking-wider mb-2">
+                {locale === 'ko' ? '작동 가이드 (Quick Help)' : locale === 'ja' ? '操作ガイド (Quick Help)' : 'Quick Help'}
+              </h5>
+              {locale === 'ja' ? (
+                <ul className="space-y-1.5 list-decimal list-inside leading-relaxed text-slate-400">
+                  <li>対象バージョンに適合する FLiNG のオリジナル実行ファイル(.exe)を用意します。</li>
+                  <li>用意した実行ファイルを上の点線エリア(ドロップゾーン)にドラッグ＆ドロップします。</li>
+                  <li>パッチ適用完了後、有効化されたダウンロードボタンをクリックして保存します。</li>
+                  <li>ダウンロードされた ZIP ファイルはウイルス誤検出およびダウンロード強制削除を防止するため、解凍パスワード <strong className="text-amber-400 font-mono">11111111</strong> が設定されています。解凍後に実行してください。</li>
+                </ul>
+              ) : locale === 'en' ? (
+                <ul className="space-y-1.5 list-decimal list-inside leading-relaxed text-slate-400">
+                  <li>Prepare the original FLiNG trainer executable (.exe) corresponding to the version.</li>
+                  <li>Drag & drop the executable into the dotted box (Drop Zone) above.</li>
+                  <li>Click the download button enabled after successful verification to save the file.</li>
+                  <li>The downloaded ZIP file is protected with password <strong className="text-amber-400 font-mono">11111111</strong> to prevent immediate antivirus quarantine.</li>
+                </ul>
+              ) : (
+                <ul className="space-y-1.5 list-decimal list-inside leading-relaxed text-slate-400">
+                  <li>해당 버전에 맞는 FLiNG 원본 실행 파일(.exe)을 준비합니다.</li>
+                  <li>준비한 실행 파일을 위의 점선 영역(드롭존)에 드래그 앤 드롭합니다.</li>
+                  <li>해시 검증 및 패치 성공 시 활성화되는 다운로드 버튼을 눌러 저장합니다.</li>
+                  <li>다운로드된 ZIP 파일은 백신 오진 방지를 위해 비밀번호 <strong className="text-amber-400 font-mono">11111111</strong>이 걸려 있습니다. 압축 해제 후 가동하십시오.</li>
+                </ul>
+              )}
+            </div>
+
+            {/* Supported Trainer Builds */}
+            <div className="p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.05)]">
+              <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent"></div>
+              
+              <h5 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
+                지원하는 트레이너 빌드 목록 (Supported Trainer Builds)
+              </h5>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-[11px] text-slate-500 uppercase tracking-wider font-mono">
+                      <th className="py-3 px-4 font-semibold">빌드 버전 (Build Version)</th>
+                      <th className="py-3 px-4 font-semibold">예상 파일 크기 (File Size)</th>
+                      <th className="py-3 px-4 font-semibold text-center">치트 옵션 수 (Option Count)</th>
+                      <th className="py-3 px-4 font-semibold text-right">상태 (Status)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50 text-xs">
+                    {trainers.map((t) => (
+                      <tr key={t.id} className="hover:bg-slate-800/10 transition-colors group">
+                        <td className="py-3.5 px-4 font-semibold text-slate-300 group-hover:text-cyan-400 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-600 font-mono text-[10px] bg-slate-800/40 px-1.5 py-0.5 rounded">ID: {t.id}</span>
+                            <span>{t.version_str}</span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-400 font-mono">
+                          {t.original_file_size ? `${(t.original_file_size / 1024 / 1024).toFixed(2)} MB` : 'N/A'}
+                        </td>
+                        <td className="py-3.5 px-4 text-center text-slate-400 font-mono">
+                          {t.option_count ? `${t.option_count}개 치트` : 'N/A'}
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.05)]">
+                            ✅ 자동 감지 가능
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-          )}
 
-          <DropZone 
-            locale={locale} 
-            trainer={selectedTrainer} 
-            allTrainers={trainers}
-            mappingsMap={mappingsMap}
-            onTrainerDetected={handleTrainerDetected}
-          />
-
-          {/* Quick instructions */}
-          <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/10 text-xs text-slate-400">
-            <h5 className="font-bold text-slate-300 uppercase tracking-wider mb-2">
-              {locale === 'ko' ? '작동 가이드 (Quick Help)' : locale === 'ja' ? '操作ガイド (Quick Help)' : 'Quick Help'}
-            </h5>
-            {locale === 'ja' ? (
-              <ul className="space-y-1.5 list-decimal list-inside leading-relaxed text-slate-400">
-                <li>対象バージョンに適合する FLiNG のオリジナル実行ファイル(.exe)を用意します。</li>
-                <li>用意した実行ファイルを上の点線エリア(ドロップゾーン)にドラッグ＆ドロップします。</li>
-                <li>パッチ適用完了後、有効化されたダウンロードボタンをクリックして保存します。</li>
-                <li>ダウンロードされた ZIP ファイルはウイルス誤検出およびダウンロード強制削除を防止するため、解凍パスワード <strong className="text-amber-400 font-mono">11111111</strong> が設定されています。解凍後に実行してください。</li>
-              </ul>
-            ) : locale === 'en' ? (
-              <ul className="space-y-1.5 list-decimal list-inside leading-relaxed text-slate-400">
-                <li>Prepare the original FLiNG trainer executable (.exe) corresponding to the version.</li>
-                <li>Drag & drop the executable into the dotted box (Drop Zone) above.</li>
-                <li>Click the download button enabled after successful verification to save the file.</li>
-                <li>The downloaded ZIP file is protected with password <strong className="text-amber-400 font-mono">11111111</strong> to prevent immediate antivirus quarantine.</li>
-              </ul>
-            ) : (
-              <ul className="space-y-1.5 list-decimal list-inside leading-relaxed text-slate-400">
-                <li>해당 버전에 맞는 FLiNG 원본 실행 파일(.exe)을 준비합니다.</li>
-                <li>준비한 실행 파일을 위의 점선 영역(드롭존)에 드래그 앤 드롭합니다.</li>
-                <li>해시 검증 및 패치 성공 시 활성화되는 다운로드 버튼을 눌러 저장합니다.</li>
-                <li>다운로드된 ZIP 파일은 백신 오진 방지를 위해 비밀번호 <strong className="text-amber-400 font-mono">11111111</strong>이 걸려 있습니다. 압축 해제 후 가동하십시오.</li>
-              </ul>
-            )}
           </div>
-
-          {/* Supported Trainer Builds */}
-          <div className="p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.05)]">
-            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent"></div>
-            
-            <h5 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
-              지원하는 트레이너 빌드 목록 (Supported Trainer Builds)
-            </h5>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-800 text-[11px] text-slate-500 uppercase tracking-wider font-mono">
-                    <th className="py-3 px-4 font-semibold">빌드 버전 (Build Version)</th>
-                    <th className="py-3 px-4 font-semibold">예상 파일 크기 (File Size)</th>
-                    <th className="py-3 px-4 font-semibold text-center">치트 옵션 수 (Option Count)</th>
-                    <th className="py-3 px-4 font-semibold text-right">상태 (Status)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/50 text-xs">
-                  {trainers.map((t) => (
-                    <tr key={t.id} className="hover:bg-slate-800/10 transition-colors group">
-                      <td className="py-3.5 px-4 font-semibold text-slate-300 group-hover:text-cyan-400 transition-colors">
-                        <div className="flex items-center gap-2">
-                          <span className="text-slate-600 font-mono text-[10px] bg-slate-800/40 px-1.5 py-0.5 rounded">ID: {t.id}</span>
-                          <span>{t.version_str}</span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-400 font-mono">
-                        {t.original_file_size ? `${(t.original_file_size / 1024 / 1024).toFixed(2)} MB` : 'N/A'}
-                      </td>
-                      <td className="py-3.5 px-4 text-center text-slate-400 font-mono">
-                        {t.option_count ? `${t.option_count}개 치트` : 'N/A'}
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.05)]">
-                          ✅ 자동 감지 가능
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-        </div>
-      ) : (
+        );
+      })() : (
         <div className="py-12 text-center text-slate-500">
           이 게임에 대한 사용 가능한 트레이너 버전이 등록되지 않았습니다.
         </div>
