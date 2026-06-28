@@ -5,6 +5,8 @@ import json
 import hashlib
 import zipfile
 import io
+import argparse
+import subprocess
 import requests
 from bs4 import BeautifulSoup
 import pefile
@@ -420,7 +422,7 @@ def fetch_steam_meta(game_title: str):
         print(f"[-] Steam search failed: {e}")
     return default_meta
 
-def scrape_and_patch_trainer(post, db: Client):
+def scrape_and_patch_trainer(post, db: Client, force=False):
     """Scrapes specific trainer page, downloads binaries for ALL versions, extracts offsets, and inserts to Supabase."""
     print(f"[*] Processing: {post['title']} ({post['link']})")
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -485,7 +487,7 @@ def scrape_and_patch_trainer(post, db: Client):
                 file_bytes = dl_response.content
                 exe_bytes = None
                 
-                # Unzip if packaged
+                # Unzip/unrar if packaged
                 if download_url.endswith('.zip') or file_bytes[:2] == b'PK':
                     print("[*] Unzipping package to extract executable...")
                     with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
@@ -493,6 +495,38 @@ def scrape_and_patch_trainer(post, db: Client):
                             if name.endswith('.exe'):
                                 exe_bytes = z.read(name)
                                 break
+                elif file_bytes.startswith(b'Rar!') or download_url.endswith('.rar'):
+                    print("[*] Unraring package to extract executable...")
+                    unrar_path = None
+                    if os.path.exists("UnRAR.exe"):
+                        unrar_path = "UnRAR.exe"
+                    elif os.path.exists("../UnRAR.exe"):
+                        unrar_path = "../UnRAR.exe"
+                    
+                    if not unrar_path:
+                        print("[-] Warning: UnRAR.exe not found. Skipping trainer.")
+                        continue
+                    
+                    try:
+                        with open("temp_trainer.rar", "wb") as f:
+                            f.write(file_bytes)
+                        subprocess.run([unrar_path, "e", "-y", "-inul", "temp_trainer.rar", "*.exe"], check=True)
+                        extracted_exe = None
+                        for fname in os.listdir("."):
+                            if fname.lower().endswith(".exe") and fname.lower() not in ["unrar.exe", "unrarw64.exe"]:
+                                extracted_exe = fname
+                                break
+                        if extracted_exe:
+                            with open(extracted_exe, "rb") as f:
+                                exe_bytes = f.read()
+                            os.remove(extracted_exe)
+                        else:
+                            print("[-] Extracted executable not found.")
+                    except Exception as e:
+                        print(f"[-] RAR extraction failed: {e}")
+                    finally:
+                        if os.path.exists("temp_trainer.rar"):
+                            os.remove("temp_trainer.rar")
                 else:
                     exe_bytes = file_bytes
                     
@@ -508,8 +542,14 @@ def scrape_and_patch_trainer(post, db: Client):
                 # Check if trainer version already exists in DB
                 trainer_res = db.table('trainers').select('id').eq('original_file_hash', original_file_hash).execute()
                 if trainer_res.data:
-                    print(f"[*] Trainer version {original_file_hash} already exists in database. Skipping.")
-                    continue
+                    if not force:
+                        print(f"[*] Trainer version {original_file_hash} already exists in database. Skipping.")
+                        continue
+                    else:
+                        trainer_id = trainer_res.data[0]['id']
+                        print(f"    [*] Force mode: deleting existing mappings and trainer ID {trainer_id} to overwrite...")
+                        db.table('translation_mappings').delete().eq('trainer_id', trainer_id).execute()
+                        db.table('trainers').delete().eq('id', trainer_id).execute()
                     
                 # Parse PE header for security boundaries
                 text_section = parse_pe_binary(exe_bytes)
@@ -578,12 +618,16 @@ def scrape_and_patch_trainer(post, db: Client):
         print(f"[-] Error processing page: {e}")
 
 def main():
+    parser = argparse.ArgumentParser(description="FLiNG Trainer Scraper Pipeline")
+    parser.add_argument("--force", action="store_true", help="Force re-processing and overwriting of existing trainers")
+    args = parser.parse_args()
+    
     if not SUPABASE_URL or not SUPABASE_KEY:
         print("[-] Supabase environment credentials not configured.")
         sys.exit(1)
         
     db: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-    print("[*] Scraper pipeline initialized. Monitoring FLiNG feed...")
+    print(f"[*] Scraper pipeline initialized (Force: {args.force}). Monitoring FLiNG feed...")
     
     # Load dynamic dictionary from Supabase
     try:
@@ -602,7 +646,7 @@ def main():
         
     # Process the most recent updates
     for post in posts[:3]:
-        scrape_and_patch_trainer(post, db)
+        scrape_and_patch_trainer(post, db, force=args.force)
 
 if __name__ == "__main__":
     main()

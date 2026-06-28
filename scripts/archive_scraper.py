@@ -7,6 +7,7 @@ import hashlib
 import zipfile
 import io
 import argparse
+import subprocess
 import requests
 from bs4 import BeautifulSoup
 import pefile
@@ -362,7 +363,7 @@ def fetch_sitemap_trainer_urls():
     urls = re.findall(r'<loc>(https://flingtrainer.com/trainer/[^<]+)</loc>', response.text)
     return urls
 
-def process_archive_trainer(game_url, db: Client, delay_sec=1.0):
+def process_archive_trainer(game_url, db: Client, delay_sec=1.0, force=False):
     """Scrapes game trainer page, extracts all download links, downloads and registers them."""
     slug = game_url.rstrip('/').split('/')[-1]
     title_raw = slug.replace('-trainer', '').replace('-', ' ').title()
@@ -399,7 +400,7 @@ def process_archive_trainer(game_url, db: Client, delay_sec=1.0):
             game_id = game_res.data[0]['id']
             # Optimization: check if all versions are already registered in the DB
             db_trainers = db.table('trainers').select('id').eq('game_id', game_id).execute()
-            if len(db_trainers.data) >= len(unique_downloads):
+            if not force and len(db_trainers.data) >= len(unique_downloads):
                 print(f"[+] Skipping {slug}: all {len(unique_downloads)} versions are already registered.")
                 return True
         else:
@@ -445,6 +446,37 @@ def process_archive_trainer(game_url, db: Client, delay_sec=1.0):
                             if name.endswith('.exe'):
                                 exe_bytes = z.read(name)
                                 break
+                elif file_bytes.startswith(b'Rar!') or download_url.endswith('.rar'):
+                    unrar_path = None
+                    if os.path.exists("UnRAR.exe"):
+                        unrar_path = "UnRAR.exe"
+                    elif os.path.exists("../UnRAR.exe"):
+                        unrar_path = "../UnRAR.exe"
+                    
+                    if not unrar_path:
+                        print("[-] Warning: UnRAR.exe not found. Skipping trainer.")
+                        continue
+                    
+                    try:
+                        with open("temp_trainer.rar", "wb") as f:
+                            f.write(file_bytes)
+                        subprocess.run([unrar_path, "e", "-y", "-inul", "temp_trainer.rar", "*.exe"], check=True)
+                        extracted_exe = None
+                        for fname in os.listdir("."):
+                            if fname.lower().endswith(".exe") and fname.lower() not in ["unrar.exe", "unrarw64.exe"]:
+                                extracted_exe = fname
+                                break
+                        if extracted_exe:
+                            with open(extracted_exe, "rb") as f:
+                                exe_bytes = f.read()
+                            os.remove(extracted_exe)
+                        else:
+                            print("[-] Extracted executable not found.")
+                    except Exception as e:
+                        print(f"[-] RAR extraction failed: {e}")
+                    finally:
+                        if os.path.exists("temp_trainer.rar"):
+                            os.remove("temp_trainer.rar")
                 else:
                     exe_bytes = file_bytes
                     
@@ -457,8 +489,14 @@ def process_archive_trainer(game_url, db: Client, delay_sec=1.0):
                 # Check if trainer already exists
                 trainer_res = db.table('trainers').select('id').eq('original_file_hash', original_file_hash).execute()
                 if trainer_res.data:
-                    print(f"    [*] Already registered: {original_file_hash}")
-                    continue
+                    if not force:
+                        print(f"    [*] Already registered: {original_file_hash}")
+                        continue
+                    else:
+                        trainer_id = trainer_res.data[0]['id']
+                        print(f"    [*] Force mode: deleting existing mappings and trainer ID {trainer_id} to overwrite...")
+                        db.table('translation_mappings').delete().eq('trainer_id', trainer_id).execute()
+                        db.table('trainers').delete().eq('id', trainer_id).execute()
                     
                 text_section = parse_pe_binary(exe_bytes)
                 if not text_section:
@@ -527,6 +565,7 @@ def main():
     parser = argparse.ArgumentParser(description="FLiNG Trainer Archive Full Crawler")
     parser.add_argument("--limit", type=int, default=10, help="Maximum number of new games to crawl in this run")
     parser.add_argument("--delay", type=float, default=1.0, help="Rate limit delay in seconds between downloads")
+    parser.add_argument("--force", action="store_true", help="Force re-processing and overwriting of existing trainers")
     args = parser.parse_args()
     
     if not SUPABASE_URL or not SUPABASE_KEY:
@@ -560,7 +599,7 @@ def main():
             print(f"\n[*] Reached batch limit of {args.limit} games. Stopping.")
             break
             
-        success = process_archive_trainer(game_url, db, delay_sec=args.delay)
+        success = process_archive_trainer(game_url, db, delay_sec=args.delay, force=args.force)
         if success:
             slug = game_url.rstrip('/').split('/')[-1]
             game_res = db.table('games').select('id').eq('slug', slug).execute()
