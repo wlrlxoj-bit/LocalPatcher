@@ -357,12 +357,8 @@ def scrape_and_patch_trainer(post, db: Client):
             
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Locate the attachment download link (e.g. .zip or .exe)
-        download_a = None
-        for a in soup.select('ul.attachment-list a'):
-            if ".zip" in a['href'] or ".exe" in a['href']:
-                download_a = a
-                break
+        # Locate the download link (starts with /downloads/)
+        download_a = soup.select_one('a[href*="/downloads/"]')
                 
         if not download_a:
             print("[-] No download link found on page.")
