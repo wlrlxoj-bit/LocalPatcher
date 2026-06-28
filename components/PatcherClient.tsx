@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, ArrowRight } from 'lucide-react';
+import { ChevronLeft, ArrowRight, AlertTriangle } from 'lucide-react';
 import { Locale, getDictionary } from '@/lib/i18n';
 import DropZone from '@/components/DropZone';
 
@@ -132,6 +132,19 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
       {/* Main Patcher Area */}
       {selectedTrainer ? (
         <div className="space-y-6">
+          {locale !== 'ko' && (
+            <div className="w-full p-4 rounded-xl border border-amber-500/20 bg-amber-950/20 text-amber-400 text-xs sm:text-sm flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                {locale === 'ja' ? (
+                  "【翻訳対応言語に関するお知らせ】現在、パッチによる翻訳は「韓国語(ko)」のみサポートされています。本ページでパッチを適用すると、トレーナーのテキストが韓国語に翻訳されます。日本語は今後対応予定です。"
+                ) : (
+                  "【Translation Support Notice】Currently, the translation patch only supports Korean (ko). Applying the patch on this trainer will localize the option descriptions into Korean. Japanese and other languages are planned for future updates."
+                )}
+              </div>
+            </div>
+          )}
+
           <DropZone 
             locale={locale} 
             trainer={selectedTrainer} 
