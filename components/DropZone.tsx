@@ -3,6 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { UploadCloud, CheckCircle2, AlertTriangle, Loader2, Info, Download } from 'lucide-react';
 import { Locale, getDictionary } from '@/lib/i18n';
+import JSZip from 'jszip';
 
 interface DropZoneProps {
   locale: Locale;
@@ -267,15 +268,22 @@ export default function DropZone({ locale, trainer, allTrainers, mappingsMap, on
         bytes.set(patchBytes, offset_dec);
       }
 
-      // 5. Save patched file to state instead of triggering auto-download
-      const patchedBlob = new Blob([bytes], { type: 'application/octet-stream' });
-      const downloadUrl = URL.createObjectURL(patchedBlob);
+      // 5. Package the patched executable into a ZIP archive to bypass Defender quarantine
+      const zip = new JSZip();
       
       const suffix = locale === 'ko' ? '_KOR' : locale === 'ja' ? '_JPN' : '_patched';
-      const targetFileName = file.name.replace(/\.exe$/i, `${suffix}.exe`);
+      const exeName = file.name.replace(/\.exe$/i, `${suffix}.exe`);
+      
+      // Add the patched .exe bytes to the ZIP
+      zip.file(exeName, bytes);
+      
+      // Generate the ZIP blob client-side
+      const zippedContent = await zip.generateAsync({ type: 'blob' });
+      const downloadUrl = URL.createObjectURL(zippedContent);
+      const targetZipName = file.name.replace(/\.exe$/i, `${suffix}.zip`);
 
       setPatchedFileUrl(downloadUrl);
-      setPatchedFileName(targetFileName);
+      setPatchedFileName(targetZipName);
       setStatus('success');
     } catch (err: any) {
       console.error(err);
