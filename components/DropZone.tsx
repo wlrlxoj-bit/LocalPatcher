@@ -3,7 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { UploadCloud, CheckCircle2, AlertTriangle, Loader2, Info, Download } from 'lucide-react';
 import { Locale, getDictionary } from '@/lib/i18n';
-import JSZip from 'jszip';
+import { ZipWriter, BlobWriter, BlobReader } from '@zip.js/zip.js';
 
 interface DropZoneProps {
   locale: Locale;
@@ -268,17 +268,21 @@ export default function DropZone({ locale, trainer, allTrainers, mappingsMap, on
         bytes.set(patchBytes, offset_dec);
       }
 
-      // 5. Package the patched executable into a ZIP archive to bypass Defender quarantine
-      const zip = new JSZip();
+      // 5. Package the patched executable into a password-protected ZIP archive to bypass Defender quarantine
+      const zipWriter = new ZipWriter(new BlobWriter("application/zip"));
       
       const suffix = locale === 'ko' ? '_KOR' : locale === 'ja' ? '_JPN' : '_patched';
       const exeName = file.name.replace(/\.exe$/i, `${suffix}.exe`);
+      const exeBlob = new Blob([bytes], { type: 'application/octet-stream' });
       
-      // Add the patched .exe bytes to the ZIP
-      zip.file(exeName, bytes);
+      // Add the patched .exe bytes to the ZIP with the password
+      await zipWriter.add(exeName, new BlobReader(exeBlob), {
+        password: "11111111",
+        zipCrypto: true // PKWare ZipCrypto for native Windows Explorer compatibility
+      });
       
       // Generate the ZIP blob client-side
-      const zippedContent = await zip.generateAsync({ type: 'blob' });
+      const zippedContent = await zipWriter.close();
       const downloadUrl = URL.createObjectURL(zippedContent);
       const targetZipName = file.name.replace(/\.exe$/i, `${suffix}.zip`);
 
