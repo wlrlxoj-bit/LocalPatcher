@@ -53,3 +53,6 @@ next-env.d.ts
 /license.txt
 /WhatsNew.txt
 /unrar.txt
+
+# Agents directories
+/.agents/
