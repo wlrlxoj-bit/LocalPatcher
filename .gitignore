@@ -39,3 +39,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# Python caches
+**/__pycache__/
+*.pyc
+
+# Local scratch files
+/scratch/
+
+# Local UnRAR utility files
+/UnRAR.exe
+/license.txt
+/WhatsNew.txt
+/unrar.txt
