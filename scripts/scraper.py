@@ -350,7 +350,7 @@ def fetch_steam_meta(game_title: str):
     default_meta = {
         'appid': '1091500',
         'title_ko': game_title,
-        'cover_url': 'https://cdn.cloudflare.steamstatic.com/steam/apps/1091500/header.jpg'
+        'cover_url': '/images/default_cover.jpg'
     }
     try:
         print(f"[*] Searching Steam store details for: {game_title}...")
