@@ -89,6 +89,32 @@ COMMON_TRANSLATIONS = {
     "check for updates": "업데이트 확인"
 }
 
+# Dynamic in-memory dictionary loaded from database
+db_dictionary = {}
+
+def save_new_translations_to_dictionary(original_line: str, translated_line: str, db: Client):
+    """Extracts clean option labels and inserts them into Supabase 'common_dictionary' table to dynamically train the database dictionary."""
+    try:
+        pattern = r"^([a-zA-Z0-9\+\s\.\-\*\/↑↓←→]+)\s*-\s*([^\*]+)(.*)$"
+        match_orig = re.match(pattern, original_line.strip())
+        match_trans = re.match(pattern, translated_line.strip())
+        if match_orig and match_trans:
+            eng_label = match_orig.group(2).strip()
+            kor_label = match_trans.group(2).strip()
+            eng_lower = eng_label.lower().replace("'", "").strip()
+            
+            if eng_lower not in db_dictionary and eng_lower not in COMMON_TRANSLATIONS:
+                # Insert to Supabase common_dictionary table
+                db.table('common_dictionary').insert({
+                    'english_term': eng_label,
+                    'korean_translation': kor_label
+                }).execute()
+                db_dictionary[eng_lower] = kor_label
+                print(f"[+] Dynamic Dictionary Learned: '{eng_label}' -> '{kor_label}'")
+    except Exception as e:
+        # Silently fail if table doesn't exist or duplicate key error occurs
+        pass
+
 def translate_via_llm(lines_to_translate):
     """Sends a batch of untranslated lines to Gemini or OpenAI API in JSON mode."""
     if not lines_to_translate:
@@ -111,7 +137,7 @@ def translate_via_llm(lines_to_translate):
     if GEMINI_API_KEY:
         try:
             print("[*] Calling Gemini API for batch translation...")
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key={GEMINI_API_KEY}"
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {
@@ -140,7 +166,7 @@ def translate_via_llm(lines_to_translate):
             payload = {
                 "model": "gpt-4o-mini",
                 "messages": [
-                    {"role": "system", "content": "You output JSON matching the requested structure."},
+                    {"role": "system", "content": "You are a helpful localization assistant."},
                     {"role": "user", "content": prompt}
                 ],
                 "response_format": {"type": "json_object"}
@@ -169,11 +195,16 @@ def translate_line(line: str):
     label = match.group(2).strip()
     notes = match.group(3).strip()
     
-    # Try translating label
     label_lower = label.lower().replace("'", "").strip()
-    if label_lower in COMMON_TRANSLATIONS:
+    
+    # Check dynamic database dictionary first, then fallback to local static dict
+    translated_label = None
+    if label_lower in db_dictionary:
+        translated_label = db_dictionary[label_lower]
+    elif label_lower in COMMON_TRANSLATIONS:
         translated_label = COMMON_TRANSLATIONS[label_lower]
         
+    if translated_label is not None:
         # Simple notes translation lookup
         translated_notes = ""
         if notes:
@@ -190,7 +221,7 @@ def translate_line(line: str):
     # Return None to indicate it requires LLM translation
     return None
 
-def process_translation_block(text: str) -> str:
+def process_translation_block(text: str, db: Client) -> str:
     """Splits a multi-line options string, translates each line (Dictionary + LLM Fallback), and pads with spaces."""
     lines = text.split("\n")
     dict_results = []
@@ -228,6 +259,9 @@ def process_translation_block(text: str) -> str:
         if trans_line is None:
             # Check if LLM mapped it, otherwise fallback to original line
             trans_line = llm_map.get(line, line)
+            # Save newly translated term to dynamic dictionary table for self-learning caching
+            if trans_line != line:
+                save_new_translations_to_dictionary(line, trans_line, db)
 
         # Apply Space Padding to synchronize string length in bytes/chars
         if len(trans_line) < orig_len:
@@ -520,8 +554,8 @@ def scrape_and_patch_trainer(post, db: Client):
                     continue
                 trainer_id = insert_trainer.data[0]['id']
                 
-                # Run translation engine
-                translated_text = process_translation_block(mapping_details['original_text'])
+                 # Run translation engine
+                translated_text = process_translation_block(mapping_details['original_text'], db)
                 
                 # Write translation mappings to DB (instantly approved for automated site deployment)
                 db.table('translation_mappings').insert({
@@ -551,6 +585,16 @@ def main():
     db: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
     print("[*] Scraper pipeline initialized. Monitoring FLiNG feed...")
     
+    # Load dynamic dictionary from Supabase
+    try:
+        res = db.table('common_dictionary').select('english_term, korean_translation').execute()
+        if res.data:
+            for row in res.data:
+                db_dictionary[row['english_term'].lower().strip()] = row['korean_translation']
+            print(f"[+] Loaded {len(db_dictionary)} common translations from database.")
+    except Exception as e:
+        print(f"[*] Dynamic dictionary table not found, falling back to local dictionary. Error: {e}")
+        
     posts = fetch_recent_trainers()
     if not posts:
         print("[-] No new updates found.")
