@@ -345,6 +345,47 @@ def fetch_recent_trainers():
         print(f"[-] Error scraping FLiNG feed: {e}")
         return []
 
+def fetch_steam_meta(game_title: str):
+    """Queries Steam Store Search and App Details APIs to fetch appid, cover art, and official Korean title."""
+    default_meta = {
+        'appid': '1091500',
+        'title_ko': game_title,
+        'cover_url': 'https://cdn.cloudflare.steamstatic.com/steam/apps/1091500/header.jpg'
+    }
+    try:
+        print(f"[*] Searching Steam store details for: {game_title}...")
+        # Step 1: Search for game AppID
+        search_url = f"https://store.steampowered.com/api/storesearch/?term={requests.utils.quote(game_title)}&l=english&cc=US"
+        res = requests.get(search_url, timeout=5)
+        if res.status_code == 200:
+            search_data = res.json()
+            items = search_data.get("items", [])
+            if items:
+                appid = str(items[0]["id"])
+                title_en = items[0]["name"]
+                
+                # Step 2: Fetch Korean details
+                details_url = f"https://store.steampowered.com/api/appdetails?appids={appid}&l=korean"
+                d_res = requests.get(details_url, timeout=5)
+                title_ko = title_en  # fallback
+                if d_res.status_code == 200:
+                    d_data = d_res.json()
+                    if d_data.get(appid, {}).get("success"):
+                        title_ko = d_data[appid]["data"]["name"]
+                        # Clean up formatting symbols
+                        title_ko = title_ko.replace("®", "").replace("™", "").strip()
+                        
+                cover_url = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/header.jpg"
+                print(f"[+] Found Steam AppID: {appid}, Korean Name: {title_ko}")
+                return {
+                    'appid': appid,
+                    'title_ko': title_ko,
+                    'cover_url': cover_url
+                }
+    except Exception as e:
+        print(f"[-] Steam search failed: {e}")
+    return default_meta
+
 def scrape_and_patch_trainer(post, db: Client):
     """Scrapes specific trainer page, downloads binary, extracts offsets, and inserts to Supabase."""
     print(f"[*] Processing: {post['title']} ({post['link']})")
@@ -365,7 +406,8 @@ def scrape_and_patch_trainer(post, db: Client):
             return
             
         download_url = download_a['href']
-        print(f"[+] Download link found: {download_url}")
+        download_text = download_a.text.strip()
+        print(f"[+] Download link found: {download_url} ({download_text})")
         
         # Download binary bytes
         dl_response = requests.get(download_url, headers=headers, timeout=30)
@@ -421,16 +463,14 @@ def scrape_and_patch_trainer(post, db: Client):
             game_id = game_res.data[0]['id']
         else:
             # Create new game meta row
-            title_ko = post['title'].split('Trainer')[0].strip()
-            # Fetch default Steam cover template using clean Search
-            steam_appid = "1091500" # fallback to cyberpunk cover if appid unknown, or scrape Steam
-            cover_url = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{steam_appid}/header.jpg"
+            game_title_en = post['title'].split('Trainer')[0].strip()
+            steam_meta = fetch_steam_meta(game_title_en)
             
             insert_game = db.table('games').insert({
-                'title_en': post['title'].split('Trainer')[0].strip(),
-                'title_ko': title_ko,
+                'title_en': game_title_en,
+                'title_ko': steam_meta['title_ko'],
                 'slug': post['slug'],
-                'cover_image_url': cover_url,
+                'cover_image_url': steam_meta['cover_url'],
                 'anti_cheat': 'none',
                 'fling_url': post['link']
             }).execute()
@@ -445,14 +485,21 @@ def scrape_and_patch_trainer(post, db: Client):
             print("[*] Trainer version already exists in database. Skipping.")
             return
             
-        # Parse version string from post title
-        version_match = re.search(r'v[0-9\.]+(?:-v[0-9\.]+)?\s+Plus\s+\d+', post['title'])
-        version_str = version_match.group(0) if version_match else "Plus " + str(post['title'].split('Plus')[-1].split(' ')[1])
+        # Parse version and option count from download link text for accuracy
+        # Example download_text: "Borderlands.4.v1.0-v1.8.1.Plus.45.Trainer-FLiNG"
+        v_match = re.search(r'v[0-9\.]+(?:-v[0-9\.]+)?', download_text)
+        version_str = v_match.group(0) if v_match else "v1.0"
+        
+        opt_match = re.search(r'Plus\.(\d+)', download_text)
+        option_count = int(opt_match.group(1)) if opt_match else 0
+        
+        final_version_str = f"{version_str} Plus {option_count}"
         
         # Insert Trainer specs
         insert_trainer = db.table('trainers').insert({
             'game_id': game_id,
-            'version_str': version_str,
+            'version_str': final_version_str,
+            'option_count': option_count,
             'original_file_hash': original_file_hash,
             'original_file_size': original_file_size,
             'is_packed': False
@@ -466,7 +513,7 @@ def scrape_and_patch_trainer(post, db: Client):
         # Run translation engine
         translated_text = process_translation_block(mapping_details['original_text'])
         
-        # Write translation mappings to DB (pending admin approval for SEO filter safety)
+        # Write translation mappings to DB (instantly approved for automated site deployment)
         db.table('translation_mappings').insert({
             'trainer_id': trainer_id,
             'offset_dec': mapping_details['offset_dec'],
@@ -475,7 +522,7 @@ def scrape_and_patch_trainer(post, db: Client):
             'translated_text': translated_text,
             'max_char_len': mapping_details['max_char_len'],
             'language_code': 'ko',
-            'is_approved': False # Requires admin approval before going live
+            'is_approved': True  # Instantly live approved
         }).execute()
         
         print(f"[+] Successfully registered new trainer ID: {trainer_id} for Game ID: {game_id}!")
