@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { UploadCloud, CheckCircle2, AlertTriangle, Loader2, Info } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertTriangle, Loader2, Info, Download } from 'lucide-react';
 import { Locale, getDictionary } from '@/lib/i18n';
 
 interface DropZoneProps {
@@ -37,6 +37,8 @@ export default function DropZone({ locale, trainer, allTrainers, mappingsMap, on
   const [errorMsg, setErrorMsg] = useState('');
   const [fileName, setFileName] = useState('');
   const [bypassCheck, setBypassCheck] = useState(false);
+  const [patchedFileUrl, setPatchedFileUrl] = useState<string | null>(null);
+  const [patchedFileName, setPatchedFileName] = useState('');
 
   // Calculate SHA-256 of file buffer
   const calculateSHA256 = async (buffer: ArrayBuffer): Promise<string> => {
@@ -265,27 +267,30 @@ export default function DropZone({ locale, trainer, allTrainers, mappingsMap, on
         bytes.set(patchBytes, offset_dec);
       }
 
-      // 5. Trigger download of patched file
+      // 5. Save patched file to state instead of triggering auto-download
       const patchedBlob = new Blob([bytes], { type: 'application/octet-stream' });
       const downloadUrl = URL.createObjectURL(patchedBlob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-
-      // Add regional tag, e.g. "GameTrainer_KOR.exe"
-      const suffix = locale === 'ko' ? '_KOR' : locale === 'ja' ? '_JPN' : '_patched';
-      link.download = file.name.replace(/\.exe$/i, `${suffix}.exe`);
       
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(downloadUrl);
+      const suffix = locale === 'ko' ? '_KOR' : locale === 'ja' ? '_JPN' : '_patched';
+      const targetFileName = file.name.replace(/\.exe$/i, `${suffix}.exe`);
 
+      setPatchedFileUrl(downloadUrl);
+      setPatchedFileName(targetFileName);
       setStatus('success');
     } catch (err: any) {
       console.error(err);
       setStatus('error');
       setErrorMsg(err.message || '파일 패치 중 알 수 없는 에러가 발생했습니다.');
     }
+  };
+
+  const handleReset = () => {
+    if (patchedFileUrl) {
+      URL.revokeObjectURL(patchedFileUrl);
+    }
+    setPatchedFileUrl(null);
+    setPatchedFileName('');
+    setStatus('idle');
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -372,7 +377,7 @@ export default function DropZone({ locale, trainer, allTrainers, mappingsMap, on
         )}
 
         {status === 'success' && (
-          <div className="flex flex-col items-center py-4">
+          <div className="flex flex-col items-center py-4 w-full">
             <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20 shadow-lg shadow-emerald-500/5">
               <CheckCircle2 className="w-6 h-6" />
             </div>
@@ -382,9 +387,26 @@ export default function DropZone({ locale, trainer, allTrainers, mappingsMap, on
             </p>
             <p className="text-[10px] text-slate-500 mt-1 font-mono">File: {fileName}</p>
             <p className="text-[10px] text-cyan-400 mt-1 font-semibold">감지된 버전: {trainer.version_str}</p>
+            
+            {/* Big, beautiful download button */}
+            <a
+              href={patchedFileUrl || '#'}
+              download={patchedFileName}
+              className="mt-6 w-full max-w-xs px-6 py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-bold text-sm shadow-xl shadow-cyan-500/25 flex items-center justify-center space-x-2 transform hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-200"
+            >
+              <Download className="w-4 h-4 text-slate-950" />
+              <span>
+                {locale === 'ko'
+                  ? '한글화 패치 파일 다운로드'
+                  : locale === 'ja'
+                    ? '日本語化パッチのダウンロード'
+                    : 'Download Localized Trainer'}
+              </span>
+            </a>
+
             <button
-              onClick={() => setStatus('idle')}
-              className="mt-6 px-4 py-2 rounded-lg border border-slate-800 hover:bg-slate-800 text-xs text-slate-300 transition-colors"
+              onClick={handleReset}
+              className="mt-4 text-[11px] text-slate-500 hover:text-slate-300 underline transition-colors"
             >
               다른 파일 패치하기
             </button>
