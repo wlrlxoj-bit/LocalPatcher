@@ -329,7 +329,7 @@ def fetch_recent_trainers():
         trainer_posts = []
         
         # Scrape post title links
-        for a in soup.select('h2.entry-title a'):
+        for a in soup.select('h2 a'):
             title = a.text.strip()
             link = a['href']
             # Match games like "Cyberpunk 2077 v2.0 Trainer"
