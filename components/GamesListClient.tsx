@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import SearchBar from '@/components/SearchBar';
 import GameCard from '@/components/GameCard';
 import { Locale, getDictionary } from '@/lib/i18n';
-import { Info, ShieldCheck, Zap } from 'lucide-react';
+import { Info, ShieldCheck, Zap, ChevronDown } from 'lucide-react';
 
 interface Game {
   id: number;
@@ -32,6 +32,12 @@ interface GamesListClientProps {
 export default function GamesListClient({ games, trainers, locale }: GamesListClientProps) {
   const t = getDictionary(locale);
   const [searchQuery, setSearchQuery] = useState('');
+  const [visibleCount, setVisibleCount] = useState(18);
+
+  // 검색어가 변경되면 표시 개수를 초기값(18)으로 리셋
+  useEffect(() => {
+    setVisibleCount(18);
+  }, [searchQuery]);
 
   // Filter games based on search query (checks both English and Korean titles)
   const filteredGames = games.filter(game => {
@@ -115,9 +121,9 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
       </div>
 
       {/* Game Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 w-full max-w-4xl mb-20">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 w-full max-w-4xl mb-8">
         {filteredGames.length > 0 ? (
-          filteredGames.map(game => {
+          filteredGames.slice(0, visibleCount).map(game => {
             const trainer = getTrainerInfo(game.id);
             return (
               <GameCard
@@ -136,6 +142,27 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
           </div>
         )}
       </div>
+
+      {/* Load More 페이지네이션 버튼 */}
+      {filteredGames.length > 0 && visibleCount < filteredGames.length && (
+        <div className="flex flex-col items-center gap-3 w-full max-w-4xl mb-20">
+          <p className="text-xs text-slate-500 font-outfit tracking-wide">
+            {Math.min(visibleCount, filteredGames.length)} / {filteredGames.length} 게임 표시 중
+          </p>
+          <button
+            onClick={() => setVisibleCount(prev => prev + 18)}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-700 bg-slate-800/60 text-slate-300 font-outfit text-sm font-medium tracking-wide transition-all duration-300 hover:bg-cyan-500/20 hover:border-cyan-500/50 hover:text-cyan-300 hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] cursor-pointer"
+          >
+            더 보기 · Load More
+            <ChevronDown className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* 모든 게임이 표시된 경우 하단 여백 보정 */}
+      {(filteredGames.length === 0 || visibleCount >= filteredGames.length) && (
+        <div className="mb-12" />
+      )}
 
       {/* About & Safety Rules Section */}
       <div id="safety" className="w-full max-w-4xl p-6 md:p-8 rounded-2xl border border-slate-800 bg-slate-900/25 relative overflow-hidden">
