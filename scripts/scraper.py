@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import json
 import hashlib
 import zipfile
 import io
@@ -13,6 +14,9 @@ from supabase import create_client, Client
 SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
 # Use Service Role Key for writing to DB securely in backend workflows, fallback to Anon Key
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 # Dictionary of common trainer translations for cost-free instant translation mapping
 COMMON_TRANSLATIONS = {
@@ -85,9 +89,77 @@ COMMON_TRANSLATIONS = {
     "check for updates": "업데이트 확인"
 }
 
-def translate_line(line: str) -> str:
-    """Translates a single cheat label line using dictionary mappings."""
-    # Pattern to parse: "Num 1 - Infinite Health **Note"
+def translate_via_llm(lines_to_translate):
+    """Sends a batch of untranslated lines to Gemini or OpenAI API in JSON mode."""
+    if not lines_to_translate:
+        return {}
+
+    prompt = f"""
+    You are a professional game localization expert.
+    Translate the following list of game trainer cheat options into natural, standard Korean used by Korean gamers.
+    
+    CRITICAL RULES:
+    1. KEEP the exact hotkey prefix (e.g. "Num 1 -", "Ctrl+Num 1 -", "Alt+Num 1 -") unchanged.
+    2. Translate only the description label and any note texts (e.g. Translate "Infinite HP" to "무한 체력").
+    3. Return your output strictly as a JSON object with a single key "translations" containing an array of translated strings in the EXACT same order.
+    
+    List to translate:
+    {json.dumps(lines_to_translate, ensure_ascii=False)}
+    """
+
+    # 1. Try Gemini API
+    if GEMINI_API_KEY:
+        try:
+            print("[*] Calling Gemini API for batch translation...")
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "responseMimeType": "application/json"
+                }
+            }
+            res = requests.post(url, json=payload, timeout=15)
+            if res.status_code == 200:
+                res_data = res.json()
+                text_response = res_data["candidates"][0]["content"]["parts"][0]["text"]
+                translated_array = json.loads(text_response).get("translations", [])
+                if len(translated_array) == len(lines_to_translate):
+                    return dict(zip(lines_to_translate, translated_array))
+        except Exception as e:
+            print(f"[-] Gemini API translation failed: {e}")
+
+    # 2. Try OpenAI API
+    if OPENAI_API_KEY:
+        try:
+            print("[*] Calling OpenAI API (gpt-4o-mini) for batch translation...")
+            url = "https://api.openai.com/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": "You output JSON matching the requested structure."},
+                    {"role": "user", "content": prompt}
+                ],
+                "response_format": {"type": "json_object"}
+            }
+            res = requests.post(url, headers=headers, json=payload, timeout=15)
+            if res.status_code == 200:
+                res_data = res.json()
+                text_response = res_data["choices"][0]["message"]["content"]
+                translated_array = json.loads(text_response).get("translations", [])
+                if len(translated_array) == len(lines_to_translate):
+                    return dict(zip(lines_to_translate, translated_array))
+        except Exception as e:
+            print(f"[-] OpenAI API translation failed: {e}")
+
+    # If both APIs fail or are unconfigured, return empty mapping (fallback to original English)
+    return {}
+
+def translate_line(line: str):
+    """Attempts dictionary translation for a single line. Returns None if it needs LLM translation."""
     pattern = r"^([a-zA-Z0-9\+\s\.\-\*\/↑↓←→]+)\s*-\s*([^\*]+)(.*)$"
     match = re.match(pattern, line.strip())
     if not match:
@@ -99,35 +171,64 @@ def translate_line(line: str) -> str:
     
     # Try translating label
     label_lower = label.lower().replace("'", "").strip()
-    translated_label = COMMON_TRANSLATIONS.get(label_lower, label)
+    if label_lower in COMMON_TRANSLATIONS:
+        translated_label = COMMON_TRANSLATIONS[label_lower]
+        
+        # Simple notes translation lookup
+        translated_notes = ""
+        if notes:
+            notes_lower = notes.lower()
+            if "takes effect" in notes_lower:
+                translated_notes = " **효과 적용 시 수치가 갱신됩니다."
+            elif "activate before" in notes_lower:
+                translated_notes = " **사용하기 전에 활성화하십시오."
+            else:
+                translated_notes = notes
+                
+        return f"{hotkey} - {translated_label}{translated_notes}"
     
-    # Simple notes translation lookup
-    translated_notes = ""
-    if notes:
-        # Check if notes contains common patterns
-        notes_lower = notes.lower()
-        if "takes effect" in notes_lower:
-            translated_notes = " **효과 적용 시 수치가 갱신됩니다."
-        elif "activate before" in notes_lower:
-            translated_notes = " **사용하기 전에 활성화하십시오."
-        else:
-            translated_notes = notes # Fallback to original notes if not matched
-            
-    return f"{hotkey} - {translated_label}{translated_notes}"
+    # Return None to indicate it requires LLM translation
+    return None
 
 def process_translation_block(text: str) -> str:
-    """Splits a multi-line options string, translates each line, and pads with spaces to preserve length."""
+    """Splits a multi-line options string, translates each line (Dictionary + LLM Fallback), and pads with spaces."""
     lines = text.split("\n")
-    translated_lines = []
-    
+    dict_results = []
+    lines_needing_llm = []
+
+    # First Pass: Translate using dictionary. Track unmapped lines.
     for line in lines:
-        if not line:
-            translated_lines.append("")
+        if not line or line.strip() == "":
+            dict_results.append(line)
             continue
-        
-        orig_len = len(line)
+            
         trans_line = translate_line(line)
+        if trans_line is not None:
+            dict_results.append(trans_line)
+        else:
+            dict_results.append(None) # Marker for LLM translate
+            lines_needing_llm.append(line)
+
+    # Second Pass: Perform batch LLM translation if keys are set
+    llm_map = {}
+    if lines_needing_llm and (GEMINI_API_KEY or OPENAI_API_KEY):
+        llm_map = translate_via_llm(lines_needing_llm)
+
+    # Third Pass: Assemble and apply Space Padding to synchronize lengths
+    translated_lines = []
+    for idx, line in enumerate(lines):
+        if not line or line.strip() == "":
+            translated_lines.append(line)
+            continue
+            
+        orig_len = len(line)
         
+        # Get translation from first pass or fallback to LLM / original
+        trans_line = dict_results[idx]
+        if trans_line is None:
+            # Check if LLM mapped it, otherwise fallback to original line
+            trans_line = llm_map.get(line, line)
+
         # Apply Space Padding to synchronize string length in bytes/chars
         if len(trans_line) < orig_len:
             trans_line += " " * (orig_len - len(trans_line))
