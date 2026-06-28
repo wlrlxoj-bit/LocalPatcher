@@ -142,12 +142,31 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
 
           {/* Quick instructions */}
           <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/10 text-xs text-slate-400">
-            <h5 className="font-bold text-slate-300 uppercase tracking-wider mb-2">작동 가이드 (Quick Help)</h5>
-            <ul className="space-y-1.5 list-decimal list-inside leading-relaxed text-slate-400">
-              <li>해당 버전에 맞는 FLiNG 원본 실행 파일(.exe)을 준비합니다.</li>
-              <li>준비한 실행 파일을 위의 점선 영역(드롭존)에 드래그 앤 드롭합니다.</li>
-              <li>해시 및 무결성 검증이 완료되면 한글화 파일이 즉시 자동 다운로드됩니다.</li>
-            </ul>
+            <h5 className="font-bold text-slate-300 uppercase tracking-wider mb-2">
+              {locale === 'ko' ? '작동 가이드 (Quick Help)' : locale === 'ja' ? '操作ガイド (Quick Help)' : 'Quick Help'}
+            </h5>
+            {locale === 'ja' ? (
+              <ul className="space-y-1.5 list-decimal list-inside leading-relaxed text-slate-400">
+                <li>対象バージョンに適合する FLiNG のオリジナル実行ファイル(.exe)を用意します。</li>
+                <li>用意した実行ファイルを上の点線エリア(ドロップゾーン)にドラッグ＆ドロップします。</li>
+                <li>パッチ適用完了後、有効化されたダウンロードボタンをクリックして保存します。</li>
+                <li>ダウンロードされた ZIP ファイルはウイルス誤検出およびダウンロード強制削除を防止するため、解凍パスワード <strong className="text-amber-400 font-mono">11111111</strong> が設定されています。解凍後に実行してください。</li>
+              </ul>
+            ) : locale === 'en' ? (
+              <ul className="space-y-1.5 list-decimal list-inside leading-relaxed text-slate-400">
+                <li>Prepare the original FLiNG trainer executable (.exe) corresponding to the version.</li>
+                <li>Drag & drop the executable into the dotted box (Drop Zone) above.</li>
+                <li>Click the download button enabled after successful verification to save the file.</li>
+                <li>The downloaded ZIP file is protected with password <strong className="text-amber-400 font-mono">11111111</strong> to prevent immediate antivirus quarantine.</li>
+              </ul>
+            ) : (
+              <ul className="space-y-1.5 list-decimal list-inside leading-relaxed text-slate-400">
+                <li>해당 버전에 맞는 FLiNG 원본 실행 파일(.exe)을 준비합니다.</li>
+                <li>준비한 실행 파일을 위의 점선 영역(드롭존)에 드래그 앤 드롭합니다.</li>
+                <li>해시 검증 및 패치 성공 시 활성화되는 다운로드 버튼을 눌러 저장합니다.</li>
+                <li>다운로드된 ZIP 파일은 백신 오진 방지를 위해 비밀번호 <strong className="text-amber-400 font-mono">11111111</strong>이 걸려 있습니다. 압축 해제 후 가동하십시오.</li>
+              </ul>
+            )}
           </div>
 
           {/* Supported Trainer Builds */}

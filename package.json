@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
+    "@zip.js/zip.js": "^2.8.26",
     "jszip": "^3.10.1",
     "lucide-react": "^1.21.0",
     "next": "16.2.9",

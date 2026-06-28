@@ -412,6 +412,27 @@ export default function DropZone({ locale, trainer, allTrainers, mappingsMap, on
               </span>
             </a>
 
+            {/* Password Notice */}
+            <div className="mt-4 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-left max-w-xs w-full">
+              <p className="text-[11px] font-semibold text-amber-400 flex items-center justify-center space-x-1">
+                <Info className="w-3.5 h-3.5 mr-1 flex-shrink-0" />
+                <span>
+                  {locale === 'ko'
+                    ? '압축 해제 비밀번호: 11111111'
+                    : locale === 'ja'
+                      ? '解凍パスワード: 11111111'
+                      : 'Extraction Password: 11111111'}
+                </span>
+              </p>
+              <p className="text-[9px] text-slate-400 mt-1 leading-normal text-center">
+                {locale === 'ko'
+                  ? '백신(Windows Defender)의 실시간 다운로드 삭제 및 오진을 우회하기 위해 비밀번호가 걸려 있습니다.'
+                  : locale === 'ja'
+                    ? 'ワクチンの強制削除を回避するため、暗号化されています。'
+                    : 'Encrypted to prevent immediate Windows Defender delete/quarantine.'}
+              </p>
+            </div>
+
             <button
               onClick={handleReset}
               className="mt-4 text-[11px] text-slate-500 hover:text-slate-300 underline transition-colors"
