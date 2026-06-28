@@ -337,7 +337,7 @@ def scan_cheat_string_offset(exe_bytes: bytes):
                     
             max_char_len = (end_offset - start_offset) // (2 if encoding == 'UTF-16LE' else 1)
             raw_bytes = exe_bytes[start_offset:end_offset]
-            original_text = raw_bytes.decode(encoding, errors='ignore')
+            original_text = raw_bytes.decode(encoding, errors='ignore').replace('\x00', '').replace('\u0000', '')
             
             return {
                 'offset_dec': start_offset,
@@ -562,8 +562,8 @@ def scrape_and_patch_trainer(post, db: Client):
                     'trainer_id': trainer_id,
                     'offset_dec': mapping_details['offset_dec'],
                     'encoding': mapping_details['encoding'],
-                    'original_text': mapping_details['original_text'],
-                    'translated_text': translated_text,
+                    'original_text': mapping_details['original_text'].replace('\x00', '').replace('\u0000', ''),
+                    'translated_text': translated_text.replace('\x00', '').replace('\u0000', ''),
                     'max_char_len': mapping_details['max_char_len'],
                     'language_code': 'ko',
                     'is_approved': True  # Instantly live approved
