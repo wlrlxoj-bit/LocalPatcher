@@ -110,8 +110,8 @@ export default async function SupportPage({
 
       {/* Header */}
       <div className="text-center mb-12">
-        <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full border border-rose-500/20 bg-rose-950/20 text-[11px] font-bold text-rose-400 mb-4 tracking-wide shadow-sm shadow-rose-500/10">
-          <Heart className="w-3.5 h-3.5 fill-current" />
+        <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full border border-slate-700 bg-slate-900 text-[11px] font-bold text-slate-400 mb-4 tracking-wide shadow-sm">
+          <Heart className="w-3.5 h-3.5" />
           <span>Patreon Support</span>
         </div>
         <h1 className="font-bold text-3xl md:text-4xl tracking-tight mb-3 text-white font-outfit">
@@ -122,16 +122,16 @@ export default async function SupportPage({
         </p>
       </div>
 
-      {/* Patreon Premium Card */}
-      <div className="relative group">
-        {/* Background gradient outline glow */}
-        <div className="absolute -inset-0.5 bg-gradient-to-r from-orange-500 to-rose-600 rounded-2xl blur opacity-30 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
+      {/* Patreon Premium Card (Disabled / Under Preparation) */}
+      <div className="relative">
+        {/* Background outline glow (subtle grey) */}
+        <div className="absolute -inset-0.5 bg-slate-800 rounded-2xl blur opacity-25 pointer-events-none"></div>
         
         {/* Core Card */}
         <div className="relative p-6 md:p-10 rounded-2xl border border-slate-800 bg-slate-950 flex flex-col items-center">
           
-          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-orange-400 to-rose-500 flex items-center justify-center shadow-lg shadow-orange-500/20 mb-6">
-            <Heart className="w-7 h-7 text-white stroke-[2.5]" />
+          <div className="w-14 h-14 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center mb-6">
+            <Heart className="w-7 h-7 text-slate-500 stroke-[2]" />
           </div>
 
           <h2 className="text-xl md:text-2xl font-bold text-white text-center mb-4">
@@ -148,7 +148,7 @@ export default async function SupportPage({
               const Icon = cost.icon;
               return (
                 <div key={idx} className="p-5 rounded-xl border border-slate-900 bg-slate-900/30 flex flex-col items-center text-center">
-                  <div className="p-2.5 rounded-lg bg-orange-500/10 text-orange-400 mb-3 shrink-0">
+                  <div className="p-2.5 rounded-lg bg-slate-950 text-slate-500 border border-slate-900 mb-3 shrink-0">
                     <Icon className="w-5 h-5" />
                   </div>
                   <h4 className="font-bold text-xs md:text-sm text-slate-200 mb-2">
@@ -163,22 +163,24 @@ export default async function SupportPage({
           </div>
 
           {/* Heartwarming Pledge Text */}
-          <div className="p-5 rounded-xl border border-rose-500/10 bg-rose-950/5 text-center max-w-xl mb-8">
-            <p className="text-xs md:text-sm text-slate-300 font-medium leading-relaxed">
+          <div className="p-5 rounded-xl border border-slate-900 bg-slate-900/20 text-center max-w-xl mb-8">
+            <p className="text-xs md:text-sm text-slate-400 font-medium leading-relaxed">
               &ldquo;{localizedContent.pledgeText}&rdquo;
             </p>
           </div>
 
-          {/* Call-to-action button */}
-          <a
-            href="https://patreon.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center space-x-2 px-8 py-4 rounded-xl bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white font-bold text-sm md:text-base shadow-xl shadow-orange-500/15 hover:shadow-orange-500/25 transform hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
+          {/* Call-to-action button (Coming Soon) */}
+          <div
+            className="inline-flex items-center space-x-2 px-8 py-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-500 font-bold text-sm md:text-base cursor-not-allowed select-none shadow-inner"
           >
-            <span>{localizedContent.cta}</span>
-            <ExternalLink className="w-4 h-4" />
-          </a>
+            <span>
+              {currentLocale === 'ko' 
+                ? '후원 서비스 준비 중 (Coming Soon)' 
+                : currentLocale === 'ja' 
+                  ? '支援サービス準備中 (Coming Soon)' 
+                  : 'Sponsorship Under Preparation (Coming Soon)'}
+            </span>
+          </div>
 
           <p className="text-[10px] text-slate-600 mt-6 font-mono text-center">
             {localizedContent.footerNote}
