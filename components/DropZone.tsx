@@ -31,19 +31,19 @@ interface DropZoneProps {
 const adBlockTexts = {
   ko: {
     title: '💚 따뜻한 후원의 클릭 한 번 부탁드립니다!',
-    message: '안녕하세요, LocalPatcher 개발자입니다. 저희 사이트는 유저님의 어떠한 개인정보나 파일도 수집하지 않고, 브라우저 로컬에서 안전하게 번역을 진행하는 착한 무료 오픈소스 툴입니다. 730여 개 패키지 게임의 번역 사전 데이터베이스를 무료로 유지하기 위해 다운로드 시 딱 한 번만 실행되는 광고 하나만 아주 조심스레 운영하고 있습니다. 괜찮으시다면 광고 차단(AdBlock)을 잠시 꺼주시고 아래의 새로고침을 통해 기부에 동참해 주시겠어요? 유저님의 따뜻한 클릭 한 번이 서버 유지에 큰 보탬이 됩니다. 늘 진심으로 감사드립니다!',
+    message: '안녕하세요, LocalPatcher 개발자입니다. 저희 사이트는 유저님의 <span class="text-cyan-400 font-bold">어떠한 개인정보나 파일도 서버에 전송/수집하지 않고</span>, 브라우저 로컬에서 안전하게 번역을 진행하는 착한 무료 웹 도구입니다. 730여 개 패키지 게임의 번역 사전 데이터베이스를 무료로 유지하기 위해 <span class="text-cyan-400 font-bold">다운로드 시 딱 한 번만 실행되는 광고</span> 하나만 아주 조심스레 운영하고 있습니다. 괜찮으시다면 <span class="text-cyan-400 font-bold">광고 차단(AdBlock)을 잠시 꺼주시고</span> 아래의 새로고침을 통해 기부에 동참해 주시겠어요? 유저님의 <span class="text-cyan-400 font-bold">따뜻한 클릭 한 번</span>이 서버 유지에 큰 보탬이 됩니다. 늘 진심으로 감사드립니다!',
     primaryBtn: '광고 허용 후 새로고침하기 (감사합니다! 💚)',
     secondaryBtn: '광고 차단을 유지한 채 그냥 다운로드받기',
   },
   ja: {
     title: '💚 温かい応援のクリックをお願いいたします！',
-    message: 'こんにちは、LocalPatcherの開発者です。当サイトはユーザー様の個人情報やファイルを一切収集せず、ブラウザのローカル環境で安全に翻訳を行う無料のオープンソースツールです。730タイトル以上のゲーム翻訳データベースを無料で維持するため、ダウンロード時に一度だけ表示される最小限の広告のみを慎重に運営しております。もしよろしければ、広告ブロック(AdBlock)を一時的に無効化し、リロードしてご協力いただけないでしょうか？皆様の温かいクリックがサーバー維持に大きな力となります。いつも心より感謝申し上げます！',
+    message: 'こんにちは、LocalPatcherの開発者です。当サイトはユーザー様の<span class="text-cyan-400 font-bold">個人情報やファイルを一切サーバーに送信・収集せず</span>、ブラウザのローカル環境で安全に翻訳を行う無料のウェブツールです。730タイトル以上のゲーム翻訳データベースを無料で維持するため、<span class="text-cyan-400 font-bold">ダウンロード時に一度だけ表示される広告</span>のみを慎重に運営しております。もしよろしければ、<span class="text-cyan-400 font-bold">広告ブロック(AdBlock)を一時的に無効化し</span>、リロードしてご協力いただけないでしょうか？皆様の<span class="text-cyan-400 font-bold">温かいクリック</span>がサーバー維持に大きな力となります。いつも心より感謝申し上げます！',
     primaryBtn: '広告を許可してリロードする (ありがとうございます！ 💚)',
     secondaryBtn: '広告ブロックを維持したままダウンロード',
   },
   en: {
     title: '💚 Support us with a simple click!',
-    message: 'Hello, this is the developer of LocalPatcher. Our site is a free, open-source tool that localizes trainers completely in your local browser without uploading any of your files or personal data to servers. In order to maintain the database for over 730 games for free, we only run a single download ad. If you don\'t mind, could you please temporarily disable your ad blocker (AdBlock) and refresh the page to support us? Your kind click goes a long way in covering our hosting costs. Thank you so much for your support!',
+    message: 'Hello, this is the developer of LocalPatcher. Our site is a free web tool that localizes trainers completely in your local browser <span class="text-cyan-400 font-bold">without uploading any of your files or personal data to servers</span>. In order to maintain the database for over 730 games for free, we <span class="text-cyan-400 font-bold">only run a single download ad</span>. If you don\'t mind, could you please <span class="text-cyan-400 font-bold">temporarily disable your ad blocker (AdBlock)</span> and refresh the page to support us? <span class="text-cyan-400 font-bold">Your kind click</span> goes a long way in covering our hosting costs. Thank you so much for your support!',
     primaryBtn: 'Disable AdBlock & Refresh (Thank you! 💚)',
     secondaryBtn: 'Keep AdBlock active and download anyway',
   }
@@ -486,9 +486,10 @@ export default function DropZone({ locale, trainer, allTrainers, mappingsMap, on
                 <div className="text-sm font-semibold text-emerald-400 flex items-center space-x-1.5">
                   <span>{adText.title}</span>
                 </div>
-                <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
-                  {adText.message}
-                </p>
+                <p 
+                  className="text-xs text-slate-300 leading-relaxed whitespace-pre-line"
+                  dangerouslySetInnerHTML={{ __html: adText.message }}
+                />
                 <div className="flex flex-col space-y-2 pt-2">
                   <button
                     onClick={() => window.location.reload()}
