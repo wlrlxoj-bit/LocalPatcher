@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, CheckCircle2, AlertTriangle, Loader2, Info, Download } from 'lucide-react';
 import { Locale, getDictionary } from '@/lib/i18n';
 import { ZipWriter, BlobWriter, BlobReader } from '@zip.js/zip.js';
@@ -40,6 +40,23 @@ export default function DropZone({ locale, trainer, allTrainers, mappingsMap, on
   const [bypassCheck, setBypassCheck] = useState(false);
   const [patchedFileUrl, setPatchedFileUrl] = useState<string | null>(null);
   const [patchedFileName, setPatchedFileName] = useState('');
+  const [isAdBlockActive, setIsAdBlockActive] = useState(false);
+
+  useEffect(() => {
+    const checkAdBlock = async () => {
+      try {
+        const res = await fetch('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js', {
+          method: 'HEAD',
+          mode: 'no-cors',
+          cache: 'no-store'
+        });
+        setIsAdBlockActive(false);
+      } catch (err) {
+        setIsAdBlockActive(true);
+      }
+    };
+    checkAdBlock();
+  }, []);
 
   // Calculate SHA-256 of file buffer
   const calculateSHA256 = async (buffer: ArrayBuffer): Promise<string> => {
@@ -413,22 +430,50 @@ export default function DropZone({ locale, trainer, allTrainers, mappingsMap, on
             <p className="text-[10px] text-slate-500 mt-1 font-mono">File: {fileName}</p>
             <p className="text-[10px] text-cyan-400 mt-1 font-semibold">감지된 버전: {trainer.version_str}</p>
             
-            {/* Big, beautiful download button */}
-            <a
-              href={patchedFileUrl || '#'}
-              download={patchedFileName}
-              onClick={handleDownloadClick}
-              className="mt-6 w-full max-w-xs px-6 py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-bold text-sm shadow-xl shadow-cyan-500/25 flex items-center justify-center space-x-2 transform hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-200"
-            >
-              <Download className="w-4 h-4 text-slate-950" />
-              <span>
-                {locale === 'ko'
-                  ? '한글화 패치 파일 다운로드'
-                  : locale === 'ja'
-                    ? '日本語化パッチのダウンロード'
-                    : 'Download Localized Trainer'}
-              </span>
-            </a>
+            {/* Big, beautiful download button or AdBlock warning */}
+            {isAdBlockActive ? (
+              <div className="mt-6 border-emerald-500/20 bg-slate-900/40 p-5 rounded-2xl border text-left max-w-sm w-full space-y-4">
+                <div className="text-sm font-semibold text-emerald-400 flex items-center space-x-1.5">
+                  <span>💚</span>
+                  <span>따뜻한 후원의 클릭 한 번 부탁드립니다!</span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
+                  안녕하세요, LocalPatcher 개발자입니다. 저희 사이트는 유저님의 어떠한 개인정보나 파일도 수집하지 않고, 브라우저 로컬에서 안전하게 번역을 진행하는 착한 무료 오픈소스 툴입니다. 730여 개 패키지 게임의 번역 사전 데이터베이스를 무료로 유지하기 위해 다운로드 시 딱 한 번만 실행되는 광고 하나만 아주 조심스레 운영하고 있습니다. 괜찮으시다면 광고 차단(AdBlock)을 잠시 꺼주시고 아래의 새로고침을 통해 기부에 동참해 주시겠어요? 유저님의 따뜻한 클릭 한 번이 서버 유지에 큰 보탬이 됩니다. 늘 진심으로 감사드립니다!
+                </p>
+                <div className="flex flex-col space-y-2 pt-2">
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95 text-center"
+                  >
+                    광고 허용 후 새로고침하기 (감사합니다! 💚)
+                  </button>
+                  <a
+                    href={patchedFileUrl || '#'}
+                    download={patchedFileName}
+                    onClick={handleDownloadClick}
+                    className="text-[11px] text-slate-500 hover:text-slate-400 underline transition-colors block text-center cursor-pointer"
+                  >
+                    광고 차단을 유지한 채 그냥 다운로드받기
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <a
+                href={patchedFileUrl || '#'}
+                download={patchedFileName}
+                onClick={handleDownloadClick}
+                className="mt-6 w-full max-w-xs px-6 py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-bold text-sm shadow-xl shadow-cyan-500/25 flex items-center justify-center space-x-2 transform hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-200"
+              >
+                <Download className="w-4 h-4 text-slate-950" />
+                <span>
+                  {locale === 'ko'
+                    ? '한글화 패치 파일 다운로드'
+                    : locale === 'ja'
+                      ? '日本語化パッチのダウンロード'
+                      : 'Download Localized Trainer'}
+                </span>
+              </a>
+            )}
 
             {/* Password Notice */}
             <div className="mt-4 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-left max-w-xs w-full">
