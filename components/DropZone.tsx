@@ -64,19 +64,48 @@ export default function DropZone({ locale, trainer, allTrainers, mappingsMap, on
   const [isAdBlockActive, setIsAdBlockActive] = useState(false);
 
   useEffect(() => {
-    const checkAdBlock = async () => {
+    const detectAdBlock = () => {
+      // Create a dummy bait element with common ad classes that ad blockers target
+      const bait = document.createElement('div');
+      // Common class names targeted by AdBlock lists like EasyList
+      bait.className = 'pub_300x250 pub_300x250m pub_728x90 text-ad ad-text ad-banner ad-link adsbox';
+      bait.setAttribute(
+        'style',
+        'width: 1px !important; height: 1px !important; position: absolute !important; left: -10000px !important; top: -10000px !important;'
+      );
+      
       try {
-        const res = await fetch('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js', {
-          method: 'HEAD',
-          mode: 'no-cors',
-          cache: 'no-store'
-        });
-        setIsAdBlockActive(false);
+        document.body.appendChild(bait);
+        
+        // Wait a tiny delay (100ms) to allow the ad blocker's stylesheet hiding injection to trigger
+        setTimeout(() => {
+          const styles = window.getComputedStyle(bait);
+          const isBlocked =
+            styles.getPropertyValue('display') === 'none' ||
+            styles.getPropertyValue('visibility') === 'hidden' ||
+            bait.offsetHeight === 0 ||
+            bait.offsetWidth === 0 ||
+            bait.clientHeight === 0;
+            
+          setIsAdBlockActive(isBlocked);
+          
+          if (document.body.contains(bait)) {
+            document.body.removeChild(bait);
+          }
+        }, 100);
       } catch (err) {
+        console.error('AdBlock detection failed:', err);
+        // Fallback to true if appending element throws an error (usually indicates strict sandboxing/adblock)
         setIsAdBlockActive(true);
       }
     };
-    checkAdBlock();
+
+    if (document.readyState === 'complete') {
+      detectAdBlock();
+    } else {
+      window.addEventListener('load', detectAdBlock);
+      return () => window.removeEventListener('load', detectAdBlock);
+    }
   }, []);
 
   // Calculate SHA-256 of file buffer
