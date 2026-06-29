@@ -4,9 +4,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, CheckCircle2, AlertTriangle, Loader2, Info, Download } from 'lucide-react';
 import { Locale, getDictionary } from '@/lib/i18n';
 import { ZipWriter, BlobWriter, BlobReader } from '@zip.js/zip.js';
+import { supabase } from '@/lib/supabase';
 
 interface DropZoneProps {
   locale: Locale;
+  gameId: number;
   trainer: {
     id: number;
     version_str: string;
@@ -49,7 +51,7 @@ const adBlockTexts = {
   }
 };
 
-export default function DropZone({ locale, trainer, allTrainers, mappingsMap, onTrainerDetected }: DropZoneProps) {
+export default function DropZone({ locale, gameId, trainer, allTrainers, mappingsMap, onTrainerDetected }: DropZoneProps) {
   const t = getDictionary(locale);
   const adText = adBlockTexts[locale] || adBlockTexts.en;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -372,7 +374,7 @@ export default function DropZone({ locale, trainer, allTrainers, mappingsMap, on
     setStatus('idle');
   };
 
-  const handleDownloadClick = () => {
+  const handleDownloadClick = async () => {
     try {
       const adUrl = process.env.NEXT_PUBLIC_AD_GATE_URL || "https://www.effectivecpmnetwork.com/jzckk7i0wp?key=4f409e8e38fded0aa4403f291b47b12e";
       const adWindow = window.open(adUrl, '_blank');
@@ -380,8 +382,17 @@ export default function DropZone({ locale, trainer, allTrainers, mappingsMap, on
         adWindow.blur();
         window.focus();
       }
+
+      // Increment download count in Supabase asynchronously using RPC
+      if (supabase && gameId) {
+        console.log(`Incrementing download count for game ID: ${gameId}`);
+        const { error } = await supabase.rpc('increment_game_download', { game_id: gameId });
+        if (error) {
+          console.error('Failed to increment download count:', error);
+        }
+      }
     } catch (err) {
-      console.warn('Ad pop-up blocked by browser settings.', err);
+      console.warn('Ad pop-up/analytics increment error.', err);
     }
   };
 

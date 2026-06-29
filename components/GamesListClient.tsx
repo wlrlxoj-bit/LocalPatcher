@@ -59,35 +59,45 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
       );
     })
     .sort((a, b) => {
+      const isAPopular = (a as any).is_popular;
+      const isBPopular = (b as any).is_popular;
+      
+      if (isAPopular || isBPopular) {
+        if (isAPopular && isBPopular) {
+          return ((a as any).popularity_index ?? 999) - ((b as any).popularity_index ?? 999);
+        }
+        return isAPopular ? -1 : 1;
+      }
+
       const popularSlugs = [
         'elden-ring',
-        'cyberpunk-2077',
-        'palworld',
-        'grand-theft-auto-v',
-        'red-dead-redemption-2',
-        'monster-hunter-wilds',
-        'hogwarts-legacy',
-        'octopath-traveler-ii',
+        'cyberpunk-2077-trainer',
+        'palworld-trainer',
+        'grand-theft-auto-v-trainer-1766066855',
+        'red-dead-redemption-2-trainer',
+        'monster-hunter-wilds-trainer',
+        'hogwarts-legacy-trainers',
+        'octopath-traveler-ii-trainer',
         'octopath-traveler',
-        'hades-ii',
-        'hades',
-        'witcher-3-wild-hunt',
+        'hades-ii-trainer',
+        'hades-trainer',
+        'the-witcher-3-wild-hunt-trainer',
         'stellaris',
       ];
 
       const indexA = popularSlugs.indexOf(a.slug);
       const indexB = popularSlugs.indexOf(b.slug);
 
-      const isAPopular = indexA !== -1;
-      const isBPopular = indexB !== -1;
+      const isAPopularFallback = indexA !== -1;
+      const isBPopularFallback = indexB !== -1;
 
-      if (isAPopular && isBPopular) {
+      if (isAPopularFallback && isBPopularFallback) {
         return indexA - indexB;
       }
-      if (isAPopular) {
+      if (isAPopularFallback) {
         return -1;
       }
-      if (isBPopular) {
+      if (isBPopularFallback) {
         return 1;
       }
 

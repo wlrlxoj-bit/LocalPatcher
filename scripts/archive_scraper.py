@@ -13,6 +13,9 @@ from bs4 import BeautifulSoup
 import pefile
 from supabase import create_client, Client
 
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env.local'), override=True)
+
 # Environment variables setup
 SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
@@ -90,7 +93,8 @@ COMMON_TRANSLATIONS = {
     "check for updates": "업데이트 확인"
 }
 
-db_dictionary = {}
+db_dictionary_ko = {}
+db_dictionary_ja = {}
 
 def save_new_translations_to_dictionary(original_line: str, translated_line: str, db: Client):
     """Extracts clean option labels and inserts them into Supabase 'common_dictionary' table."""
@@ -103,12 +107,12 @@ def save_new_translations_to_dictionary(original_line: str, translated_line: str
             kor_label = match_trans.group(2).strip()
             eng_lower = eng_label.lower().replace("'", "").strip()
             
-            if eng_lower not in db_dictionary and eng_lower not in COMMON_TRANSLATIONS:
+            if eng_lower not in db_dictionary_ko and eng_lower not in COMMON_TRANSLATIONS:
                 db.table('common_dictionary').insert({
                     'english_term': eng_label,
                     'korean_translation': kor_label
                 }).execute()
-                db_dictionary[eng_lower] = kor_label
+                db_dictionary_ko[eng_lower] = kor_label
                 print(f"[+] Learned new term: '{eng_label}' -> '{kor_label}'")
     except Exception:
         pass
@@ -158,7 +162,7 @@ def translate_via_llm(lines_to_translate):
                 "Content-Type": "application/json"
             }
             payload = {
-                "model": "gpt-4o-mini",
+                "model": "gpt-4.1-mini",
                 "messages": [
                     {"role": "system", "content": "You are a helpful localization assistant."},
                     {"role": "user", "content": prompt}
@@ -191,8 +195,8 @@ def translate_line(line: str):
     label_lower = label.lower().replace("'", "").strip()
     
     translated_label = None
-    if label_lower in db_dictionary:
-        translated_label = db_dictionary[label_lower]
+    if label_lower in db_dictionary_ko:
+        translated_label = db_dictionary_ko[label_lower]
     elif label_lower in COMMON_TRANSLATIONS:
         translated_label = COMMON_TRANSLATIONS[label_lower]
         
@@ -245,6 +249,126 @@ def process_translation_block(text: str, db: Client) -> str:
             trans_line = llm_map.get(line, line)
             if trans_line != line:
                 save_new_translations_to_dictionary(line, trans_line, db)
+
+        if len(trans_line) < orig_len:
+            trans_line += " " * (orig_len - len(trans_line))
+        elif len(trans_line) > orig_len:
+            trans_line = trans_line[:orig_len]
+            
+        translated_lines.append(trans_line)
+        
+    return "\n".join(translated_lines)
+
+def translate_line_ja(line: str):
+    """Attempts Japanese dictionary translation for a single line. Returns None if it needs LLM translation."""
+    pattern = r"^([a-zA-Z0-9\+\s\.\-\*\/↑↓←→]+)\s*-\s*([^\*]+)(.*)$"
+    match = re.match(pattern, line.strip())
+    if not match:
+        return line
+    
+    hotkey = match.group(1).strip()
+    label = match.group(2).strip()
+    notes = match.group(3).strip()
+    
+    label_lower = label.lower().replace("'", "").strip()
+    
+    translated_label = None
+    if label_lower in db_dictionary_ja:
+        translated_label = db_dictionary_ja[label_lower]
+        
+    if translated_label is not None:
+        translated_notes = ""
+        if notes:
+            notes_lower = notes.lower()
+            if "takes effect" in notes_lower:
+                translated_notes = " **効果適用時に反映"
+            elif "activate before" in notes_lower:
+                translated_notes = " **使用前有効化"
+            else:
+                translated_notes = notes
+                
+        return f"{hotkey} - {translated_label}{translated_notes}"
+    
+    return None
+
+def translate_via_llm_ja(lines_to_translate):
+    """Sends a batch of untranslated lines to OpenAI API in JSON mode for Japanese."""
+    if not lines_to_translate:
+        return {}
+
+    prompt = f"""
+    You are a professional game localization expert.
+    Translate the following list of game trainer cheat options into natural, standard Japanese used by Japanese gamers.
+    
+    CRITICAL RULES:
+    1. KEEP the exact hotkey prefix (e.g. "Num 1 -", "Ctrl+Num 1 -", "Alt+Num 1 -") unchanged.
+    2. Translate only the description label and any note texts (e.g. Translate "Infinite HP" to "体力無限" or "無限体力").
+    3. Return your output strictly as a JSON object with a single key "translations" containing an array of translated strings in the EXACT same order.
+    
+    List to translate:
+    {json.dumps(lines_to_translate, ensure_ascii=False)}
+    """
+
+    if OPENAI_API_KEY:
+        try:
+            print("[*] Calling OpenAI API (gpt-4.1-mini) for batch translation to Japanese...")
+            url = "https://api.openai.com/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                    {"role": "system", "content": "You are a helpful localization assistant."},
+                    {"role": "user", "content": prompt}
+                ],
+                "response_format": {"type": "json_object"}
+            }
+            res = requests.post(url, headers=headers, json=payload, timeout=15)
+            if res.status_code == 200:
+                res_data = res.json()
+                text_response = res_data["choices"][0]["message"]["content"]
+                translated_array = json.loads(text_response).get("translations", [])
+                if len(translated_array) == len(lines_to_translate):
+                    return dict(zip(lines_to_translate, translated_array))
+        except Exception as e:
+            print(f"[-] OpenAI API translation failed: {e}")
+
+    return {}
+
+def process_translation_block_ja(text: str, db: Client) -> str:
+    """Splits options block, translates each line to Japanese, and space-pads to synchronize lengths."""
+    lines = text.split("\n")
+    dict_results = []
+    lines_needing_llm = []
+
+    for line in lines:
+        if not line or line.strip() == "":
+            dict_results.append(line)
+            continue
+            
+        trans_line = translate_line_ja(line)
+        if trans_line is not None:
+            dict_results.append(trans_line)
+        else:
+            dict_results.append(None)
+            lines_needing_llm.append(line)
+
+    llm_map = {}
+    if lines_needing_llm and OPENAI_API_KEY:
+        llm_map = translate_via_llm_ja(lines_needing_llm)
+
+    translated_lines = []
+    for idx, line in enumerate(lines):
+        if not line or line.strip() == "":
+            translated_lines.append(line)
+            continue
+            
+        orig_len = len(line)
+        trans_line = dict_results[idx]
+        if trans_line is None:
+            trans_line = llm_map.get(line, line)
 
         if len(trans_line) < orig_len:
             trans_line += " " * (orig_len - len(trans_line))
@@ -496,11 +620,17 @@ def process_archive_trainer(game_url, db: Client, delay_sec=1.0, force=False):
                 # Check if trainer already exists
                 trainer_res = db.table('trainers').select('id').eq('original_file_hash', original_file_hash).execute()
                 if trainer_res.data:
+                    trainer_id = trainer_res.data[0]['id']
+                    # Check if it has any translation mappings
+                    mappings_res = db.table('translation_mappings').select('id').eq('trainer_id', trainer_id).execute()
+                    if mappings_res.data and len(mappings_res.data) > 0:
+                        print(f"    [*] Skip/Protect: Trainer ID {trainer_id} has existing translation mappings. Skipping overwrite.")
+                        continue
+
                     if not force:
                         print(f"    [*] Already registered: {original_file_hash}")
                         continue
                     else:
-                        trainer_id = trainer_res.data[0]['id']
                         print(f"    [*] Force mode: deleting existing mappings and trainer ID {trainer_id} to overwrite...")
                         db.table('translation_mappings').delete().eq('trainer_id', trainer_id).execute()
                         db.table('trainers').delete().eq('id', trainer_id).execute()
@@ -544,17 +674,31 @@ def process_archive_trainer(game_url, db: Client, delay_sec=1.0, force=False):
                 trainer_id = insert_trainer.data[0]['id']
                 
                 # Translate block
-                translated_text = process_translation_block(mapping_details['original_text'], db)
+                translated_text_ko = process_translation_block(mapping_details['original_text'], db)
+                translated_text_ja = process_translation_block_ja(mapping_details['original_text'], db)
                 
                 # Insert translation mapping
+                clean_orig_text = mapping_details['original_text'].replace('\x00', '').replace('\u0000', '')
+                
                 db.table('translation_mappings').insert({
                     'trainer_id': trainer_id,
                     'offset_dec': mapping_details['offset_dec'],
                     'encoding': mapping_details['encoding'],
-                    'original_text': mapping_details['original_text'].replace('\x00', '').replace('\u0000', ''),
-                    'translated_text': translated_text.replace('\x00', '').replace('\u0000', ''),
+                    'original_text': clean_orig_text,
+                    'translated_text': translated_text_ko.replace('\x00', '').replace('\u0000', ''),
                     'max_char_len': mapping_details['max_char_len'],
                     'language_code': 'ko',
+                    'is_approved': True
+                }).execute()
+                
+                db.table('translation_mappings').insert({
+                    'trainer_id': trainer_id,
+                    'offset_dec': mapping_details['offset_dec'],
+                    'encoding': mapping_details['encoding'],
+                    'original_text': clean_orig_text,
+                    'translated_text': translated_text_ja.replace('\x00', '').replace('\u0000', ''),
+                    'max_char_len': mapping_details['max_char_len'],
+                    'language_code': 'ja',
                     'is_approved': True
                 }).execute()
                 
@@ -582,13 +726,16 @@ def main():
     db: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
     print(f"[*] Starting Archive Scraper (Limit: {args.limit} games, Delay: {args.delay}s)...")
     
-    # Load dynamic dictionary
+    # Load dynamic dictionary from Supabase
     try:
-        res = db.table('common_dictionary').select('english_term, korean_translation').execute()
+        res = db.table('common_dictionary').select('english_term, korean_translation, translated_ja').execute()
         if res.data:
             for row in res.data:
-                db_dictionary[row['english_term'].lower().strip()] = row['korean_translation']
-            print(f"[+] Loaded {len(db_dictionary)} common translations from database.")
+                eng_key = row['english_term'].lower().strip()
+                db_dictionary_ko[eng_key] = row['korean_translation']
+                if row.get('translated_ja'):
+                    db_dictionary_ja[eng_key] = row['translated_ja']
+            print(f"[+] Loaded {len(db_dictionary_ko)} KO and {len(db_dictionary_ja)} JA translations from database.")
     except Exception as e:
         print(f"[*] Dynamic dictionary not active, fallback to static defaults. Error: {e}")
         

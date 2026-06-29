@@ -179,6 +179,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
 
                 <DropZone 
                   locale={locale} 
+                  gameId={game.id}
                   trainer={selectedTrainer} 
                   allTrainers={trainers}
                   mappingsMap={mappingsMap}

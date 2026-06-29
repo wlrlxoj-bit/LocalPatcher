@@ -3,6 +3,7 @@ import Header from '@/layouts/Header';
 import Footer from '@/layouts/Footer';
 import '@/app/globals.css';
 import { Locale } from '@/lib/i18n';
+import Script from 'next/script';
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -38,6 +39,26 @@ export default async function LocaleLayout({
 
   return (
     <html lang={currentLocale}>
+      <head>
+        {process.env.NEXT_PUBLIC_GA_ID && (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_ID}`}
+              strategy="afterInteractive"
+            />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${process.env.NEXT_PUBLIC_GA_ID}', {
+                  page_path: window.location.pathname,
+                });
+              `}
+            </Script>
+          </>
+        )}
+      </head>
       <body className="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500 selection:text-slate-950">
         <div className="relative min-h-screen flex flex-col z-0">
           {/* Background Decorative Light Gradients */}
