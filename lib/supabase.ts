@@ -324,9 +324,38 @@ export async function getGames() {
   }
 }
 
+export async function getGamesWithTrainers() {
+  if (!supabase) {
+    return mockGames.map(game => ({
+      ...game,
+      trainers: mockTrainers.filter(t => t.game_id === game.id)
+    }));
+  }
+  try {
+    const { data, error } = await supabase
+      .from('games')
+      .select('*, trainers(id, version_str, option_count)');
+    if (error || !data) throw error || new Error('No data');
+    return data;
+  } catch (err) {
+    console.warn('getGamesWithTrainers failed, falling back:', err);
+    return mockGames.map(game => ({
+      ...game,
+      trainers: mockTrainers.filter(t => t.game_id === game.id)
+    }));
+  }
+}
+
 export async function getGameBySlug(slug: string) {
-  const games = await getGames();
-  return games.find(g => g.slug === slug) || null;
+  if (!supabase) return mockGames.find(g => g.slug === slug) || null;
+  try {
+    const { data, error } = await supabase.from('games').select('*').eq('slug', slug).maybeSingle();
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.warn('Supabase query failed, falling back to mock data:', err);
+    return mockGames.find(g => g.slug === slug) || null;
+  }
 }
 
 export async function getTrainersForGame(gameId: number) {
