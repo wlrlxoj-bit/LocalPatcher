@@ -1,7 +1,7 @@
 import React from 'react';
 import { notFound } from 'next/navigation';
 import PatcherClient from '@/components/PatcherClient';
-import { getGameBySlug, getTrainersForGame, getMappingsForTrainer } from '@/lib/supabase';
+import { getGameBySlug, getTrainersForGame, getMappingsForTrainers } from '@/lib/supabase';
 import { Locale } from '@/lib/i18n';
 
 export const dynamic = 'force-dynamic';
@@ -29,12 +29,8 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
     notFound();
   }
 
-  // 3. Pre-fetch mappings for all trainers of this game
-  const mappingsMap: Record<number, any[]> = {};
-  for (const trainer of trainers) {
-    const mappings = await getMappingsForTrainer(trainer.id, currentLocale);
-    mappingsMap[trainer.id] = mappings;
-  }
+  // 3. Pre-fetch mappings for all trainers of this game in a single batch query
+  const mappingsMap = await getMappingsForTrainers(trainers.map(t => t.id), currentLocale);
 
   return (
     <PatcherClient

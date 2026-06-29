@@ -390,3 +390,44 @@ export async function getMappingsForTrainer(trainerId: number, lang: string = 'k
     return mappings.filter(m => m.language_code === lang);
   }
 }
+
+export async function getMappingsForTrainers(trainerIds: number[], lang: string = 'ko') {
+  if (!supabase) {
+    const result: Record<number, any[]> = {};
+    for (const tid of trainerIds) {
+      const mappings = mockMappings[tid] || [];
+      result[tid] = mappings.filter(m => m.language_code === lang);
+    }
+    return result;
+  }
+  try {
+    const { data, error } = await supabase
+      .from('translation_mappings')
+      .select('*')
+      .in('trainer_id', trainerIds)
+      .eq('language_code', lang)
+      .eq('is_approved', true);
+    if (error || !data) throw error || new Error('No data');
+    
+    const result: Record<number, any[]> = {};
+    for (const tid of trainerIds) {
+      result[tid] = [];
+    }
+    for (const mapping of data) {
+      const tid = mapping.trainer_id;
+      if (!result[tid]) {
+        result[tid] = [];
+      }
+      result[tid].push(mapping);
+    }
+    return result;
+  } catch (err) {
+    console.warn('Supabase query failed, falling back to mock data:', err);
+    const result: Record<number, any[]> = {};
+    for (const tid of trainerIds) {
+      const mappings = mockMappings[tid] || [];
+      result[tid] = mappings.filter(m => m.language_code === lang);
+    }
+    return result;
+  }
+}
