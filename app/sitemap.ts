@@ -42,7 +42,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const sitemapEntries: MetadataRoute.Sitemap = [];
 
   // 2. Static pages for each locale
-  const staticPaths = ['', '/terms', '/privacy', '/faq', '/support'];
+  const staticPaths = ['', '/terms', '/privacy', '/faq', '/support', '/guides'];
   
   for (const locale of locales) {
     for (const path of staticPaths) {
@@ -59,7 +59,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   for (const locale of locales) {
     for (const slug of patchableGameSlugs) {
       sitemapEntries.push({
-        url: `${BASE_URL}/${locale}/games/${slug}`,
+        url: `${BASE_URL}/${locale}/patcher/${slug}`,
         lastModified: new Date(),
         changeFrequency: 'weekly',
         priority: 0.8,
