@@ -305,6 +305,19 @@ export default function DropZone({ locale, trainer, allTrainers, mappingsMap, on
     setStatus('idle');
   };
 
+  const handleDownloadClick = () => {
+    try {
+      const adUrl = process.env.NEXT_PUBLIC_AD_GATE_URL || "https://www.effectivecpmnetwork.com/jzckk7i0wp?key=4f409e8e38fded0aa4403f291b47b12e";
+      const adWindow = window.open(adUrl, '_blank');
+      if (adWindow) {
+        adWindow.blur();
+        window.focus();
+      }
+    } catch (err) {
+      console.warn('Ad pop-up blocked by browser settings.', err);
+    }
+  };
+
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -404,6 +417,7 @@ export default function DropZone({ locale, trainer, allTrainers, mappingsMap, on
             <a
               href={patchedFileUrl || '#'}
               download={patchedFileName}
+              onClick={handleDownloadClick}
               className="mt-6 w-full max-w-xs px-6 py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-bold text-sm shadow-xl shadow-cyan-500/25 flex items-center justify-center space-x-2 transform hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-200"
             >
               <Download className="w-4 h-4 text-slate-950" />
