@@ -49,14 +49,50 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
   };
 
   // Filter games based on search query (checks both English and Korean titles) and option count
-  const filteredGames = games.filter(game => {
-    const query = searchQuery.toLowerCase();
-    return (
-      getTrainerInfo(game.id).count > 0 &&
-      (game.title_en.toLowerCase().includes(query) ||
-       game.title_ko.toLowerCase().includes(query))
-    );
-  });
+  const filteredGames = games
+    .filter(game => {
+      const query = searchQuery.toLowerCase();
+      return (
+        getTrainerInfo(game.id).count > 0 &&
+        (game.title_en.toLowerCase().includes(query) ||
+         game.title_ko.toLowerCase().includes(query))
+      );
+    })
+    .sort((a, b) => {
+      const popularSlugs = [
+        'elden-ring',
+        'cyberpunk-2077',
+        'palworld',
+        'grand-theft-auto-v',
+        'red-dead-redemption-2',
+        'monster-hunter-wilds',
+        'hogwarts-legacy',
+        'octopath-traveler-ii',
+        'octopath-traveler',
+        'hades-ii',
+        'hades',
+        'witcher-3-wild-hunt',
+        'stellaris',
+      ];
+
+      const indexA = popularSlugs.indexOf(a.slug);
+      const indexB = popularSlugs.indexOf(b.slug);
+
+      const isAPopular = indexA !== -1;
+      const isBPopular = indexB !== -1;
+
+      if (isAPopular && isBPopular) {
+        return indexA - indexB;
+      }
+      if (isAPopular) {
+        return -1;
+      }
+      if (isBPopular) {
+        return 1;
+      }
+
+      return b.id - a.id;
+    });
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-12 flex flex-col items-center">
