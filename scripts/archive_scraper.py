@@ -477,6 +477,13 @@ def process_archive_trainer(game_url, db: Client, delay_sec=1.0, force=False):
                     finally:
                         if os.path.exists("temp_trainer.rar"):
                             os.remove("temp_trainer.rar")
+                        # Clean up any leftover extracted exe files in the current directory
+                        for fname in os.listdir("."):
+                            if fname.lower().endswith(".exe") and fname.lower() not in ["unrar.exe", "unrarw64.exe"]:
+                                try:
+                                    os.remove(fname)
+                                except Exception:
+                                    pass
                 else:
                     exe_bytes = file_bytes
                     
