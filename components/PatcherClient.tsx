@@ -65,7 +65,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
           className="inline-flex items-center space-x-1 text-xs text-slate-500 hover:text-cyan-400 transition-colors"
         >
           <ChevronLeft className="w-4 h-4" />
-          <span>목록으로 돌아가기</span>
+          <span>{t.backToList}</span>
         </Link>
       </div>
 
@@ -94,7 +94,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                 href={`/${locale}/guides`}
                 className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-400 hover:bg-amber-500/20 transition-all duration-200"
               >
-                <span>{game.anti_cheat} 우회 가이드</span>
+                <span>{t.bypassGuide.replace('{antiCheat}', game.anti_cheat)}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             )}
@@ -223,37 +223,37 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
               
               <h5 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
-                지원하는 트레이너 빌드 목록 (Supported Trainer Builds)
+                {t.supportedBuilds}
               </h5>
               
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-800 text-[11px] text-slate-500 uppercase tracking-wider font-mono">
-                      <th className="py-3 px-4 font-semibold">빌드 버전 (Build Version)</th>
-                      <th className="py-3 px-4 font-semibold">예상 파일 크기 (File Size)</th>
-                      <th className="py-3 px-4 font-semibold text-center">치트 옵션 수 (Option Count)</th>
-                      <th className="py-3 px-4 font-semibold text-right">상태 (Status)</th>
+                      <th className="py-3 px-4 font-semibold">{t.buildVersion}</th>
+                      <th className="py-3 px-4 font-semibold">{t.fileSize}</th>
+                      <th className="py-3 px-4 font-semibold text-center">{t.cheatCountLabel}</th>
+                      <th className="py-3 px-4 font-semibold text-right">{t.statusLabel}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50 text-xs">
-                    {trainers.map((t) => (
-                      <tr key={t.id} className="hover:bg-slate-800/10 transition-colors group">
+                    {trainers.map((t_option) => (
+                      <tr key={t_option.id} className="hover:bg-slate-800/10 transition-colors group">
                         <td className="py-3.5 px-4 font-semibold text-slate-300 group-hover:text-cyan-400 transition-colors">
                           <div className="flex items-center gap-2">
-                            <span className="text-slate-600 font-mono text-[10px] bg-slate-800/40 px-1.5 py-0.5 rounded">ID: {t.id}</span>
-                            <span>{t.version_str}</span>
+                            <span className="text-slate-600 font-mono text-[10px] bg-slate-800/40 px-1.5 py-0.5 rounded">ID: {t_option.id}</span>
+                            <span>{t_option.version_str}</span>
                           </div>
                         </td>
                         <td className="py-3.5 px-4 text-slate-400 font-mono">
-                          {t.original_file_size ? `${(t.original_file_size / 1024 / 1024).toFixed(2)} MB` : 'N/A'}
+                          {t_option.original_file_size ? `${(t_option.original_file_size / 1024 / 1024).toFixed(2)} MB` : 'N/A'}
                         </td>
                         <td className="py-3.5 px-4 text-center text-slate-400 font-mono">
-                          {t.option_count ? `${t.option_count}개 치트` : 'N/A'}
+                          {t_option.option_count ? t.cheatCountText.replace('{count}', String(t_option.option_count || 0)) : 'N/A'}
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.05)]">
-                            ✅ 자동 감지 가능
+                            {t.autoDetectable}
                           </span>
                         </td>
                       </tr>
@@ -267,7 +267,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
         );
       })() : (
         <div className="py-12 text-center text-slate-500">
-          이 게임에 대한 사용 가능한 트레이너 버전이 등록되지 않았습니다.
+          {t.noTrainerVersion}
         </div>
       )}
 
