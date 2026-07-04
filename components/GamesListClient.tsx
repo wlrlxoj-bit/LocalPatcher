@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import SearchBar from '@/components/SearchBar';
 import GameCard from '@/components/GameCard';
 import { Locale, getDictionary } from '@/lib/i18n';
-import { Info, ShieldCheck, Zap, ChevronDown, AlertTriangle } from 'lucide-react';
+import { Info, ShieldCheck, Zap, ChevronDown } from 'lucide-react';
 
 interface Game {
   id: number;
@@ -154,18 +154,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
         </div>
       </div>
 
-      {locale !== 'ko' && (
-        <div className="w-full max-w-4xl p-4 rounded-xl border border-amber-500/20 bg-amber-950/20 text-amber-400 text-xs sm:text-sm flex items-start gap-3 mb-6">
-          <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-          <div>
-            {locale === 'ja' ? (
-              "お知らせ: 現在、翻訳パッチは韓国語(ko)のみ対応しています。日本語を含む他の言語は順次サポート予定です。パッチを適用するとトレーナーのテキストは韓国語に翻訳されます。"
-            ) : (
-              "Notice: Currently, translation patches only support Korean (ko). Other languages (including Japanese and English labels) will be supported in future updates. Patching will output Korean text."
-            )}
-          </div>
-        </div>
-      )}
+
 
       {/* Games List Title & Search */}
       <div id="games-section" className="w-full max-w-4xl mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 pt-8 border-t border-slate-800/50">

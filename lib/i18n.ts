@@ -80,9 +80,9 @@ export const i18nDict = {
     aboutSub: 'LocalPatcher does not distribute cracks or virus-infected files. We only swap language offsets transparently.',
   },
   ja: {
-    title: 'LocalPatcher - トレーナーローカライズツール',
-    subtitle: '安全で確実なトレーナーパッチャー',
-    desc: 'アップロードされたファイルはサーバーに保存されず、外部に流出することもありません。既存の英語文字列のみを1:1で上書きするため、ファイルの完全性が保証されます。',
+    title: 'ゲームトレーナー日本語化パッチ＆ダウンロード | LocalPatcher',
+    subtitle: 'Steamゲームトレーナー日本語化プラットフォーム',
+    desc: 'ファイルをサーバーにアップロードせず、ブラウザ上で安全かつ簡単にFLiNGトレーナーやSteamゲームのチートツールを日本語化（ローカライズ）できるユーティリティです。',
     badgeSecure: 'サーバー保存なしの安全な多言語パッチ',
     badgeAnonTitle: '徹底した匿名性',
     badgeAnonDesc: '会員登録やログインは一切不要。お客様の個人情報は一切収集いたしません。',
