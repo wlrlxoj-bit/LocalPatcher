@@ -94,6 +94,14 @@ export default async function LocaleLayout({
             </Script>
           </>
         )}
+        {process.env.NEXT_PUBLIC_ADSENSE_ID && (
+          <Script
+            async
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${process.env.NEXT_PUBLIC_ADSENSE_ID}`}
+            crossOrigin="anonymous"
+            strategy="afterInteractive"
+          />
+        )}
       </head>
       <body className="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500 selection:text-slate-950">
         <div className="relative min-h-screen flex flex-col z-0">
