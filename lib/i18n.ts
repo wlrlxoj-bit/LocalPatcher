@@ -2,9 +2,9 @@ export type Locale = 'ko' | 'en' | 'ja';
 
 export const i18nDict = {
   ko: {
-    title: 'LocalPatcher - 안전한 트레이너 한글 패치',
-    subtitle: '안심하고 쓰는 무해한 트레이너 패쳐',
-    desc: '사용자의 원본 트레이너를 서버에 보존하거나 외부로 유포하지 않습니다. 영문 문자열 영역을 1:1 오버라이트하여 원본 프로그램의 무결성을 완벽하게 보장합니다.',
+    title: '게임 트레이너 한글 패치 & 다운로드 플랫폼 | LocalPatcher',
+    subtitle: '스팀 게임 트레이너 한글 패치 플랫폼',
+    desc: '사용자의 원본 트레이너 파일을 서버에 유포하지 않고, 100% 안전하게 브라우저 로컬에서 플링(FLiNG) 트레이너 및 스팀 게임 치트 키를 한글화 패치해 주는 유틸리티입니다.',
     badgeSecure: '서버 보존 없는 안전한 다국어 패칭',
     badgeAnonTitle: '익명성 철저 보장',
     badgeAnonDesc: '회원가입과 일반 로그인을 완전히 배제하여 어떠한 개인정보도 수집하지 않습니다.',
