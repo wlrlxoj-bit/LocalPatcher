@@ -41,9 +41,19 @@ export async function generateMetadata({ params }: PatcherPageProps) {
     description = `Apply client-side translation and localization patches for ${game.title_en} game trainers (${versionsStr}). Safely modify original files directly in your web browser with no server uploads.`;
   }
 
+  const gameName = game.title_ko || game.title_en;
+  const gameNameEn = game.title_en;
+
+  const keywords = currentLocale === 'ko'
+    ? [`${gameName} 트레이너 한글`, `${gameName} 한글 패치`, `${gameName} 치트 다운로드`, `${gameName} 플링 번역`, '트레이너 한글 패치', '게임 트레이너 한글']
+    : currentLocale === 'ja'
+      ? [`${gameName} トレーナー日本語化`, `${gameName} チート翻訳`, `${gameName} MOD日本語化`, `${gameName} チートダウンロード`, 'トレーナー日本語化', 'ゲームトレーナー']
+      : [`${gameNameEn} trainer translation`, `${gameNameEn} localized cheats`, `${gameNameEn} FLiNG translated`, 'game trainer localization'];
+
   return {
     title,
     description,
+    keywords,
     alternates: {
       canonical: `/${currentLocale}/patcher/${game_slug}`,
       languages: {

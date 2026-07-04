@@ -24,10 +24,17 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
       ? 'SteamゲームトレーナーおよびFLiNGチートツールの日本語化パッチプラットフォーム。ファイルをサーバーにアップロードせず、ブラウザ上で安全かつ簡単に日本語訳パッチを適用・ダウンロードできます。'
       : 'A safe client-side trainer patch utility that overwrites English text in game trainers with local language strings. No server uploads.';
 
+  const keywords = isKo
+    ? ['트레이너 한글 패치', '게임 트레이너 한글', '플링 트레이너 번역', '스팀 트레이너 다운로드', '게임 치트 한글화', '로컬패처', 'LocalPatcher']
+    : isJa
+      ? ['ゲームトレーナー日本語化', 'FLiNGトレーナー日本語', 'チートツール翻訳', 'PCゲームチート', 'トレーナーパッチ', 'ローカルパッチャー', '日本トレーナー', '日本ゲームチート']
+      : ['game trainer translation', 'fling trainer localized', 'cheat translation tool', 'steam trainer patch', 'hangul patch', 'localpatcher'];
+
   return {
     metadataBase: new URL('https://local-patcher.vercel.app'),
     title,
     description,
+    keywords,
     alternates: {
       canonical: `/${currentLocale}`,
       languages: {
