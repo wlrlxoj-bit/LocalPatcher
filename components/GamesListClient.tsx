@@ -14,6 +14,8 @@ interface Game {
   cover_image_url: string;
   anti_cheat: string;
   fling_url?: string;
+  is_popular?: boolean;
+  popularity_index?: number;
 }
 
 interface Trainer {
@@ -48,59 +50,35 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
     };
   };
 
-  // Filter games based on search query (checks both English and Korean titles) and option count
-  const filteredGames = games
+  // Get games that actually have options/trainers
+  const gamesWithTrainers = games.filter(game => getTrainerInfo(game.id).count > 0);
+
+  // Split into latest and popular games
+  const latestGames = [...gamesWithTrainers].sort((a, b) => b.id - a.id);
+
+  const popularGames = gamesWithTrainers
+    .filter(game => game.is_popular === true)
+    .sort((a, b) => (a.popularity_index ?? 999) - (b.popularity_index ?? 999));
+
+  // Filter games based on search query (checks both English and Korean titles)
+  const filteredGames = gamesWithTrainers
     .filter(game => {
       const query = searchQuery.toLowerCase();
       return (
-        getTrainerInfo(game.id).count > 0 &&
-        (game.title_en.toLowerCase().includes(query) ||
-         game.title_ko.toLowerCase().includes(query))
+        game.title_en.toLowerCase().includes(query) ||
+        game.title_ko.toLowerCase().includes(query)
       );
     })
     .sort((a, b) => {
-      const isAPopular = (a as any).is_popular;
-      const isBPopular = (b as any).is_popular;
+      const isAPopular = a.is_popular;
+      const isBPopular = b.is_popular;
       
       if (isAPopular || isBPopular) {
         if (isAPopular && isBPopular) {
-          return ((a as any).popularity_index ?? 999) - ((b as any).popularity_index ?? 999);
+          return (a.popularity_index ?? 999) - (b.popularity_index ?? 999);
         }
         return isAPopular ? -1 : 1;
       }
-
-      const popularSlugs = [
-        'elden-ring',
-        'cyberpunk-2077-trainer',
-        'palworld-trainer',
-        'grand-theft-auto-v-trainer-1766066855',
-        'red-dead-redemption-2-trainer',
-        'monster-hunter-wilds-trainer',
-        'hogwarts-legacy-trainers',
-        'octopath-traveler-ii-trainer',
-        'octopath-traveler',
-        'hades-ii-trainer',
-        'hades-trainer',
-        'the-witcher-3-wild-hunt-trainer',
-        'stellaris',
-      ];
-
-      const indexA = popularSlugs.indexOf(a.slug);
-      const indexB = popularSlugs.indexOf(b.slug);
-
-      const isAPopularFallback = indexA !== -1;
-      const isBPopularFallback = indexB !== -1;
-
-      if (isAPopularFallback && isBPopularFallback) {
-        return indexA - indexB;
-      }
-      if (isAPopularFallback) {
-        return -1;
-      }
-      if (isBPopularFallback) {
-        return 1;
-      }
-
       return b.id - a.id;
     });
 
@@ -154,12 +132,10 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
         </div>
       </div>
 
-
-
       {/* Games List Title & Search */}
-      <div id="games-section" className="w-full max-w-4xl mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 pt-8 border-t border-slate-800/50">
+      <div id="games-section" className={`w-full ${searchQuery ? 'max-w-4xl' : 'max-w-7xl'} mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 pt-8 border-t border-slate-800/50`}>
         <h2 className="font-bold text-xl sm:text-2xl tracking-tight text-white font-outfit">
-          {t.supportedGamesTitle}
+          {searchQuery ? t.supportedGamesTitle : t.recentUpdatesTitle}
         </h2>
         
         <SearchBar 
@@ -169,48 +145,146 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
         />
       </div>
 
-      {/* Game Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 w-full max-w-4xl mb-8">
-        {filteredGames.length > 0 ? (
-          filteredGames.slice(0, visibleCount).map(game => {
-            const trainer = getTrainerInfo(game.id);
-            return (
-              <GameCard
-                key={game.id}
-                game={game}
-                trainerVersion={trainer.version}
-                optionCount={trainer.count}
-                locale={locale}
-                optionsLabel={t.optionsCount}
-              />
-            );
-          })
-        ) : (
-          <div className="col-span-full py-12 text-center text-slate-500 text-sm">
-            검색 결과가 없습니다. 다른 게임을 검색해 주세요.
+      {!searchQuery ? (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 w-full max-w-7xl mb-8 items-start">
+          {/* Left Column: Recent Updates */}
+          <div className="lg:col-span-3 flex flex-col gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 w-full">
+              {latestGames.slice(0, visibleCount).map(game => {
+                const trainer = getTrainerInfo(game.id);
+                return (
+                  <GameCard
+                    key={game.id}
+                    game={game}
+                    trainerVersion={trainer.version}
+                    optionCount={trainer.count}
+                    locale={locale}
+                    optionsLabel={t.optionsCount}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Load More button */}
+            {latestGames.length > 0 && visibleCount < latestGames.length && (
+              <div className="flex flex-col items-center gap-3 w-full py-4">
+                <p className="text-xs text-slate-500 font-outfit tracking-wide">
+                  {Math.min(visibleCount, latestGames.length)} / {latestGames.length} 게임 표시 중
+                </p>
+                <button
+                  onClick={() => setVisibleCount(prev => prev + 18)}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-700 bg-slate-800/60 text-slate-300 font-outfit text-sm font-medium tracking-wide transition-all duration-300 hover:bg-cyan-500/20 hover:border-cyan-500/50 hover:text-cyan-300 hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] cursor-pointer"
+                >
+                  {t.loadMore}
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+            
+            {(latestGames.length === 0 || visibleCount >= latestGames.length) && (
+              <div className="mb-6" />
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Load More 페이지네이션 버튼 */}
-      {filteredGames.length > 0 && visibleCount < filteredGames.length && (
-        <div className="flex flex-col items-center gap-3 w-full max-w-4xl mb-20">
-          <p className="text-xs text-slate-500 font-outfit tracking-wide">
-            {Math.min(visibleCount, filteredGames.length)} / {filteredGames.length} 게임 표시 중
-          </p>
-          <button
-            onClick={() => setVisibleCount(prev => prev + 18)}
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-700 bg-slate-800/60 text-slate-300 font-outfit text-sm font-medium tracking-wide transition-all duration-300 hover:bg-cyan-500/20 hover:border-cyan-500/50 hover:text-cyan-300 hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] cursor-pointer"
-          >
-            더 보기 · Load More
-            <ChevronDown className="w-4 h-4" />
-          </button>
+          {/* Right Column: Popular Trainers Sidebar */}
+          <div className="lg:col-span-1 lg:sticky lg:top-24 flex flex-col gap-4 p-4 sm:p-5 rounded-2xl border border-slate-800 bg-slate-900/20 backdrop-blur-sm">
+            <h3 className="font-bold text-lg text-white font-outfit border-b border-slate-800 pb-3 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+              {t.popularTrainersTitle}
+            </h3>
+            <div className="flex flex-col gap-3">
+              {popularGames.slice(0, 10).map((game, index) => {
+                const trainer = getTrainerInfo(game.id);
+                const rank = index + 1;
+                return (
+                  <a
+                    key={game.id}
+                    href={`/${locale}/games/${game.slug}`}
+                    className="flex items-center gap-3 p-2 rounded-xl transition-all duration-200 hover:bg-slate-800/40 group"
+                  >
+                    {/* Rank Badge */}
+                    <div className={`w-6 h-6 flex items-center justify-center rounded-lg text-xs font-bold font-outfit shrink-0 ${
+                      rank === 1 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                      rank === 2 ? 'bg-slate-300/20 text-slate-300 border border-slate-300/30' :
+                      rank === 3 ? 'bg-amber-700/20 text-amber-600 border border-amber-700/30' :
+                      'bg-slate-800/50 text-slate-400 border border-slate-700/30'
+                    }`}>
+                      {rank}
+                    </div>
+                    
+                    {/* Thumbnail */}
+                    {game.cover_image_url ? (
+                      <img
+                        src={game.cover_image_url}
+                        alt={locale === 'ko' ? game.title_ko : game.title_en}
+                        className="w-10 h-12 object-cover rounded-lg bg-slate-800 shrink-0 border border-slate-800 group-hover:border-slate-700 transition-colors"
+                      />
+                    ) : (
+                      <div className="w-10 h-12 bg-slate-900/80 rounded-lg shrink-0 border border-slate-800 group-hover:border-slate-700 transition-colors flex items-center justify-center text-[10px] text-slate-500">
+                        No Cover
+                      </div>
+                    )}
+
+                    {/* Title & Info */}
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-sm font-semibold text-slate-200 truncate group-hover:text-cyan-400 transition-colors leading-tight">
+                        {locale === 'ko' ? game.title_ko : game.title_en}
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 font-outfit">
+                        {trainer.count} {t.optionsCount}
+                      </p>
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
         </div>
-      )}
+      ) : (
+        <>
+          {/* Game Cards Grid for Search Results */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 w-full max-w-4xl mb-8">
+            {filteredGames.length > 0 ? (
+              filteredGames.slice(0, visibleCount).map(game => {
+                const trainer = getTrainerInfo(game.id);
+                return (
+                  <GameCard
+                    key={game.id}
+                    game={game}
+                    trainerVersion={trainer.version}
+                    optionCount={trainer.count}
+                    locale={locale}
+                    optionsLabel={t.optionsCount}
+                  />
+                );
+              })
+            ) : (
+              <div className="col-span-full py-12 text-center text-slate-500 text-sm">
+                검색 결과가 없습니다. 다른 게임을 검색해 주세요.
+              </div>
+            )}
+          </div>
 
-      {/* 모든 게임이 표시된 경우 하단 여백 보정 */}
-      {(filteredGames.length === 0 || visibleCount >= filteredGames.length) && (
-        <div className="mb-12" />
+          {/* Load More button for Search Results */}
+          {filteredGames.length > 0 && visibleCount < filteredGames.length && (
+            <div className="flex flex-col items-center gap-3 w-full max-w-4xl mb-20">
+              <p className="text-xs text-slate-500 font-outfit tracking-wide">
+                {Math.min(visibleCount, filteredGames.length)} / {filteredGames.length} 게임 표시 중
+              </p>
+              <button
+                onClick={() => setVisibleCount(prev => prev + 18)}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-700 bg-slate-800/60 text-slate-300 font-outfit text-sm font-medium tracking-wide transition-all duration-300 hover:bg-cyan-500/20 hover:border-cyan-500/50 hover:text-cyan-300 hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] cursor-pointer"
+              >
+                {t.loadMore}
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {(filteredGames.length === 0 || visibleCount >= filteredGames.length) && (
+            <div className="mb-12" />
+          )}
+        </>
       )}
 
       {/* About & Safety Rules Section */}

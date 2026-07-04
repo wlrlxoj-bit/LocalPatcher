@@ -58,6 +58,9 @@ export const i18nDict = {
     cheatCountText: '{count}개 치트',
     autoDetectable: '✅ 자동 감지 가능',
     noTrainerVersion: '이 게임에 대한 사용 가능한 트레이너 버전이 등록되지 않았습니다.',
+    recentUpdatesTitle: '최신 업데이트 트레이너',
+    popularTrainersTitle: '인기 트레이너',
+    loadMore: '더 많은 게임 보기',
   },
   en: {
     title: 'LocalPatcher - Secure Trainer Localizer',
@@ -116,6 +119,9 @@ export const i18nDict = {
     cheatCountText: '{count} cheats',
     autoDetectable: '✅ Auto Detectable',
     noTrainerVersion: 'No trainer versions registered for this game.',
+    recentUpdatesTitle: 'Recent Updates',
+    popularTrainersTitle: 'Popular Trainers',
+    loadMore: 'Load More Games',
   },
   ja: {
     title: 'ゲームトレーナー日本語化パッチ＆ダウンロード | LocalPatcher',
@@ -173,7 +179,10 @@ export const i18nDict = {
     statusLabel: '状態',
     cheatCountText: '{count}個のチート',
     autoDetectable: '✅ 自動検知可能',
-    noTrainerVersion: 'このゲームに対応するトレーナーバージョンが登録されていません。',
+    noTrainerVersion: 'このゲームに対応するトレーナーバージョンが登録されていません.',
+    recentUpdatesTitle: '最近のアップデート',
+    popularTrainersTitle: '人気トレーナー',
+    loadMore: 'もっと見る',
   }
 };
 
