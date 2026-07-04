@@ -13,6 +13,69 @@ interface PatcherPageProps {
   }>;
 }
 
+export async function generateMetadata({ params }: PatcherPageProps) {
+  const { locale, game_slug } = await params;
+  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko') ? locale : 'ko';
+
+  const game = await getGameBySlug(game_slug);
+  if (!game) {
+    return {};
+  }
+
+  const trainers = await getTrainersForGame(game.id);
+  const versionsStr = trainers && trainers.length > 0
+    ? trainers.map(t => t.version_str).join(', ')
+    : '';
+
+  let title = '';
+  let description = '';
+
+  if (currentLocale === 'ko') {
+    title = `${game.title_ko} 트레이너 한글 패치 - 100% 안전한 무설치 로컬 패처 | LocalPatcher`;
+    description = `${game.title_ko} (${game.title_en}) 최신 트레이너 한글 번역 패치(${versionsStr})를 제공합니다. 서버에 파일을 올릴 필요 없이, 웹브라우저에서 3초 만에 안전하게 한글로 변환하여 사용하세요.`;
+  } else if (currentLocale === 'ja') {
+    title = `${game.title_en} ${game.title_ko !== game.title_en ? `(${game.title_ko})` : ''} トレーナー日本語化パッチ - 安全なウェブ版ローカル変換 | LocalPatcher`;
+    description = `${game.title_en}の最新トレーナー用日本語化翻訳パッチ(${versionsStr})です。サーバーにファイルを一切アップロードせず、Webブラウザ内で完全にローカルで日本語化できます。`;
+  } else {
+    title = `${game.title_en} Trainer Translation & Localization Patch | LocalPatcher`;
+    description = `Apply client-side translation and localization patches for ${game.title_en} game trainers (${versionsStr}). Safely modify original files directly in your web browser with no server uploads.`;
+  }
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: `/${currentLocale}/patcher/${game_slug}`,
+      languages: {
+        'ko': `/ko/patcher/${game_slug}`,
+        'en': `/en/patcher/${game_slug}`,
+        'ja': `/ja/patcher/${game_slug}`,
+        'x-default': `/en/patcher/${game_slug}`,
+      },
+    },
+    openGraph: {
+      type: 'website',
+      title,
+      description,
+      url: `https://local-patcher.vercel.app/${currentLocale}/patcher/${game_slug}`,
+      images: [
+        {
+          url: game.cover_image_url,
+          width: 460,
+          height: 215,
+          alt: `${game.title_en} Steam Cover Image`,
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: [game.cover_image_url],
+    },
+  };
+}
+
 export default async function PatcherPage({ params }: PatcherPageProps) {
   const { locale, game_slug } = await params;
   const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko') ? locale : 'ko';
@@ -32,17 +95,45 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
   // 3. Pre-fetch mappings for all trainers of this game in a single batch query
   const mappingsMap = await getMappingsForTrainers(trainers.map(t => t.id), currentLocale);
 
+  // 4. Build JSON-LD structured data for SoftwareApplication
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    'name': `${game.title_en} Trainer Local Patcher`,
+    'operatingSystem': 'Windows',
+    'applicationCategory': 'GameApplication',
+    'offers': {
+      '@type': 'Offer',
+      'price': '0',
+      'priceCurrency': 'USD',
+    },
+    'description': currentLocale === 'ko'
+      ? `${game.title_ko} (${game.title_en})의 최신 트레이너 한글 패치를 브라우저 로컬에서 설치 없이 안전하게 지원하는 유틸리티입니다.`
+      : currentLocale === 'ja'
+        ? `${game.title_en}の最新トレーナー日本語化パッチをブラウザローカルで安全かつ迅速に適用するツール。`
+        : `Free browser-based patch tool to translate and localize ${game.title_en} game trainers client-side.`,
+    'screenshot': game.cover_image_url,
+    'softwareVersion': trainers[0]?.version_str || '1.0',
+    'downloadUrl': `https://local-patcher.vercel.app/${currentLocale}/patcher/${game_slug}`,
+  };
+
   return (
-    <PatcherClient
-      game={game}
-      trainers={trainers.map(t => ({
-        id: t.id,
-        version_str: t.version_str,
-        original_file_hash: t.original_file_hash,
-        original_file_size: t.original_file_size
-      }))}
-      mappingsMap={mappingsMap}
-      locale={currentLocale as Locale}
-    />
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <PatcherClient
+        game={game}
+        trainers={trainers.map(t => ({
+          id: t.id,
+          version_str: t.version_str,
+          original_file_hash: t.original_file_hash,
+          original_file_size: t.original_file_size
+        }))}
+        mappingsMap={mappingsMap}
+        locale={currentLocale as Locale}
+      />
+    </>
   );
 }

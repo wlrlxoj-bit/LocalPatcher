@@ -7,20 +7,49 @@ import Script from 'next/script';
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const isKo = locale === 'ko';
-  const isJa = locale === 'ja';
+  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko') ? locale : 'ko';
   
+  const isKo = currentLocale === 'ko';
+  const isJa = currentLocale === 'ja';
+  
+  const title = isKo 
+    ? 'LocalPatcher - 안전한 트레이너 한글 패치 플랫폼' 
+    : isJa 
+      ? 'LocalPatcher - 安全なトレーナーパッチプラットフォーム' 
+      : 'LocalPatcher - Secure Trainer Localization Portal';
+      
+  const description = isKo 
+    ? '사용자 파일을 서버로 절대 업로드하지 않고, 브라우저 로컬에서 안전하게 1:1 영문 문자열만 덮어쓰는 게임 트레이너 다국어 패칭 유틸리티입니다.' 
+    : isJa
+      ? 'ファイルをアップロードすることなく、ブラウザローカルで安全にゲームトレーナーを日本語化するパッチユーティリティです。'
+      : 'A safe client-side trainer patch utility that overwrites English text in game trainers with local language strings. No server uploads.';
+
   return {
-    title: isKo 
-      ? 'LocalPatcher - 안전한 트레이너 한글 패치 플랫폼' 
-      : isJa 
-        ? 'LocalPatcher - 安全なトレーナーパッチプラットフォーム' 
-        : 'LocalPatcher - Secure Trainer Localization Portal',
-    description: isKo 
-      ? '사용자 파일을 서버로 절대 업로드하지 않고, 브라우저 로컬에서 안전하게 1:1 영문 문자열만 덮어쓰는 게임 트레이너 다국어 패칭 유틸리티입니다.' 
-      : isJa
-        ? 'ファイルをアップロードすることなく、ブラウザローカルで安全にゲームトレーナーを日本語化するパッチユーティリティです。'
-        : 'A safe client-side trainer patch utility that overwrites English text in game trainers with local language strings. No server uploads.',
+    metadataBase: new URL('https://local-patcher.vercel.app'),
+    title,
+    description,
+    alternates: {
+      canonical: `/${currentLocale}`,
+      languages: {
+        'ko': '/ko',
+        'en': '/en',
+        'ja': '/ja',
+        'x-default': '/en',
+      },
+    },
+    openGraph: {
+      type: 'website',
+      siteName: 'LocalPatcher',
+      title,
+      description,
+      url: `https://local-patcher.vercel.app/${currentLocale}`,
+      locale: currentLocale === 'ko' ? 'ko_KR' : currentLocale === 'ja' ? 'ja_JP' : 'en_US',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+    },
     icons: {
       icon: '/favicon.ico',
     }
