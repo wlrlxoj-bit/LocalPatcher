@@ -41,15 +41,16 @@ interface PatcherClientProps {
 }
 
 export default function PatcherClient({ game, trainers, mappingsMap, locale }: PatcherClientProps) {
+  const sortedTrainers = [...trainers].sort((a, b) => b.id - a.id);
   const t = getDictionary(locale);
   const displayTitle = locale === 'ko' ? game.title_ko : game.title_en;
   
   // Set default selected trainer version
   const [selectedTrainerId, setSelectedTrainerId] = useState<number>(
-    trainers.length > 0 ? trainers[0].id : 0
+    sortedTrainers.length > 0 ? sortedTrainers[0].id : 0
   );
 
-  const selectedTrainer = trainers.find(t => t.id === selectedTrainerId);
+  const selectedTrainer = sortedTrainers.find(t => t.id === selectedTrainerId);
 
   const handleTrainerDetected = (id: number) => {
     setSelectedTrainerId(id);
@@ -181,7 +182,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                   locale={locale} 
                   gameId={game.id}
                   trainer={selectedTrainer} 
-                  allTrainers={trainers}
+                  allTrainers={sortedTrainers}
                   mappingsMap={mappingsMap}
                   onTrainerDetected={handleTrainerDetected}
                 />
@@ -237,7 +238,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50 text-xs">
-                    {trainers.map((t_option) => (
+                    {sortedTrainers.map((t_option) => (
                       <tr key={t_option.id} className="hover:bg-slate-800/10 transition-colors group">
                         <td className="py-3.5 px-4 font-semibold text-slate-300 group-hover:text-cyan-400 transition-colors">
                           <div className="flex items-center gap-2">
