@@ -229,44 +229,44 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
               {t.aboutSub}
             </h4>
             <p className="mt-2 text-xs leading-relaxed pl-3.5">
-              LocalPatcher는 게임 실행 파일을 조작하여 어떠한 불법 크랙이나 악성 바이러스를 배포하지 않습니다. 당사는 사용자가 공식 트레이너를 활용하여 싱글 플레이를 쾌적하게 즐길 수 있도록 돕는 다국어 번역 교체 툴입니다. 모든 연산과 패치 처리는 로컬 브라우저에서 수행되며, 원본 파일의 무결성 검증을 완료한 후 오직 영문 텍스트 영역만 덮어씌웁니다.
+              {t.aboutDesc}
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800/60">
             <div>
               <h5 className="font-bold text-slate-200 flex items-center text-xs uppercase tracking-wide">
-                1. 오프라인 모드 플레이 준수 (Account Ban 방지)
+                {t.safetyTitle1}
               </h5>
               <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
-                트레이너를 활성화한 상태에서 온라인 멀티플레이 세션에 접속하는 행위는 멀티플레이 치팅 위반으로 스팀 계정 영구 정지(VAC Ban 등)를 유발할 수 있습니다. 트레이너를 켜기 전에 반드시 스팀 런처를 오프라인 상태로 설정해 주시기 바랍니다.
+                {t.safetyDesc1}
               </p>
             </div>
 
             <div>
               <h5 className="font-bold text-slate-200 flex items-center text-xs uppercase tracking-wide">
-                2. 보안 프로그램 오진 안내 (False Positive)
+                {t.safetyTitle2}
               </h5>
               <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
-                게임 트레이너는 메모리 데이터 후킹 기술을 이용해 치트를 작동하기 때문에 대부분의 백신 프로그램(Windows Defender 등)에서 위험 요소로 오진할 수 있습니다. 당사의 해시 무결성 검증을 거친 정식 원본에 한해 예외 등록을 한 뒤 안심하고 사용하셔도 무방합니다.
+                {t.safetyDesc2}
               </p>
             </div>
 
             <div>
               <h5 className="font-bold text-slate-200 flex items-center text-xs uppercase tracking-wide">
-                3. 세이브 파일 백업 습관화
+                {t.safetyTitle3}
               </h5>
               <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
-                트레이너 가동 도중 드물게 발생하는 메모리 충돌로 인해 세이브 파일이 유실될 위험이 존재합니다. 트레이너를 사용하기 전에 중요한 스팀 로컬 세이브 파일 위치를 찾아 수동으로 별도 백업해 두는 습관을 권장합니다.
+                {t.safetyDesc3}
               </p>
             </div>
 
             <div>
               <h5 className="font-bold text-slate-200 flex items-center text-xs uppercase tracking-wide">
-                4. 게임 및 트레이너 버전 확인
+                {t.safetyTitle4}
               </h5>
               <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
-                게임 버전(예: Steam v1.1.0)과 다운로드한 트레이너 버전이 일치하지 않을 시 비정상 종료(Crash)가 일어납니다. 원본 파일 크기가 다른 경우 해시 불일치 에러를 발생시켜 안전하게 차단하므로, 버전에 꼭 맞춰 올려주십시오.
+                {t.safetyDesc4}
               </p>
             </div>
           </div>
