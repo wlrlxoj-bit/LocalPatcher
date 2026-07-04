@@ -45,10 +45,10 @@ export async function generateMetadata({ params }: PatcherPageProps) {
   const gameNameEn = game.title_en;
 
   const keywords = currentLocale === 'ko'
-    ? [`${gameName} 트레이너 한글`, `${gameName} 한글 패치`, `${gameName} 치트 다운로드`, `${gameName} 플링 번역`, '트레이너 한글 패치', '게임 트레이너 한글']
+    ? [gameName, gameNameEn, '게임', '한글', '패치', '트레이너', '치트', '스팀', '플링', '번역', '다운로드', '무료']
     : currentLocale === 'ja'
-      ? [`${gameName} トレーナー日本語化`, `${gameName} チート翻訳`, `${gameName} MOD日本語化`, `${gameName} チートダウンロード`, 'トレーナー日本語化', 'ゲームトレーナー']
-      : [`${gameNameEn} trainer translation`, `${gameNameEn} localized cheats`, `${gameNameEn} FLiNG translated`, 'game trainer localization'];
+      ? [gameNameEn, gameName !== gameNameEn ? gameName : '', 'ゲーム', '日本語化', 'パッチ', 'トレーナー', 'チート', '無料', 'ダウンロード', '日本'].filter(Boolean)
+      : [gameNameEn, 'game', 'trainer', 'cheats', 'translation', 'patch', 'download', 'free', 'localized'];
 
   return {
     title,

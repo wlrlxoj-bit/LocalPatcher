@@ -25,10 +25,10 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
       : 'A safe client-side trainer patch utility that overwrites English text in game trainers with local language strings. No server uploads.';
 
   const keywords = isKo
-    ? ['트레이너 한글 패치', '게임 트레이너 한글', '플링 트레이너 번역', '스팀 트레이너 다운로드', '게임 치트 한글화', '로컬패처', 'LocalPatcher']
+    ? ['게임', '한글', '패치', '트레이너', '치트', '스팀', '플링', '번역', '다운로드', '무료', '로컬패처', 'LocalPatcher']
     : isJa
-      ? ['ゲームトレーナー日本語化', 'FLiNGトレーナー日本語', 'チートツール翻訳', 'PCゲームチート', 'トレーナーパッチ', 'ローカルパッチャー', '日本トレーナー', '日本ゲームチート']
-      : ['game trainer translation', 'fling trainer localized', 'cheat translation tool', 'steam trainer patch', 'hangul patch', 'localpatcher'];
+      ? ['ゲーム', '日本語化', '日本語訳', 'パッチ', 'トレーナー', 'チート', '無料', 'ダウンロード', '日本', 'ローカルパッチャー', 'LocalPatcher']
+      : ['game', 'trainer', 'cheats', 'translation', 'patch', 'download', 'free', 'localized', 'localpatcher'];
 
   return {
     metadataBase: new URL('https://local-patcher.vercel.app'),
