@@ -12,6 +12,8 @@ from bs4 import BeautifulSoup
 import pefile
 from supabase import create_client, Client
 
+sys.stdout.reconfigure(encoding='utf-8')
+
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env.local'), override=True)
 
@@ -574,13 +576,25 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
                 seen_urls.add(url)
                 unique_downloads.append(a)
                 
-        # Check if game already exists in DB, otherwise insert new game
-        game_res = db.table('games').select('id').eq('slug', post['slug']).execute()
+        # Check if game already exists in DB by slug first, or by title_en
+        game_title_en = post['title'].split('Trainer')[0].strip()
+        game_res = db.table('games').select('id', 'slug').eq('slug', post['slug']).execute()
+        
+        game_row = None
         if game_res.data:
-            game_id = game_res.data[0]['id']
+            game_row = game_res.data[0]
+        else:
+            title_res = db.table('games').select('id', 'slug').eq('title_en', game_title_en).execute()
+            if title_res.data:
+                game_row = title_res.data[0]
+                
+        if game_row:
+            game_id = game_row['id']
+            if game_row['slug'] != post['slug']:
+                print(f"[*] Updating slug for game '{game_title_en}' from '{game_row['slug']}' to '{post['slug']}'")
+                db.table('games').update({'slug': post['slug']}).eq('id', game_id).execute()
         else:
             # Create new game meta row
-            game_title_en = post['title'].split('Trainer')[0].strip()
             steam_meta = fetch_steam_meta(game_title_en)
             
             insert_game = db.table('games').insert({

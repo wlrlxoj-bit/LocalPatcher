@@ -13,6 +13,8 @@ from bs4 import BeautifulSoup
 import pefile
 from supabase import create_client, Client
 
+sys.stdout.reconfigure(encoding='utf-8')
+
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env.local'), override=True)
 
@@ -519,9 +521,22 @@ def process_archive_trainer(game_url, db: Client, delay_sec=1.0, force=False):
                 unique_downloads.append(a)
                 
         # Resolve game_id
-        game_res = db.table('games').select('id').eq('slug', slug).execute()
+        game_res = db.table('games').select('id', 'slug').eq('slug', slug).execute()
+        
+        game_row = None
         if game_res.data:
-            game_id = game_res.data[0]['id']
+            game_row = game_res.data[0]
+        else:
+            title_res = db.table('games').select('id', 'slug').eq('title_en', title_raw).execute()
+            if title_res.data:
+                game_row = title_res.data[0]
+
+        if game_row:
+            game_id = game_row['id']
+            if game_row['slug'] != slug:
+                print(f"[*] Updating slug for game '{title_raw}' from '{game_row['slug']}' to '{slug}'")
+                db.table('games').update({'slug': slug}).eq('id', game_id).execute()
+                
             # Optimization: check if all versions are already registered in the DB
             db_trainers = db.table('trainers').select('id').eq('game_id', game_id).execute()
             if not force and len(db_trainers.data) >= len(unique_downloads):
