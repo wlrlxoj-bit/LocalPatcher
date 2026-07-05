@@ -10,6 +10,7 @@ interface Game {
   id: number;
   title_en: string;
   title_ko: string;
+  title_ja?: string;
   slug: string;
   cover_image_url: string;
   anti_cheat: string;
@@ -84,12 +85,14 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
       
       const titleEnClean = game.title_en.toLowerCase().replace(/\s+/g, '');
       const titleKoClean = game.title_ko.toLowerCase().replace(/\s+/g, '');
+      const titleJaClean = (game.title_ja || '').toLowerCase().replace(/\s+/g, '');
       
       return (
         titleEnClean.includes(queryClean) ||
         titleEnClean.includes(queryChosung) ||
         titleKoClean.includes(queryClean) ||
-        getChosung(titleKoClean).includes(queryChosung)
+        getChosung(titleKoClean).includes(queryChosung) ||
+        titleJaClean.includes(queryClean)
       );
     })
     .sort((a, b) => {

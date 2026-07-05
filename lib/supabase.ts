@@ -20,6 +20,7 @@ export interface Game {
   id: number;
   title_en: string;
   title_ko: string;
+  title_ja?: string;
   slug: string;
   cover_image_url: string;
   anti_cheat: string;
