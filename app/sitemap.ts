@@ -1,10 +1,10 @@
 import { MetadataRoute } from 'next';
 import { supabase, mockGames } from '@/lib/supabase';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 86400;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const BASE_URL = 'https://local-patcher.vercel.app';
+  const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://local-patcher.vercel.app';
   const locales = ['ko', 'en', 'ja'];
   
   // 1. Fetch games and trainers from database to find patchable games

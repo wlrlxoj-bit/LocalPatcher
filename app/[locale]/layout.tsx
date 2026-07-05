@@ -31,7 +31,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
       : ['game', 'trainer', 'cheats', 'translation', 'patch', 'download', 'free', 'localized', 'localpatcher'];
 
   return {
-    metadataBase: new URL('https://local-patcher.vercel.app'),
+    metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://local-patcher.vercel.app'),
     title,
     description,
     keywords,
@@ -49,7 +49,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
       siteName: 'LocalPatcher',
       title,
       description,
-      url: `https://local-patcher.vercel.app/${currentLocale}`,
+      url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://local-patcher.vercel.app'}/${currentLocale}`,
       locale: currentLocale === 'ko' ? 'ko_KR' : currentLocale === 'ja' ? 'ja_JP' : 'en_US',
     },
     twitter: {
@@ -97,12 +97,36 @@ export default async function LocaleLayout({
           </>
         )}
         {process.env.NEXT_PUBLIC_ADSENSE_ID && (
-          <Script
-            async
-            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${process.env.NEXT_PUBLIC_ADSENSE_ID}`}
-            crossOrigin="anonymous"
-            strategy="afterInteractive"
-          />
+          <>
+            <Script
+              async
+              src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${process.env.NEXT_PUBLIC_ADSENSE_ID}`}
+              crossOrigin="anonymous"
+              strategy="afterInteractive"
+              data-ad-client={process.env.NEXT_PUBLIC_ADSENSE_ID}
+            />
+            {/* SPA 환경에서 페이지 이동 시 애드센스 광고 갱신 지원을 위한 클라이언트 헬퍼 */}
+            <Script id="adsense-spa-helper" strategy="afterInteractive">
+              {`
+                (function() {
+                  let lastPathname = window.location.pathname;
+                  const observer = new MutationObserver(() => {
+                    if (window.location.pathname !== lastPathname) {
+                      lastPathname = window.location.pathname;
+                      try {
+                        if (window.adsbygoogle) {
+                          (window.adsbygoogle = window.adsbygoogle || []).push({});
+                        }
+                      } catch (e) {
+                        console.error('AdSense SPA update failed:', e);
+                      }
+                    }
+                  });
+                  observer.observe(document.documentElement, { childList: true, subtree: true });
+                })();
+              `}
+            </Script>
+          </>
         )}
       </head>
       <body className="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500 selection:text-slate-950">

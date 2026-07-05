@@ -52,6 +52,11 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
 
   const selectedTrainer = sortedTrainers.find(t => t.id === selectedTrainerId);
 
+  const partnerKey = process.env.NEXT_PUBLIC_HUMBLE_PARTNER_KEY;
+  const purchaseUrl = partnerKey
+    ? `https://www.humblebundle.com/store/search?search=${encodeURIComponent(game.title_en)}&partner=${partnerKey}`
+    : `https://store.steampowered.com/search/?term=${encodeURIComponent(game.title_en)}`;
+
   const handleTrainerDetected = (id: number) => {
     setSelectedTrainerId(id);
   };
@@ -87,37 +92,50 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
           </div>
         </div>
 
-        {/* Anti-cheat status & official download link */}
-        {(game.fling_url || (game.anti_cheat && game.anti_cheat !== 'none')) && (
-          <div className="z-10 flex flex-col items-center md:items-end justify-center gap-2">
-            {game.anti_cheat && game.anti_cheat !== 'none' && (
-              <Link
-                href={`/${locale}/guides`}
-                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-400 hover:bg-amber-500/20 transition-all duration-200"
-              >
-                <span>{t.bypassGuide.replace('{antiCheat}', game.anti_cheat)}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            )}
+        {/* Anti-cheat status, official download link, and purchase link */}
+        <div className="z-10 flex flex-col items-center md:items-end justify-center gap-2 shrink-0">
+          <a
+            href={purchaseUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-all duration-200 shadow-sm"
+          >
+            <span>{
+              locale === 'ko' 
+                ? '이 게임 최저가로 구매하기 ↗' 
+                : locale === 'ja' 
+                  ? 'このゲームを最安値で購入 ↗' 
+                  : 'Buy This Game at Lowest Price ↗'
+            }</span>
+          </a>
 
-            {game.fling_url && (
-              <a
-                href={game.fling_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/20 transition-all duration-200"
-              >
-                <span>{
-                  locale === 'ko' 
-                    ? 'FLiNG 공식 다운로드 ↗' 
-                    : locale === 'ja' 
-                      ? 'FLiNG公式ダウンロード ↗' 
-                      : 'FLiNG Official Download ↗'
-                }</span>
-              </a>
-            )}
-          </div>
-        )}
+          {game.anti_cheat && game.anti_cheat !== 'none' && (
+            <Link
+              href={`/${locale}/guides`}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-400 hover:bg-amber-500/20 transition-all duration-200"
+            >
+              <span>{t.bypassGuide.replace('{antiCheat}', game.anti_cheat)}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          )}
+
+          {game.fling_url && (
+            <a
+              href={game.fling_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/20 transition-all duration-200"
+            >
+              <span>{
+                locale === 'ko' 
+                  ? 'FLiNG 공식 다운로드 ↗' 
+                  : locale === 'ja' 
+                    ? 'FLiNG公式ダウンロード ↗' 
+                    : 'FLiNG Official Download ↗'
+              }</span>
+            </a>
+          )}
+        </div>
       </div>
 
       {/* Trainer UI Preview — right below title */}

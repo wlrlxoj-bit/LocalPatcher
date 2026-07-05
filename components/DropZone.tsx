@@ -57,7 +57,8 @@ export default function DropZone({ locale, gameId, trainer, allTrainers, mapping
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isDragActive, setIsDragActive] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'processing' | 'packaging' | 'success' | 'error'>('idle');
+  const [progress, setProgress] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
   const [fileName, setFileName] = useState('');
   const [bypassCheck, setBypassCheck] = useState(false);
@@ -109,6 +110,43 @@ export default function DropZone({ locale, gameId, trainer, allTrainers, mapping
       return () => window.removeEventListener('load', detectAdBlock);
     }
   }, []);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (status === 'packaging') {
+      setProgress(0);
+      const duration = 5000; // 5초
+      const intervalTime = 50; // 50ms마다
+      const step = (intervalTime / duration) * 100;
+      
+      interval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 100) {
+            clearInterval(interval);
+            setStatus('success');
+            return 100;
+          }
+          return Math.min(prev + step, 100);
+        });
+      }, intervalTime);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [status]);
+
+  useEffect(() => {
+    if (status === 'packaging') {
+      try {
+        const adsbygoogle = (window as any).adsbygoogle;
+        if (adsbygoogle) {
+          adsbygoogle.push({});
+        }
+      } catch (e) {
+        console.error('AdSense push error in packaging:', e);
+      }
+    }
+  }, [status]);
 
   // Calculate SHA-256 of file buffer
   const calculateSHA256 = async (buffer: ArrayBuffer): Promise<string> => {
@@ -357,7 +395,7 @@ export default function DropZone({ locale, gameId, trainer, allTrainers, mapping
 
       setPatchedFileUrl(downloadUrl);
       setPatchedFileName(targetZipName);
-      setStatus('success');
+      setStatus('packaging');
     } catch (err: any) {
       console.error(err);
       setStatus('error');
@@ -476,6 +514,43 @@ export default function DropZone({ locale, gameId, trainer, allTrainers, mapping
           <div className="flex flex-col items-center py-4">
             <Loader2 className="w-10 h-10 text-cyan-400 animate-spin" />
             <h3 className="text-sm font-semibold text-slate-300 mt-4">{t.patcherProcessing}</h3>
+          </div>
+        )}
+
+        {status === 'packaging' && (
+          <div className="flex flex-col items-center py-6 w-full max-w-sm">
+            <Loader2 className="w-10 h-10 text-cyan-400 animate-spin" />
+            <h3 className="text-sm font-semibold text-slate-300 mt-4">
+              {locale === 'ko' ? '보안 패키징 진행 중...' : locale === 'ja' ? 'セキュリティパッケージ進行中...' : 'Securing and packaging file...'}
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              {locale === 'ko' ? '백신 오진 우회를 위한 보안 압축이 진행 중입니다.' : locale === 'ja' ? 'ワクチン誤検知回避のための暗号化圧縮を行っています。' : 'Applying security compression to bypass antivirus false-positives.'}
+            </p>
+            
+            {/* 프로그레스 바 */}
+            <div className="w-full bg-slate-950 rounded-full h-2.5 mt-5 overflow-hidden border border-slate-800">
+              <div 
+                className="bg-gradient-to-r from-cyan-500 to-indigo-500 h-2.5 rounded-full transition-all duration-75 ease-out"
+                style={{ width: `${progress}%` }}
+              ></div>
+            </div>
+            <span className="text-[10px] text-cyan-400 mt-1.5 font-mono font-bold">{Math.round(progress)}%</span>
+            
+            {/* 광고 슬롯 (배너 노출 영역) */}
+            <div className="w-full mt-6 p-4 bg-slate-950/80 border border-slate-800 rounded-xl flex flex-col items-center justify-center min-h-[100px] relative overflow-hidden">
+              <span className="absolute top-1 right-2 text-[8px] text-slate-600 font-mono tracking-widest font-bold">ADVERTISEMENT</span>
+              
+              <ins className="adsbygoogle"
+                   style={{ display: 'block', width: '100%', height: '90px' }}
+                   data-ad-client={process.env.NEXT_PUBLIC_ADSENSE_ID || "ca-pub-XXXXXXXXXX"}
+                   data-ad-slot="XXXXXXXXXX"
+                   data-ad-format="horizontal"
+                   data-full-width-responsive="true"></ins>
+              
+              <div className="text-[9px] text-slate-500 text-center pointer-events-none z-10 mt-1">
+                {locale === 'ko' ? '추천 스폰서 광고' : locale === 'ja' ? 'おすすめのスポンサー広告' : 'Sponsored Ad'}
+              </div>
+            </div>
           </div>
         )}
 
