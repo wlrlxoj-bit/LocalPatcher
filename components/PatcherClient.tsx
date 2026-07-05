@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ArrowRight, AlertTriangle, Share2 } from 'lucide-react';
 import { Locale, getDictionary } from '@/lib/i18n';
@@ -47,7 +47,29 @@ interface PartnerStoreWidgetProps {
   t: any;
 }
 
+interface PriceData {
+  original: number;
+  current: number;
+  discountPercent: number;
+}
+
+interface PricesResponse {
+  success: boolean;
+  rates: Record<string, number>;
+  stores: {
+    steam: PriceData;
+    gmg: PriceData;
+    humble: PriceData;
+  };
+}
+
 function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
+  const [prices, setPrices] = useState<PricesResponse | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [currency, setCurrency] = useState<string>(
+    locale === 'ko' ? 'KRW' : locale === 'ja' ? 'JPY' : 'USD'
+  );
+
   const steamUrl = `https://store.steampowered.com/search/?term=${encodeURIComponent(game.title_en)}`;
   const gmgUrl = `https://www.greenmangaming.com/search?query=${encodeURIComponent(game.title_en)}`;
   const partnerKey = process.env.NEXT_PUBLIC_HUMBLE_PARTNER_KEY;
@@ -55,30 +77,135 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
     ? `https://www.humblebundle.com/store/search?sort=bestselling&search=${encodeURIComponent(game.title_en)}&partner=${partnerKey}`
     : `https://www.humblebundle.com/store/search?sort=bestselling&search=${encodeURIComponent(game.title_en)}`;
 
-  const stores = [
+  useEffect(() => {
+    let active = true;
+    const fetchPrices = async () => {
+      try {
+        setLoading(true);
+        const match = game.cover_image_url.match(/\/apps\/(\d+)\//);
+        const steamAppId = match ? match[1] : '';
+        const url = `/api/prices?gameId=${game.id}&title=${encodeURIComponent(game.title_en)}${steamAppId ? `&appid=${steamAppId}` : ''}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (active && data.success) {
+            setPrices(data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch prices:', err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    fetchPrices();
+    return () => {
+      active = false;
+    };
+  }, [game.title_en, game.cover_image_url]);
+
+  const formatPrice = (valueInUSD: number, targetCurrency: string, rates: Record<string, number>) => {
+    const rate = rates[targetCurrency] || 1.0;
+    const converted = valueInUSD * rate;
+    
+    if (targetCurrency === 'KRW') {
+      return `₩${Math.round(converted).toLocaleString()}`;
+    }
+    if (targetCurrency === 'JPY') {
+      return `¥${Math.round(converted).toLocaleString()}`;
+    }
+    if (targetCurrency === 'EUR') {
+      return `€${converted.toFixed(2)}`;
+    }
+    return `$${converted.toFixed(2)}`;
+  };
+
+  // Determine best deal store
+  let bestDealStore: 'steam' | 'gmg' | 'humble' | null = null;
+  if (prices) {
+    const { steam, gmg, humble } = prices.stores;
+    const minVal = Math.min(steam.current, gmg.current, humble.current);
+    if (gmg.current === minVal) {
+      bestDealStore = 'gmg';
+    } else if (humble.current === minVal) {
+      bestDealStore = 'humble';
+    } else {
+      bestDealStore = 'steam';
+    }
+  }
+
+  const rates = prices?.rates || { USD: 1, KRW: 1380, JPY: 155, EUR: 0.92 };
+
+  const getStoreDisplayDetails = (storeName: 'steam' | 'gmg' | 'humble', fallbackUrl: string) => {
+    if (loading) {
+      return {
+        priceStr: '...',
+        originalStr: null as string | null,
+        discountBadge: null as React.ReactNode,
+        isBestDeal: false,
+        url: fallbackUrl,
+      };
+    }
+
+    if (!prices) {
+      return {
+        priceStr: t.viewDeal || 'View Deal',
+        originalStr: null as string | null,
+        discountBadge: null as React.ReactNode,
+        isBestDeal: false,
+        url: fallbackUrl,
+      };
+    }
+
+    const priceInfo = prices.stores[storeName];
+    const isBestDeal = bestDealStore === storeName;
+    const priceStr = formatPrice(priceInfo.current, currency, rates);
+    const originalStr = priceInfo.discountPercent > 0 ? formatPrice(priceInfo.original, currency, rates) : null;
+    const discountBadge = priceInfo.discountPercent > 0 ? (
+      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">
+        -{priceInfo.discountPercent}%
+      </span>
+    ) : null;
+
+    return {
+      priceStr,
+      originalStr,
+      discountBadge,
+      isBestDeal,
+      url: fallbackUrl,
+    };
+  };
+
+  const storesList = [
     {
+      key: 'steam' as const,
       name: 'Steam Store',
-      url: steamUrl,
-      btnText: t.goToSteam,
-      colorClass: 'border-slate-800/80 hover:border-slate-700 bg-slate-900/25 hover:bg-slate-900/40',
-      btnColorClass: 'text-slate-300 hover:text-white border-slate-700 hover:border-slate-600 bg-slate-950/20 hover:bg-slate-950/40',
+      ...getStoreDisplayDetails('steam', steamUrl),
       badge: <span className="text-xs text-slate-500 mt-1 block">{t.steamBadge}</span>,
+      normalBorder: 'border-slate-800/80 bg-slate-900/25 hover:bg-slate-900/40 hover:border-slate-700',
+      normalBtn: 'text-slate-300 hover:text-white border-slate-700 hover:border-slate-600 bg-slate-950/20 hover:bg-slate-950/40',
+      neonBorder: 'border-cyan-500/50 bg-slate-900/30 shadow-[0_0_15px_rgba(6,182,212,0.3)]',
+      neonBtn: 'text-cyan-400 hover:text-cyan-300 border-cyan-500 hover:border-cyan-400 bg-cyan-950/40 hover:bg-cyan-950/60 shadow-[0_0_10px_rgba(6,182,212,0.3)]',
     },
     {
+      key: 'gmg' as const,
       name: 'Green Man Gaming',
-      url: gmgUrl,
-      btnText: t.viewDeal,
-      colorClass: 'border-slate-800/80 hover:border-emerald-500/30 bg-slate-900/25 hover:bg-emerald-950/10',
-      btnColorClass: 'text-emerald-400 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40 bg-emerald-950/20 hover:bg-emerald-950/40',
+      ...getStoreDisplayDetails('gmg', gmgUrl),
       badge: <span className="text-xs text-cyan-400 font-medium mt-1 block">{t.gmgBadge}</span>,
+      normalBorder: 'border-slate-800/80 bg-slate-900/25 hover:bg-slate-900/40 hover:border-slate-700',
+      normalBtn: 'text-emerald-400 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40 bg-emerald-950/20 hover:bg-emerald-950/40',
+      neonBorder: 'border-emerald-500 bg-slate-900/30 shadow-[0_0_20px_rgba(16,185,129,0.4)]',
+      neonBtn: 'text-emerald-450 hover:text-emerald-350 border-emerald-500 hover:border-emerald-400 bg-emerald-950/40 hover:bg-emerald-950/60 shadow-[0_0_10px_rgba(16,185,129,0.3)]',
     },
     {
+      key: 'humble' as const,
       name: 'Humble Store',
-      url: humbleUrl,
-      btnText: t.viewDeal,
-      colorClass: 'border-slate-800/80 hover:border-cyan-500/30 bg-slate-900/25 hover:bg-cyan-950/10',
-      btnColorClass: 'text-cyan-400 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40 bg-cyan-950/20 hover:bg-cyan-950/40',
+      ...getStoreDisplayDetails('humble', humbleUrl),
       badge: <span className="text-xs text-emerald-400 font-medium mt-1 block">{t.humbleBadge}</span>,
+      normalBorder: 'border-slate-800/80 bg-slate-900/25 hover:bg-slate-900/40 hover:border-slate-700',
+      normalBtn: 'text-cyan-400 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40 bg-cyan-950/20 hover:bg-cyan-950/40',
+      neonBorder: 'border-cyan-500 bg-slate-900/30 shadow-[0_0_20px_rgba(6,182,212,0.4)]',
+      neonBtn: 'text-cyan-400 hover:text-cyan-300 border-cyan-500 hover:border-cyan-400 bg-cyan-950/40 hover:bg-cyan-950/60 shadow-[0_0_10px_rgba(6,182,212,0.3)]',
     }
   ];
 
@@ -86,32 +213,77 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
     <div className="relative rounded-2xl border border-cyan-500/20 bg-slate-950/60 p-6 overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.1)] flex flex-col gap-4">
       <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-purple-500/5 to-transparent pointer-events-none"></div>
       
-      <div className="z-10 flex flex-col gap-1 text-left">
+      <div className="z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-left">
         <h3 className="text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-400 font-outfit">
-          {t.partnerTitle}
+          {locale === 'ko' ? '실시간 패키지 구매 가격 비교' : locale === 'ja' ? 'リアルタイム価格比較' : 'Real-time Price Comparison'}
         </h3>
+        
+        {/* Currency Selector */}
+        <div className="flex bg-slate-900/80 border border-slate-800 rounded-lg p-0.5 text-xs font-mono">
+          {['USD', 'KRW', 'JPY', 'EUR'].map((cur) => (
+            <button
+              key={cur}
+              onClick={() => setCurrency(cur)}
+              className={`px-2 py-1 rounded-md transition-all ${
+                currency === cur 
+                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' 
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              {cur}
+            </button>
+          ))}
+        </div>
       </div>
       
-      <div className="z-10 grid grid-cols-1 gap-2.5">
-        {stores.map((store) => (
-          <div
-            key={store.name}
-            className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 rounded-xl border transition-all duration-200 gap-3 ${store.colorClass}`}
-          >
-            <div className="flex flex-col text-left">
-              <span className="text-sm font-bold text-white font-outfit">{store.name}</span>
-              {store.badge}
-            </div>
-            <a
-              href={store.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`inline-flex items-center justify-center px-4 py-1.5 rounded-lg border text-xs font-semibold transition-all duration-200 shrink-0 w-full sm:w-auto ${store.btnColorClass}`}
+      <div className="z-10 grid grid-cols-1 gap-3">
+        {storesList.map((store) => {
+          const cardStyle = store.isBestDeal ? store.neonBorder : store.normalBorder;
+          const btnStyle = store.isBestDeal ? store.neonBtn : store.normalBtn;
+          
+          return (
+            <div
+              key={store.name}
+              className={`relative flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-xl border transition-all duration-300 gap-3 ${cardStyle}`}
             >
-              {store.btnText}
-            </a>
-          </div>
-        ))}
+              {/* Best Deal neon badge */}
+              {store.isBestDeal && (
+                <div className="absolute -top-2.5 right-4 px-2 py-0.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded text-[9px] font-black tracking-wider uppercase shadow-[0_0_10px_rgba(16,185,129,0.5)] flex items-center gap-1">
+                  <span>🔥 BEST PRICE</span>
+                </div>
+              )}
+              
+              <div className="flex flex-col text-left">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-white font-outfit">{store.name}</span>
+                  {store.discountBadge}
+                </div>
+                {store.badge}
+              </div>
+              
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                <div className="flex flex-col text-right font-mono pr-2">
+                  {store.originalStr && (
+                    <span className="text-[10px] text-slate-500 line-through">
+                      {store.originalStr}
+                    </span>
+                  )}
+                  <span className={`text-sm font-bold ${store.isBestDeal ? 'text-emerald-400 drop-shadow-[0_0_6px_rgba(16,185,129,0.4)]' : 'text-slate-300'}`}>
+                    {store.priceStr}
+                  </span>
+                </div>
+                <a
+                  href={store.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`inline-flex items-center justify-center px-4 py-2 rounded-lg border text-xs font-bold transition-all duration-200 shrink-0 w-full sm:w-auto ${btnStyle}`}
+                >
+                  {store.key === 'steam' ? (t.goToSteam || 'Go to Steam ↗') : (t.viewDeal || 'View Deal')}
+                </a>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
