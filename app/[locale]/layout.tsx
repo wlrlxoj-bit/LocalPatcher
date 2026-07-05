@@ -34,6 +34,11 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
     title,
     description,
     keywords,
+    verification: {
+      other: {
+        'naver-site-verification': '3531a31999851fd3a7ad0f180edc86a1bbbbe36a',
+      },
+    },
     alternates: {
       canonical: `/${currentLocale}`,
       languages: {
