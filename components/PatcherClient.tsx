@@ -58,27 +58,27 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
   const stores = [
     {
       name: 'Steam Store',
-      desc: locale === 'ko' ? '공식 밸브 PC 게임 스토어' : locale === 'ja' ? '公式 Valve PC ゲームストア' : 'Official Valve PC Game Store',
       url: steamUrl,
       btnText: t.goToSteam,
       colorClass: 'border-slate-800/80 hover:border-slate-700 bg-slate-900/25 hover:bg-slate-900/40',
       btnColorClass: 'text-slate-300 hover:text-white border-slate-700 hover:border-slate-600 bg-slate-950/20 hover:bg-slate-950/40',
+      badge: <span className="text-xs text-slate-500 mt-1 block">{t.steamBadge}</span>,
     },
     {
       name: 'Green Man Gaming',
-      desc: locale === 'ko' ? '공식 파트너십 추가 할인 혜택 스토어' : locale === 'ja' ? '公式パートナー追加割引ストア' : 'Official Partner Discount Store',
       url: gmgUrl,
       btnText: t.viewDeal,
       colorClass: 'border-slate-800/80 hover:border-emerald-500/30 bg-slate-900/25 hover:bg-emerald-950/10',
       btnColorClass: 'text-emerald-400 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40 bg-emerald-950/20 hover:bg-emerald-950/40',
+      badge: <span className="text-xs text-cyan-400 font-medium mt-1 block">{t.gmgBadge}</span>,
     },
     {
       name: 'Humble Store',
-      desc: locale === 'ko' ? '기부와 할인을 동시에 진행하는 파트너 스토어' : locale === 'ja' ? 'チャリティと割引が同時に受けられるストア' : 'Charity & Discount Partner Store',
       url: humbleUrl,
       btnText: t.viewDeal,
       colorClass: 'border-slate-800/80 hover:border-cyan-500/30 bg-slate-900/25 hover:bg-cyan-950/10',
       btnColorClass: 'text-cyan-400 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40 bg-cyan-950/20 hover:bg-cyan-950/40',
+      badge: <span className="text-xs text-emerald-400 font-medium mt-1 block">{t.humbleBadge}</span>,
     }
   ];
 
@@ -90,9 +90,6 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
         <h3 className="text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-400 font-outfit">
           {t.partnerTitle}
         </h3>
-        <p className="text-xs text-slate-400 leading-relaxed">
-          {t.partnerNotice}
-        </p>
       </div>
       
       <div className="z-10 grid grid-cols-1 gap-2.5">
@@ -103,7 +100,7 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
           >
             <div className="flex flex-col text-left">
               <span className="text-sm font-bold text-white font-outfit">{store.name}</span>
-              <span className="text-[11px] text-slate-400 mt-0.5">{store.desc}</span>
+              {store.badge}
             </div>
             <a
               href={store.url}
@@ -193,15 +190,6 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
 
           {/* Action buttons */}
           <div className="z-10 flex flex-col items-center md:items-end justify-center gap-2 shrink-0">
-            <a
-              href={purchaseUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-all duration-200 shadow-sm"
-            >
-              <span>Buy This Game at Lowest Price ↗</span>
-            </a>
-
             <button
               onClick={handleShare}
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/20 transition-all duration-200 shadow-sm cursor-pointer"
@@ -319,21 +307,6 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
 
         {/* Anti-cheat status, official download link, and purchase link */}
         <div className="z-10 flex flex-col items-center md:items-end justify-center gap-2 shrink-0">
-          <a
-            href={purchaseUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-all duration-200 shadow-sm"
-          >
-            <span>{
-              locale === 'ko' 
-                ? '이 게임 최저가로 구매하기 ↗' 
-                : locale === 'ja' 
-                  ? 'このゲームを最安値で購入 ↗' 
-                  : 'Buy This Game at Lowest Price ↗'
-            }</span>
-          </a>
-
           {game.anti_cheat && game.anti_cheat !== 'none' && (
             <Link
               href={`/${locale}/guides`}

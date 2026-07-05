@@ -139,33 +139,6 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       
-      {/* 제휴사 할인 버튼 배너 */}
-      <div className="max-w-4xl mx-auto px-6 pt-6 -mb-6">
-        <a
-          href={purchaseUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-full flex items-center justify-between p-4 rounded-xl border border-emerald-500/20 bg-emerald-950/10 text-emerald-400 hover:bg-emerald-500/20 transition-all duration-200 shadow-md group"
-        >
-          <div className="flex items-center space-x-2">
-            <span className="font-bold text-sm">
-              {currentLocale === 'ko'
-                ? '🎁 이 게임 최저가로 구매하기'
-                : currentLocale === 'ja'
-                  ? '🎁 このゲームを最安値で購入'
-                  : '🎁 Buy This Game at Lowest Price'}
-            </span>
-            <span className="text-xs text-emerald-500/70">
-              {currentLocale === 'ko'
-                ? '(험블번들 제휴 할인 혜택 제공)'
-                : currentLocale === 'ja'
-                  ? '(Humble Bundle 提携割引特典提供)'
-                  : '(Humble Bundle Partner Deal)'}
-            </span>
-          </div>
-          <span className="text-sm font-bold group-hover:translate-x-1 transition-transform">↗</span>
-        </a>
-      </div>
 
       <PatcherClient
         game={game}
