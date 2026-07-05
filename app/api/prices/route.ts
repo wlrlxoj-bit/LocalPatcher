@@ -94,7 +94,8 @@ export async function GET(request: NextRequest) {
     
     if (cachedData) {
       const mapCachedPrice = (price: number | null, discount: number | null) => {
-        const current = price || 59.99;
+        if (price === null) return null;
+        const current = price;
         const discountPercent = discount || 0;
         const original = discountPercent > 0 
           ? parseFloat((current / (1 - discountPercent / 100)).toFixed(2)) 
@@ -109,42 +110,63 @@ export async function GET(request: NextRequest) {
         baseCurrency: 'USD',
         rates: EXCHANGE_RATES,
         stores: {
-          steam: mapCachedPrice(cachedData.steam_price, cachedData.steam_discount),
+          steam: mapCachedPrice(cachedData.steam_price ?? 59.99, cachedData.steam_discount)!,
           gmg: mapCachedPrice(cachedData.gmg_price, cachedData.gmg_discount),
           humble: mapCachedPrice(cachedData.humble_price, cachedData.humble_discount),
-          gog: mapCachedPrice(cachedData.gog_price ?? cachedData.steam_price, cachedData.gog_discount ?? cachedData.steam_discount),
+          gog: mapCachedPrice(cachedData.gog_price, cachedData.gog_discount),
         }
       });
     }
     
-    // 2. Fetch from CheapShark API
-    let deals: any[] = [];
-    if (appId) {
+    // 2. Fetch from CheapShark API using 2-step Game Lookup
+    let gameID: string | null = null;
+    
+    if (resolvedAppId) {
       try {
         const res = await fetch(
-          `https://www.cheapshark.com/api/1.0/deals?steamAppID=${appId}&limit=30`
+          `https://www.cheapshark.com/api/1.0/games?steamAppID=${resolvedAppId}`
         );
         if (res.ok) {
-          deals = await res.json();
+          const gameList = await res.json();
+          if (Array.isArray(gameList) && gameList.length > 0) {
+            gameID = gameList[0].gameID;
+          }
         }
       } catch (err) {
         console.warn('CheapShark steamAppID fetch failed:', err);
       }
     }
     
-    if ((!deals || deals.length === 0) && title) {
+    if (!gameID && title) {
       try {
         const res = await fetch(
-          `https://www.cheapshark.com/api/1.0/deals?title=${encodeURIComponent(title)}&limit=30`
+          `https://www.cheapshark.com/api/1.0/games?title=${encodeURIComponent(title)}`
         );
         if (res.ok) {
-          const allDeals = await res.json();
-          deals = allDeals.filter((d: any) =>
-            d.title.toLowerCase().includes(title.toLowerCase())
-          );
+          const gameList = await res.json();
+          if (Array.isArray(gameList) && gameList.length > 0) {
+            gameID = gameList[0].gameID;
+          }
         }
       } catch (err) {
         console.warn('CheapShark title fetch failed:', err);
+      }
+    }
+
+    let deals: any[] = [];
+    if (gameID) {
+      try {
+        const res = await fetch(
+          `https://www.cheapshark.com/api/1.0/games?id=${gameID}`
+        );
+        if (res.ok) {
+          const gameDetails = await res.json();
+          if (gameDetails && Array.isArray(gameDetails.deals)) {
+            deals = gameDetails.deals;
+          }
+        }
+      } catch (err) {
+        console.warn('CheapShark game lookup by ID failed:', err);
       }
     }
     
@@ -163,8 +185,8 @@ export async function GET(request: NextRequest) {
     
     if (steamDeal) {
       steamPrice = {
-        original: parseFloat(steamDeal.normalPrice),
-        current: parseFloat(steamDeal.salePrice),
+        original: parseFloat(steamDeal.retailPrice),
+        current: parseFloat(steamDeal.price),
         discountPercent: Math.round(parseFloat(steamDeal.savings)),
       };
     } else {
@@ -172,29 +194,29 @@ export async function GET(request: NextRequest) {
       steamPrice = { ...fallback };
     }
     
-    let gmgPrice = { ...steamPrice };
+    let gmgPrice: { original: number; current: number; discountPercent: number } | null = null;
     if (gmgDeal) {
       gmgPrice = {
-        original: parseFloat(gmgDeal.normalPrice),
-        current: parseFloat(gmgDeal.salePrice),
+        original: parseFloat(gmgDeal.retailPrice),
+        current: parseFloat(gmgDeal.price),
         discountPercent: Math.round(parseFloat(gmgDeal.savings)),
       };
     }
     
-    let humblePrice = { ...steamPrice };
+    let humblePrice: { original: number; current: number; discountPercent: number } | null = null;
     if (humbleDeal) {
       humblePrice = {
-        original: parseFloat(humbleDeal.normalPrice),
-        current: parseFloat(humbleDeal.salePrice),
+        original: parseFloat(humbleDeal.retailPrice),
+        current: parseFloat(humbleDeal.price),
         discountPercent: Math.round(parseFloat(humbleDeal.savings)),
       };
     }
     
-    let gogPrice = { ...steamPrice };
+    let gogPrice: { original: number; current: number; discountPercent: number } | null = null;
     if (gogDeal) {
       gogPrice = {
-        original: parseFloat(gogDeal.normalPrice),
-        current: parseFloat(gogDeal.salePrice),
+        original: parseFloat(gogDeal.retailPrice),
+        current: parseFloat(gogDeal.price),
         discountPercent: Math.round(parseFloat(gogDeal.savings)),
       };
     }
@@ -208,12 +230,12 @@ export async function GET(request: NextRequest) {
             game_id: gameId,
             steam_price: steamPrice.current,
             steam_discount: steamPrice.discountPercent,
-            gmg_price: gmgPrice.current,
-            gmg_discount: gmgPrice.discountPercent,
-            humble_price: humblePrice.current,
-            humble_discount: humblePrice.discountPercent,
-            gog_price: gogPrice.current,
-            gog_discount: gogPrice.discountPercent,
+            gmg_price: gmgPrice?.current ?? null,
+            gmg_discount: gmgPrice?.discountPercent ?? null,
+            humble_price: humblePrice?.current ?? null,
+            humble_discount: humblePrice?.discountPercent ?? null,
+            gog_price: gogPrice?.current ?? null,
+            gog_discount: gogPrice?.discountPercent ?? null,
             updated_at: new Date().toISOString()
           }, { onConflict: 'game_id' });
         

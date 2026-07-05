@@ -58,9 +58,9 @@ interface PricesResponse {
   rates: Record<string, number>;
   stores: {
     steam: PriceData;
-    gmg: PriceData;
-    humble: PriceData;
-    gog: PriceData;
+    gmg: PriceData | null;
+    humble: PriceData | null;
+    gog: PriceData | null;
   };
 }
 
@@ -77,7 +77,7 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
   const humbleUrl = partnerKey
     ? `https://www.humblebundle.com/store/search?sort=bestselling&search=${encodeURIComponent(game.title_en)}&partner=${partnerKey}`
     : `https://www.humblebundle.com/store/search?sort=bestselling&search=${encodeURIComponent(game.title_en)}`;
-  const gogUrl = `https://www.gog.com/en/games?query=${encodeURIComponent(game.title_en)}`;
+  const gogUrl = `https://www.gog.com/en/games?search=${encodeURIComponent(game.title_en)}`;
 
   useEffect(() => {
     let active = true;
@@ -126,16 +126,15 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
   let bestDealStore: 'steam' | 'gmg' | 'humble' | 'gog' | null = null;
   if (prices) {
     const { steam, gmg, humble, gog } = prices.stores;
-    const minVal = Math.min(steam.current, gmg.current, humble.current, gog.current);
-    if (gog.current === minVal) {
-      bestDealStore = 'gog';
-    } else if (gmg.current === minVal) {
-      bestDealStore = 'gmg';
-    } else if (humble.current === minVal) {
-      bestDealStore = 'humble';
-    } else {
-      bestDealStore = 'steam';
-    }
+    const activePrices: { store: 'steam' | 'gmg' | 'humble' | 'gog'; current: number }[] = [
+      { store: 'steam', current: steam.current }
+    ];
+    if (gmg) activePrices.push({ store: 'gmg', current: gmg.current });
+    if (humble) activePrices.push({ store: 'humble', current: humble.current });
+    if (gog) activePrices.push({ store: 'gog', current: gog.current });
+    
+    activePrices.sort((a, b) => a.current - b.current);
+    bestDealStore = activePrices[0].store;
   }
 
   const rates = prices?.rates || { USD: 1, KRW: 1380, JPY: 155, EUR: 0.92 };
@@ -162,11 +161,20 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
     }
 
     const priceInfo = prices.stores[storeName];
+    if (!priceInfo) {
+      return {
+        priceStr: '',
+        originalStr: null as string | null,
+        discountBadge: null as React.ReactNode,
+        isBestDeal: false,
+        url: fallbackUrl,
+      };
+    }
     const isBestDeal = bestDealStore === storeName;
     const priceStr = formatPrice(priceInfo.current, currency, rates);
     const originalStr = priceInfo.discountPercent > 0 ? formatPrice(priceInfo.original, currency, rates) : null;
     const discountBadge = priceInfo.discountPercent > 0 ? (
-      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">
+      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-450 border border-rose-500/30">
         -{priceInfo.discountPercent}%
       </span>
     ) : null;
@@ -223,6 +231,11 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
     }
   ];
 
+  const filteredStoresList = storesList.filter((store) => {
+    if (loading || !prices) return true;
+    return prices.stores[store.key] !== null;
+  });
+
   return (
     <div className="relative rounded-2xl border border-cyan-500/20 bg-slate-950/60 p-6 overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.1)] flex flex-col gap-4">
       <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-purple-500/5 to-transparent pointer-events-none"></div>
@@ -251,7 +264,7 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
       </div>
       
       <div className="z-10 grid grid-cols-1 gap-3">
-        {storesList.map((store) => {
+        {filteredStoresList.map((store) => {
           const cardStyle = store.isBestDeal ? store.neonBorder : store.normalBorder;
           const btnStyle = store.isBestDeal ? store.neonBtn : store.normalBtn;
           
@@ -298,6 +311,16 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
             </div>
           );
         })}
+      </div>
+      
+      <div className="z-10 text-[10px] text-slate-500 leading-relaxed text-left border-t border-slate-900/60 pt-3 font-sans">
+        {locale === 'ko' ? (
+          '* 원화(KRW) 및 엔화(JPY) 가격은 실시간 환율을 반영한 추정치로, 각 스토어의 세금 설정 및 결제 수수료에 따라 실제 구매 금액과 소폭 다를 수 있습니다.'
+        ) : locale === 'ja' ? (
+          '* 円(JPY)およびウォン(KRW)の価格はリアルタイムの換送レートによる推定値であり、実際の決済金額とは多少異なる場合があります。'
+        ) : (
+          '* JPY and KRW prices are estimated based on real-time exchange rates. Actual checkout amounts may differ slightly depending on store tax policies and payment fees.'
+        )}
       </div>
     </div>
   );
