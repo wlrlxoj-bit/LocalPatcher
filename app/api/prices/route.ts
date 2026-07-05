@@ -66,6 +66,25 @@ export async function GET(request: NextRequest) {
         }
       }
     }
+
+    if (!appId && gameId && supabase) {
+      try {
+        const { data: gameData } = await supabase
+          .from('games')
+          .select('cover_image_url')
+          .eq('id', gameId)
+          .single();
+        
+        if (gameData?.cover_image_url) {
+          const match = gameData.cover_image_url.match(/apps\/(\d+)/);
+          if (match) {
+            appId = parseInt(match[1], 10);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to query cover_image_url from games:', err);
+      }
+    }
     
     const resolvedAppId = appId || 1091500;
     
@@ -120,11 +139,13 @@ export async function GET(request: NextRequest) {
     
     // 2. Fetch from CheapShark API using 2-step Game Lookup
     let gameID: string | null = null;
+    const headers = { 'User-Agent': 'LocalPatcher/1.0 (contact@localpatcher.com)' };
     
-    if (resolvedAppId) {
+    if (appId) {
       try {
         const res = await fetch(
-          `https://www.cheapshark.com/api/1.0/games?steamAppID=${resolvedAppId}`
+          `https://www.cheapshark.com/api/1.0/games?steamAppID=${appId}`,
+          { headers, next: { revalidate: 3600 } }
         );
         if (res.ok) {
           const gameList = await res.json();
@@ -140,7 +161,8 @@ export async function GET(request: NextRequest) {
     if (!gameID && title) {
       try {
         const res = await fetch(
-          `https://www.cheapshark.com/api/1.0/games?title=${encodeURIComponent(title)}`
+          `https://www.cheapshark.com/api/1.0/games?title=${encodeURIComponent(title)}`,
+          { headers, next: { revalidate: 3600 } }
         );
         if (res.ok) {
           const gameList = await res.json();
@@ -157,7 +179,8 @@ export async function GET(request: NextRequest) {
     if (gameID) {
       try {
         const res = await fetch(
-          `https://www.cheapshark.com/api/1.0/games?id=${gameID}`
+          `https://www.cheapshark.com/api/1.0/games?id=${gameID}`,
+          { headers, next: { revalidate: 3600 } }
         );
         if (res.ok) {
           const gameDetails = await res.json();
