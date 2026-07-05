@@ -474,7 +474,7 @@ export default function DropZone({ locale, gameId, trainer, allTrainers, mapping
         onDrop={handleDrop}
         className={`relative rounded-2xl border-2 border-dashed p-8 md:p-12 flex flex-col items-center justify-center text-center group transition-all duration-300 overflow-hidden ${
           isDragActive
-            ? 'border-cyan-500 bg-cyan-950/20 scale-[1.01]'
+            ? 'border-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.4)] bg-cyan-950/30 scale-[1.02] duration-300 animate-pulse'
             : 'border-slate-800 bg-slate-900/10 hover:border-cyan-500/50 hover:bg-slate-900/20'
         } ${status === 'processing' ? 'pointer-events-none' : ''}`}
       >

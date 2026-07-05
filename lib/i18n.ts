@@ -61,6 +61,12 @@ export const i18nDict = {
     recentUpdatesTitle: '최신 업데이트 트레이너',
     popularTrainersTitle: '인기 트레이너',
     loadMore: '더 많은 게임 보기',
+    shareBtn: '패치 완료 정보 공유하기 🔗',
+    shareSuccess: '홍보 문구가 클립보드에 복사되었습니다! 커뮤니티에 붙여넣어 주세요.',
+    partnerTitle: '🎁 LocalPatcher 후원 파트너 딜',
+    partnerNotice: '아래 공식 파트너 링크를 통해 게임을 구매하시면, 추가 비용 없이 LocalPatcher의 무료 번역 서비스 운영을 후원하게 됩니다!',
+    viewDeal: '할인 혜택 확인 ↗',
+    goToSteam: 'Steam 상점 이동 ↗',
   },
   en: {
     title: 'LocalPatcher - Secure Trainer Localizer',
@@ -122,6 +128,12 @@ export const i18nDict = {
     recentUpdatesTitle: 'Recent Updates',
     popularTrainersTitle: 'Popular Trainers',
     loadMore: 'Load More Games',
+    shareBtn: 'Share Patch Info 🔗',
+    shareSuccess: 'Promo text copied to clipboard! Please share it with your community.',
+    partnerTitle: '🎁 LocalPatcher Creator Support Deals',
+    partnerNotice: 'Buy the game through our official partner links below to support LocalPatcher translation portal at no extra cost!',
+    viewDeal: 'Check Discount ↗',
+    goToSteam: 'Go to Steam Store ↗',
   },
   ja: {
     title: 'ゲームトレーナー日本語化パッチ＆ダウンロード | LocalPatcher',
@@ -183,6 +195,12 @@ export const i18nDict = {
     recentUpdatesTitle: '最近のアップデート',
     popularTrainersTitle: '人気トレーナー',
     loadMore: 'もっと見る',
+    shareBtn: 'パッチ適用情報を共有する 🔗',
+    shareSuccess: '紹介テキストがクリップボードにコピーされました！コミュニティに貼り付けてください。',
+    partnerTitle: '🎁 LocalPatcher 支援パートナーディール',
+    partnerNotice: '下記の公式パートナーリンクからゲームを購入すると、追加費用なしでLocalPatcherの翻訳サービス運営を公式に支援できます！',
+    viewDeal: '割引特典を確認 ↗',
+    goToSteam: 'Steamストアへ移動 ↗',
   }
 };
 

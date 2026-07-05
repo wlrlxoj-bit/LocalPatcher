@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, ArrowRight, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ArrowRight, AlertTriangle, Share2 } from 'lucide-react';
 import { Locale, getDictionary } from '@/lib/i18n';
 import DropZone from '@/components/DropZone';
 
@@ -10,6 +10,7 @@ interface Game {
   id: number;
   title_en: string;
   title_ko: string;
+  title_ja?: string;
   slug: string;
   cover_image_url: string;
   anti_cheat: string;
@@ -40,11 +41,89 @@ interface PatcherClientProps {
   locale: Locale;
 }
 
+interface PartnerStoreWidgetProps {
+  game: Game;
+  locale: Locale;
+  t: any;
+}
+
+function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
+  const steamUrl = `https://store.steampowered.com/search/?term=${encodeURIComponent(game.title_en)}`;
+  const gmgUrl = `https://www.greenmangaming.com/search?query=${encodeURIComponent(game.title_en)}`;
+  const partnerKey = process.env.NEXT_PUBLIC_HUMBLE_PARTNER_KEY;
+  const humbleUrl = partnerKey
+    ? `https://www.humblebundle.com/store/search?sort=bestselling&search=${encodeURIComponent(game.title_en)}&partner=${partnerKey}`
+    : `https://www.humblebundle.com/store/search?sort=bestselling&search=${encodeURIComponent(game.title_en)}`;
+
+  const stores = [
+    {
+      name: 'Steam Store',
+      desc: locale === 'ko' ? '공식 밸브 PC 게임 스토어' : locale === 'ja' ? '公式 Valve PC ゲームストア' : 'Official Valve PC Game Store',
+      url: steamUrl,
+      btnText: t.goToSteam,
+      colorClass: 'border-slate-800/80 hover:border-slate-700 bg-slate-900/25 hover:bg-slate-900/40',
+      btnColorClass: 'text-slate-300 hover:text-white border-slate-700 hover:border-slate-600 bg-slate-950/20 hover:bg-slate-950/40',
+    },
+    {
+      name: 'Green Man Gaming',
+      desc: locale === 'ko' ? '공식 파트너십 추가 할인 혜택 스토어' : locale === 'ja' ? '公式パートナー追加割引ストア' : 'Official Partner Discount Store',
+      url: gmgUrl,
+      btnText: t.viewDeal,
+      colorClass: 'border-slate-800/80 hover:border-emerald-500/30 bg-slate-900/25 hover:bg-emerald-950/10',
+      btnColorClass: 'text-emerald-400 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40 bg-emerald-950/20 hover:bg-emerald-950/40',
+    },
+    {
+      name: 'Humble Store',
+      desc: locale === 'ko' ? '기부와 할인을 동시에 진행하는 파트너 스토어' : locale === 'ja' ? 'チャリティと割引が同時に受けられるストア' : 'Charity & Discount Partner Store',
+      url: humbleUrl,
+      btnText: t.viewDeal,
+      colorClass: 'border-slate-800/80 hover:border-cyan-500/30 bg-slate-900/25 hover:bg-cyan-950/10',
+      btnColorClass: 'text-cyan-400 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40 bg-cyan-950/20 hover:bg-cyan-950/40',
+    }
+  ];
+
+  return (
+    <div className="relative rounded-2xl border border-cyan-500/20 bg-slate-950/60 p-6 overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.1)] flex flex-col gap-4">
+      <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-purple-500/5 to-transparent pointer-events-none"></div>
+      
+      <div className="z-10 flex flex-col gap-1 text-left">
+        <h3 className="text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-400 font-outfit">
+          {t.partnerTitle}
+        </h3>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          {t.partnerNotice}
+        </p>
+      </div>
+      
+      <div className="z-10 grid grid-cols-1 gap-2.5">
+        {stores.map((store) => (
+          <div
+            key={store.name}
+            className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 rounded-xl border transition-all duration-200 gap-3 ${store.colorClass}`}
+          >
+            <div className="flex flex-col text-left">
+              <span className="text-sm font-bold text-white font-outfit">{store.name}</span>
+              <span className="text-[11px] text-slate-400 mt-0.5">{store.desc}</span>
+            </div>
+            <a
+              href={store.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`inline-flex items-center justify-center px-4 py-1.5 rounded-lg border text-xs font-semibold transition-all duration-200 shrink-0 w-full sm:w-auto ${store.btnColorClass}`}
+            >
+              {store.btnText}
+            </a>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function PatcherClient({ game, trainers, mappingsMap, locale }: PatcherClientProps) {
   const sortedTrainers = [...trainers].sort((a, b) => b.id - a.id);
   const t = getDictionary(locale);
   const displayTitle = locale === 'ko' ? game.title_ko : game.title_en;
-  
   // Set default selected trainer version
   const [selectedTrainerId, setSelectedTrainerId] = useState<number>(
     sortedTrainers.length > 0 ? sortedTrainers[0].id : 0
@@ -61,11 +140,28 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
     setSelectedTrainerId(id);
   };
 
-  if (locale === 'en') {
-    const humblePurchaseUrl = partnerKey
-      ? `https://www.humblebundle.com/store/search?search=${encodeURIComponent(game.title_en)}&partner=${partnerKey}`
-      : `https://www.humblebundle.com/store/search?search=${encodeURIComponent(game.title_en)}`;
+  const handleShare = () => {
+    const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+    let promoText = '';
+    
+    if (locale === 'ko') {
+      promoText = `🎮 [${game.title_ko}] 트레이너 100% 안전한 한글 패치 완료!\n개인정보 수집 및 서버 업로드 없이 브라우저 로컬에서 안전하고 빠르게 번역 패치해보세요. 지금 바로 다운로드 가능!\n🔗 ${currentUrl}`;
+    } else if (locale === 'ja') {
+      promoText = `🎮 [${game.title_ja || game.title_en}] トレーナー 100% 安全な日本語化パッチ完了!\n個人情報の収集やサーバーへのアップロードなしで、ブラウザローカルで安全かつ迅速に翻訳パッチを適用できます。今すぐダウンロード可能!\n🔗 ${currentUrl}`;
+    } else {
+      promoText = `🎮 [${game.title_en}] Trainer 100% Safe Local Language Patch applied!\nApply localization patches safely and instantly in your local browser, without any file uploads or registration. Get yours now!\n🔗 ${currentUrl}`;
+    }
+    
+    navigator.clipboard.writeText(promoText)
+      .then(() => {
+        alert(t.shareSuccess);
+      })
+      .catch((err) => {
+        console.error('Failed to copy text: ', err);
+      });
+  };
 
+  if (locale === 'en') {
     return (
       <div className="max-w-4xl mx-auto px-6 py-12 flex flex-col">
         {/* Back button */}
@@ -94,29 +190,31 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
               <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-mono">Original Game: {game.title_en}</p>
             </div>
           </div>
+
+          {/* Action buttons */}
+          <div className="z-10 flex flex-col items-center md:items-end justify-center gap-2 shrink-0">
+            <a
+              href={purchaseUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-all duration-200 shadow-sm"
+            >
+              <span>Buy This Game at Lowest Price ↗</span>
+            </a>
+
+            <button
+              onClick={handleShare}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/20 transition-all duration-200 shadow-sm cursor-pointer"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>{t.shareBtn}</span>
+            </button>
+          </div>
         </div>
 
-        {/* Prominent Affiliate Promo Banner */}
-        <div className="relative rounded-2xl border border-cyan-500/20 bg-slate-950/60 p-6 md:p-8 overflow-hidden shadow-[0_0_50px_rgba(6,182,212,0.15)] flex flex-col items-center text-center gap-6 mb-8">
-          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-emerald-500/5 to-transparent pointer-events-none"></div>
-          
-          <div className="z-10 flex flex-col items-center gap-2">
-            <h2 className="text-2xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400 font-outfit tracking-wide drop-shadow-md">
-              🔥 Get the Best Deal on Humble Store
-            </h2>
-            <p className="text-sm text-slate-300 max-w-xl leading-relaxed mt-2">
-              Buy the official game at the lowest price through our Humble Bundle partner deals. Save money and support our localizing platform!
-            </p>
-          </div>
-
-          <a
-            href={humblePurchaseUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="z-10 relative inline-flex items-center justify-center px-8 py-3.5 rounded-xl text-sm font-bold text-slate-950 bg-gradient-to-r from-cyan-400 to-emerald-400 hover:from-cyan-300 hover:to-emerald-300 transition-all duration-300 shadow-[0_0_20px_rgba(34,211,238,0.3)] hover:shadow-[0_0_30px_rgba(34,211,238,0.5)] transform hover:-translate-y-0.5"
-          >
-            Buy on Humble Store ↗
-          </a>
+        {/* Triple Store Widget */}
+        <div className="mb-8">
+          <PartnerStoreWidget game={game} locale={locale} t={t} />
         </div>
 
         {/* Secondary Clean Card for original FLiNG download */}
@@ -216,7 +314,6 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
           <div className="pt-1">
             <h1 className="text-xl md:text-2xl font-bold text-white font-outfit">{displayTitle}</h1>
             <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-mono">Original Game: {game.title_en}</p>
-
           </div>
         </div>
 
@@ -263,6 +360,14 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
               }</span>
             </a>
           )}
+
+          <button
+            onClick={handleShare}
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/20 transition-all duration-200 shadow-sm cursor-pointer"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            <span>{t.shareBtn}</span>
+          </button>
         </div>
       </div>
 
@@ -334,6 +439,9 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                 />
               </>
             )}
+
+            {/* Triple Store Widget */}
+            <PartnerStoreWidget game={game} locale={locale} t={t} />
 
             {/* Quick instructions */}
             <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/10 text-xs text-slate-400">
