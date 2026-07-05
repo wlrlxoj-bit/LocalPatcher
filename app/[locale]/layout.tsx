@@ -76,6 +76,8 @@ export default async function LocaleLayout({
   return (
     <html lang={currentLocale}>
       <head>
+        {/* Impact.com 소유권 인증 */}
+        <meta name="impact-site-verification" content="78fe6405-d192-45b2-9632-5604beb6e721" />
         {process.env.NEXT_PUBLIC_GA_ID && (
           <>
             <Script
