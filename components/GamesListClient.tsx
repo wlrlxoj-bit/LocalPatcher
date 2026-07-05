@@ -225,7 +225,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
                 return (
                   <a
                     key={game.id}
-                    href={`/${locale}/games/${game.slug}`}
+                    href={`/${locale}/patcher/${game.slug}`}
                     className="flex items-center gap-3 p-2 rounded-xl transition-all duration-200 hover:bg-slate-800/40 group"
                   >
                     {/* Rank Badge */}
