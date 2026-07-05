@@ -314,13 +314,7 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
       </div>
       
       <div className="z-10 text-[10px] text-slate-500 leading-relaxed text-left border-t border-slate-900/60 pt-3 font-sans">
-        {locale === 'ko' ? (
-          '* 원화(KRW) 및 엔화(JPY) 가격은 실시간 환율을 반영한 추정치로, 각 스토어의 세금 설정 및 결제 수수료에 따라 실제 구매 금액과 소폭 다를 수 있습니다.'
-        ) : locale === 'ja' ? (
-          '* 円(JPY)およびウォン(KRW)の価格はリアルタイムの換送レートによる推定値であり、実際の決済金額とは多少異なる場合があります。'
-        ) : (
-          '* JPY and KRW prices are estimated based on real-time exchange rates. Actual checkout amounts may differ slightly depending on store tax policies and payment fees.'
-        )}
+        {t.priceDisclaimer}
       </div>
     </div>
   );
