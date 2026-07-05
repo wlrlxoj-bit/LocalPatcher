@@ -22,6 +22,24 @@ db = create_client(
 
 client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
 
+# List of allowed abbreviations/words that do NOT indicate a translation leak in explanations
+ALLOWED_WORDS = {
+    'num', 'ctrl', 'alt', 'shift', 'pageup', 'pagedown', 'insert', 'delete', 'home', 'end',
+    'hp', 'mp', 'sp', 'bp', 'xp', 'ap', 'jp', 'eac', 'id', 'ad', 'spa', 'fling', 'edit',
+    'gta', 'cpu', 'gpu', 'ram', 'hud', 'fps', 'ok', 'vs', 'ii', 'iii', 'iv', 'v', 'vi'
+}
+
+def has_english_leak(text: str) -> bool:
+    if not text:
+        return False
+    # Extract all english words of length 3 or more
+    import re
+    words = re.findall(r'[a-zA-Z]{3,}', text.lower())
+    for word in words:
+        if word not in ALLOWED_WORDS:
+            return True
+    return False
+
 POPULAR_SLUGS = [
     'elden-ring',
     'cyberpunk-2077-trainer',
@@ -114,6 +132,12 @@ def translate_block_to_ja(text: str, ja_dict: dict) -> str:
         
         translated_label = ja_dict.get(label_lower)
         if translated_label:
+            # Force LLM translation if english leaks are detected in the notes
+            if notes and has_english_leak(notes):
+                dict_results.append(None)
+                lines_needing_llm.append(line)
+                continue
+                
             # 메모 번역 매핑
             translated_notes = ""
             if notes:

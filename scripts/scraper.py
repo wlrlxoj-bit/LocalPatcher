@@ -96,6 +96,23 @@ COMMON_TRANSLATIONS = {
     "check for updates": "업데이트 확인"
 }
 
+# List of allowed abbreviations/words that do NOT indicate a translation leak in explanations
+ALLOWED_WORDS = {
+    'num', 'ctrl', 'alt', 'shift', 'pageup', 'pagedown', 'insert', 'delete', 'home', 'end',
+    'hp', 'mp', 'sp', 'bp', 'xp', 'ap', 'jp', 'eac', 'id', 'ad', 'spa', 'fling', 'edit',
+    'gta', 'cpu', 'gpu', 'ram', 'hud', 'fps', 'ok', 'vs', 'ii', 'iii', 'iv', 'v', 'vi'
+}
+
+def has_english_leak(text: str) -> bool:
+    if not text:
+        return False
+    # Extract all English alphabetical words of length 3 or more
+    words = re.findall(r'[a-zA-Z]{3,}', text.lower())
+    for word in words:
+        if word not in ALLOWED_WORDS:
+            return True # English leak detected!
+    return False
+
 # Dynamic in-memory dictionary loaded from database
 db_dictionary_ko = {}
 db_dictionary_ja = {}
@@ -213,6 +230,10 @@ def translate_line(line: str):
         translated_label = COMMON_TRANSLATIONS[label_lower]
         
     if translated_label is not None:
+        # Force LLM translation if there is an english leak in the details/notes
+        if notes and has_english_leak(notes):
+            return None
+            
         # Simple notes translation lookup
         translated_notes = ""
         if notes:
@@ -300,6 +321,10 @@ def translate_line_ja(line: str):
         translated_label = db_dictionary_ja[label_lower]
         
     if translated_label is not None:
+        # Force LLM translation if there is an english leak in the details/notes for Japanese
+        if notes and has_english_leak(notes):
+            return None
+            
         translated_notes = ""
         if notes:
             notes_lower = notes.lower()

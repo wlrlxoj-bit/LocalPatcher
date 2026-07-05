@@ -61,6 +61,134 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
     setSelectedTrainerId(id);
   };
 
+  if (locale === 'en') {
+    const humblePurchaseUrl = partnerKey
+      ? `https://www.humblebundle.com/store/search?search=${encodeURIComponent(game.title_en)}&partner=${partnerKey}`
+      : `https://www.humblebundle.com/store/search?search=${encodeURIComponent(game.title_en)}`;
+
+    return (
+      <div className="max-w-4xl mx-auto px-6 py-12 flex flex-col">
+        {/* Back button */}
+        <div className="mb-6">
+          <Link 
+            href={`/${locale}`}
+            className="inline-flex items-center space-x-1 text-xs text-slate-500 hover:text-cyan-400 transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span>{t.backToList}</span>
+          </Link>
+        </div>
+
+        {/* Game Details Banner */}
+        <div className="relative rounded-2xl border border-slate-800 bg-slate-900/30 overflow-hidden p-6 md:p-8 flex flex-col md:flex-row items-center md:items-start justify-between gap-6 mb-8">
+          <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 to-indigo-500/5 pointer-events-none"></div>
+          
+          {/* Game Specs */}
+          <div className="flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-4 z-10">
+            <div 
+              className="w-20 h-28 bg-slate-800 rounded-xl bg-cover bg-center border border-slate-700/50 shadow-md shrink-0"
+              style={{ backgroundImage: `url(${game.cover_image_url})` }}
+            />
+            <div className="pt-1">
+              <h1 className="text-xl md:text-2xl font-bold text-white font-outfit">{displayTitle}</h1>
+              <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-mono">Original Game: {game.title_en}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Prominent Affiliate Promo Banner */}
+        <div className="relative rounded-2xl border border-cyan-500/20 bg-slate-950/60 p-6 md:p-8 overflow-hidden shadow-[0_0_50px_rgba(6,182,212,0.15)] flex flex-col items-center text-center gap-6 mb-8">
+          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-emerald-500/5 to-transparent pointer-events-none"></div>
+          
+          <div className="z-10 flex flex-col items-center gap-2">
+            <h2 className="text-2xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400 font-outfit tracking-wide drop-shadow-md">
+              🔥 Get the Best Deal on Humble Store
+            </h2>
+            <p className="text-sm text-slate-300 max-w-xl leading-relaxed mt-2">
+              Buy the official game at the lowest price through our Humble Bundle partner deals. Save money and support our localizing platform!
+            </p>
+          </div>
+
+          <a
+            href={humblePurchaseUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="z-10 relative inline-flex items-center justify-center px-8 py-3.5 rounded-xl text-sm font-bold text-slate-950 bg-gradient-to-r from-cyan-400 to-emerald-400 hover:from-cyan-300 hover:to-emerald-300 transition-all duration-300 shadow-[0_0_20px_rgba(34,211,238,0.3)] hover:shadow-[0_0_30px_rgba(34,211,238,0.5)] transform hover:-translate-y-0.5"
+          >
+            Buy on Humble Store ↗
+          </a>
+        </div>
+
+        {/* Secondary Clean Card for original FLiNG download */}
+        <div className="relative rounded-xl border border-slate-800 bg-slate-900/30 p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 mb-8 shadow-md">
+          <div className="flex flex-col text-center md:text-left gap-1">
+            <h3 className="text-lg font-bold text-white font-outfit">
+              Official English Trainer Download
+            </h3>
+            <p className="text-xs text-slate-400 max-w-xl leading-relaxed">
+              You do not need to patch the trainer into English since it is already in English. Download the official, original trainer directly from FLiNG&apos;s webpage.
+            </p>
+          </div>
+
+          <a
+            href={game.fling_url || 'https://flingtrainer.com/'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center px-5 py-2.5 rounded-lg border border-cyan-500/30 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/10 hover:border-cyan-500/50 transition-all duration-200 shrink-0"
+          >
+            Go to FLiNG Official Download Page ↗
+          </a>
+        </div>
+
+        {/* Supported Trainer Builds */}
+        <div className="p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.05)]">
+          <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent"></div>
+          
+          <h5 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
+            {t.supportedBuilds}
+          </h5>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 text-[11px] text-slate-500 uppercase tracking-wider font-mono">
+                  <th className="py-3 px-4 font-semibold">{t.buildVersion}</th>
+                  <th className="py-3 px-4 font-semibold">{t.fileSize}</th>
+                  <th className="py-3 px-4 font-semibold text-center">{t.cheatCountLabel}</th>
+                  <th className="py-3 px-4 font-semibold text-right">{t.statusLabel}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50 text-xs">
+                {sortedTrainers.map((t_option) => (
+                  <tr key={t_option.id} className="hover:bg-slate-800/10 transition-colors group">
+                    <td className="py-3.5 px-4 font-semibold text-slate-300 group-hover:text-cyan-400 transition-colors">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-600 font-mono text-[10px] bg-slate-800/40 px-1.5 py-0.5 rounded">ID: {t_option.id}</span>
+                        <span>{t_option.version_str}</span>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-400 font-mono">
+                      {t_option.original_file_size ? `${(t_option.original_file_size / 1024 / 1024).toFixed(2)} MB` : 'N/A'}
+                    </td>
+                    <td className="py-3.5 px-4 text-center text-slate-400 font-mono">
+                      {t_option.option_count ? t.cheatCountText.replace('{count}', String(t_option.option_count || 0)) : 'N/A'}
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.05)]">
+                        {t.autoDetectable}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto px-6 py-12 flex flex-col">
       
@@ -219,13 +347,6 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                   <li>パッチ適用完了後、有効化されたダウンロードボタンをクリックして保存します。</li>
                   <li>ダウンロードされた ZIP ファイルはウイルス誤検出およびダウンロード強制削除を防止するため、解凍パスワード <strong className="text-amber-400 font-mono">11111111</strong> が設定されています。解凍後に実行してください。</li>
                 </ul>
-              ) : locale === 'en' ? (
-                <ul className="space-y-1.5 list-decimal list-inside leading-relaxed text-slate-400">
-                  <li>Prepare the original FLiNG trainer executable (.exe) corresponding to the version.</li>
-                  <li>Drag & drop the executable into the dotted box (Drop Zone) above.</li>
-                  <li>Click the download button enabled after successful verification to save the file.</li>
-                  <li>The downloaded ZIP file is protected with password <strong className="text-amber-400 font-mono">11111111</strong> to prevent immediate antivirus quarantine.</li>
-                </ul>
               ) : (
                 <ul className="space-y-1.5 list-decimal list-inside leading-relaxed text-slate-400">
                   <li>해당 버전에 맞는 FLiNG 원본 실행 파일(.exe)을 준비합니다.</li>
@@ -328,7 +449,7 @@ function parseMappings(translatedText: string): CheatOption[] {
     if (match) {
       const hotkey = match[1].trim();
       let label = match[2].trim();
-      let notes: string[] = [];
+      const notes: string[] = [];
 
       if (label.includes('**')) {
         const parts = label.split('**');
