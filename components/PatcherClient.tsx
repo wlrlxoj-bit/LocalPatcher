@@ -173,7 +173,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
         </div>
 
         {/* Game Details Banner */}
-        <div className="relative rounded-2xl border border-slate-800 bg-slate-900/30 overflow-hidden p-6 md:p-8 flex flex-col md:flex-row items-center md:items-start justify-between gap-6 mb-8">
+        <div className="relative rounded-2xl border border-slate-800 bg-slate-900/30 overflow-hidden p-6 md:p-8 flex flex-col md:flex-row items-center md:items-start justify-between gap-6 mb-6">
           <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 to-indigo-500/5 pointer-events-none"></div>
           
           {/* Game Specs */}
@@ -201,7 +201,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
         </div>
 
         {/* Triple Store Widget */}
-        <div className="mb-8">
+        <div className="mb-6">
           <PartnerStoreWidget game={game} locale={locale} t={t} />
         </div>
 
@@ -290,7 +290,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
       </div>
 
       {/* Game Details Banner */}
-      <div className="relative rounded-2xl border border-slate-800 bg-slate-900/30 overflow-hidden p-6 md:p-8 flex flex-col md:flex-row items-center md:items-start justify-between gap-6 mb-8">
+      <div className="relative rounded-2xl border border-slate-800 bg-slate-900/30 overflow-hidden p-6 md:p-8 flex flex-col md:flex-row items-center md:items-start justify-between gap-6 mb-6">
         <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 to-indigo-500/5 pointer-events-none"></div>
         
         {/* Game Specs */}
@@ -342,6 +342,11 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
             <span>{t.shareBtn}</span>
           </button>
         </div>
+      </div>
+
+      {/* Triple Store Widget */}
+      <div className="mb-6">
+        <PartnerStoreWidget game={game} locale={locale} t={t} />
       </div>
 
       {/* Trainer UI Preview — right below title */}
@@ -412,9 +417,6 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                 />
               </>
             )}
-
-            {/* Triple Store Widget */}
-            <PartnerStoreWidget game={game} locale={locale} t={t} />
 
             {/* Quick instructions */}
             <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/10 text-xs text-slate-400">
@@ -598,7 +600,7 @@ interface TrainerUIPreviewProps {
 function TrainerUIPreview({ game, trainer, mappings, locale }: TrainerUIPreviewProps) {
   if (!mappings || mappings.length === 0) {
     return (
-      <div className="mt-8 p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden text-center text-xs text-slate-500">
+      <div className="mt-6 p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden text-center text-xs text-slate-500">
         <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent"></div>
         한글 번역 매핑 정보가 등록되지 않아 트레이너 미리보기를 표시할 수 없습니다.
       </div>
@@ -615,7 +617,7 @@ function TrainerUIPreview({ game, trainer, mappings, locale }: TrainerUIPreviewP
   const cheats = cheatMapping ? parseMappings(cheatMapping.translated_text) : [];
 
   return (
-    <div className="mt-8 p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden shadow-[0_0_25px_rgba(6,182,212,0.05)]">
+    <div className="mt-6 p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden shadow-[0_0_25px_rgba(6,182,212,0.05)]">
       <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent"></div>
       
       <h5 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
