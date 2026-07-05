@@ -31,6 +31,22 @@ interface GamesListClientProps {
   locale: Locale;
 }
 
+function getChosung(str: string): string {
+  const cho = [
+    'ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'
+  ];
+  let result = '';
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i) - 44032;
+    if (code > -1 && code < 11172) {
+      result += cho[Math.floor(code / 588)];
+    } else {
+      result += str.charAt(i);
+    }
+  }
+  return result;
+}
+
 export default function GamesListClient({ games, trainers, locale }: GamesListClientProps) {
   const t = getDictionary(locale);
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,13 +76,20 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
     .filter(game => game.is_popular === true)
     .sort((a, b) => (a.popularity_index ?? 999) - (b.popularity_index ?? 999));
 
-  // Filter games based on search query (checks both English and Korean titles)
+  // Filter games based on search query (checks both English and Korean titles with Chosung search)
   const filteredGames = gamesWithTrainers
     .filter(game => {
-      const query = searchQuery.toLowerCase();
+      const queryClean = searchQuery.toLowerCase().replace(/\s+/g, '');
+      const queryChosung = getChosung(queryClean);
+      
+      const titleEnClean = game.title_en.toLowerCase().replace(/\s+/g, '');
+      const titleKoClean = game.title_ko.toLowerCase().replace(/\s+/g, '');
+      
       return (
-        game.title_en.toLowerCase().includes(query) ||
-        game.title_ko.toLowerCase().includes(query)
+        titleEnClean.includes(queryClean) ||
+        titleEnClean.includes(queryChosung) ||
+        titleKoClean.includes(queryClean) ||
+        getChosung(titleKoClean).includes(queryChosung)
       );
     })
     .sort((a, b) => {
