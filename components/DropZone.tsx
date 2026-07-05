@@ -414,7 +414,7 @@ export default function DropZone({ locale, gameId, trainer, allTrainers, mapping
 
   const handleDownloadClick = async () => {
     try {
-      const adUrl = process.env.NEXT_PUBLIC_AD_GATE_URL || "https://www.effectivecpmnetwork.com/jzckk7i0wp?key=4f409e8e38fded0aa4403f291b47b12e";
+      const adUrl = process.env.NEXT_PUBLIC_AD_GATE_URL || "https://www.effectivecpmnetwork.com/idhbg4vm?key=33b748a68cf17f28c5cf24a5aabfb561";
       const adWindow = window.open(adUrl, '_blank');
       if (adWindow) {
         adWindow.blur();
