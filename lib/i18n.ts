@@ -70,6 +70,7 @@ export const i18nDict = {
     gmgBadge: '✨ 예약 구매 특가 및 상시 15~20% 할인 쿠폰 배포!',
     humbleBadge: '🎁 초이스 구독 추가 할인 및 스팀 키 패키지 번들 특가!',
     steamBadge: '정가 및 스팀 공식 정기 세션 세일',
+    gogBadge: '🛡️ DRM-Free 공식 게임 영구 소장 딜!',
   },
   en: {
     title: 'LocalPatcher - Secure Trainer Localizer',
@@ -140,6 +141,7 @@ export const i18nDict = {
     gmgBadge: '✨ Pre-order deals & active 15~20% discount vouchers!',
     humbleBadge: '🎁 Choice subscriber discounts & steam key bundles!',
     steamBadge: 'Regular pricing & Steam official seasonal sales',
+    gogBadge: '🛡️ DRM-Free official game digital copy!',
   },
   ja: {
     title: 'ゲームトレーナー日本語化パッチ＆ダウンロード | LocalPatcher',
@@ -210,6 +212,7 @@ export const i18nDict = {
     gmgBadge: '✨ 予約購入特価＆常時15〜20%割引クーポン配布！',
     humbleBadge: '🎁 チョイス購読割引＆スチームキーパッケージバンドル特価！',
     steamBadge: '定価およびSteam公式定期セール',
+    gogBadge: '🛡️ DRM-Free公式ゲーム永久所有ディール！',
   }
 };
 

@@ -60,6 +60,7 @@ interface PricesResponse {
     steam: PriceData;
     gmg: PriceData;
     humble: PriceData;
+    gog: PriceData;
   };
 }
 
@@ -76,6 +77,7 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
   const humbleUrl = partnerKey
     ? `https://www.humblebundle.com/store/search?sort=bestselling&search=${encodeURIComponent(game.title_en)}&partner=${partnerKey}`
     : `https://www.humblebundle.com/store/search?sort=bestselling&search=${encodeURIComponent(game.title_en)}`;
+  const gogUrl = `https://www.gog.com/en/games?query=${encodeURIComponent(game.title_en)}`;
 
   useEffect(() => {
     let active = true;
@@ -121,11 +123,13 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
   };
 
   // Determine best deal store
-  let bestDealStore: 'steam' | 'gmg' | 'humble' | null = null;
+  let bestDealStore: 'steam' | 'gmg' | 'humble' | 'gog' | null = null;
   if (prices) {
-    const { steam, gmg, humble } = prices.stores;
-    const minVal = Math.min(steam.current, gmg.current, humble.current);
-    if (gmg.current === minVal) {
+    const { steam, gmg, humble, gog } = prices.stores;
+    const minVal = Math.min(steam.current, gmg.current, humble.current, gog.current);
+    if (gog.current === minVal) {
+      bestDealStore = 'gog';
+    } else if (gmg.current === minVal) {
       bestDealStore = 'gmg';
     } else if (humble.current === minVal) {
       bestDealStore = 'humble';
@@ -136,7 +140,7 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
 
   const rates = prices?.rates || { USD: 1, KRW: 1380, JPY: 155, EUR: 0.92 };
 
-  const getStoreDisplayDetails = (storeName: 'steam' | 'gmg' | 'humble', fallbackUrl: string) => {
+  const getStoreDisplayDetails = (storeName: 'steam' | 'gmg' | 'humble' | 'gog', fallbackUrl: string) => {
     if (loading) {
       return {
         priceStr: '...',
@@ -206,6 +210,16 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
       normalBtn: 'text-cyan-400 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40 bg-cyan-950/20 hover:bg-cyan-950/40',
       neonBorder: 'border-cyan-500 bg-slate-900/30 shadow-[0_0_20px_rgba(6,182,212,0.4)]',
       neonBtn: 'text-cyan-400 hover:text-cyan-300 border-cyan-500 hover:border-cyan-400 bg-cyan-950/40 hover:bg-cyan-950/60 shadow-[0_0_10px_rgba(6,182,212,0.3)]',
+    },
+    {
+      key: 'gog' as const,
+      name: 'GOG.com',
+      ...getStoreDisplayDetails('gog', gogUrl),
+      badge: <span className="text-xs text-purple-400 font-medium mt-1 block">{t.gogBadge}</span>,
+      normalBorder: 'border-slate-800/80 bg-slate-900/25 hover:bg-slate-900/40 hover:border-slate-700',
+      normalBtn: 'text-purple-400 hover:text-purple-300 border-purple-500/20 hover:border-purple-500/40 bg-purple-950/20 hover:bg-purple-950/40',
+      neonBorder: 'border-purple-500 bg-slate-900/30 shadow-[0_0_20px_rgba(168,85,247,0.4)]',
+      neonBtn: 'text-purple-400 hover:text-purple-300 border-purple-500 hover:border-purple-400 bg-purple-950/40 hover:bg-purple-950/60 shadow-[0_0_10px_rgba(168,85,247,0.3)]',
     }
   ];
 

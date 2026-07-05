@@ -112,6 +112,7 @@ export async function GET(request: NextRequest) {
           steam: mapCachedPrice(cachedData.steam_price, cachedData.steam_discount),
           gmg: mapCachedPrice(cachedData.gmg_price, cachedData.gmg_discount),
           humble: mapCachedPrice(cachedData.humble_price, cachedData.humble_discount),
+          gog: mapCachedPrice(cachedData.gog_price ?? cachedData.steam_price, cachedData.gog_discount ?? cachedData.steam_discount),
         }
       });
     }
@@ -147,10 +148,11 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // 3. Parse store deals: Match Steam (storeID: "1"), GMG (storeID: "2"), Humble (storeID: "11")
+    // 3. Parse store deals: Match Steam (storeID: "1"), GMG (storeID: "2"), Humble (storeID: "11"), GOG (storeID: "7")
     const steamDeal = deals.find(d => d.storeID === '1');
     const gmgDeal = deals.find(d => d.storeID === '2');
     const humbleDeal = deals.find(d => d.storeID === '11');
+    const gogDeal = deals.find(d => d.storeID === '7');
     
     // Default Steam price details (fallback)
     let steamPrice = {
@@ -188,6 +190,15 @@ export async function GET(request: NextRequest) {
       };
     }
     
+    let gogPrice = { ...steamPrice };
+    if (gogDeal) {
+      gogPrice = {
+        original: parseFloat(gogDeal.normalPrice),
+        current: parseFloat(gogDeal.salePrice),
+        discountPercent: Math.round(parseFloat(gogDeal.savings)),
+      };
+    }
+    
     // 4. Save (UPSERT) dynamic real-time prices back into Supabase
     if (supabase && gameId) {
       try {
@@ -201,6 +212,8 @@ export async function GET(request: NextRequest) {
             gmg_discount: gmgPrice.discountPercent,
             humble_price: humblePrice.current,
             humble_discount: humblePrice.discountPercent,
+            gog_price: gogPrice.current,
+            gog_discount: gogPrice.discountPercent,
             updated_at: new Date().toISOString()
           }, { onConflict: 'game_id' });
         
@@ -223,6 +236,7 @@ export async function GET(request: NextRequest) {
         steam: steamPrice,
         gmg: gmgPrice,
         humble: humblePrice,
+        gog: gogPrice,
       }
     });
   } catch (err: any) {
