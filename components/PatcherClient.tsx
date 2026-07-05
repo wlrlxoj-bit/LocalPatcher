@@ -292,8 +292,8 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                     {locale === 'ko' 
                       ? '본 게임의 트레이너는 내부 리소스가 압축 및 암호화(난독화)되어 있어 현재 웹상에서 한글 패치를 적용할 수 없습니다. 대신 공식 영문판 트레이너를 이용해 주시기 바랍니다.' 
                       : locale === 'ja' 
-                        ? '本ゲームのトレーナーはリソースが暗号化されているため、韓国語パッチを適用できません。公式の英語版をご利用ください。' 
-                        : 'This trainer is encrypted/compressed and currently cannot be patched into Korean. Please download and use the official English version.'}
+                        ? '本ゲームのトレーナーはリソースが暗号化されているため、日本語パッチを適用できません。公式の英語版をご利用ください。' 
+                        : 'This trainer is encrypted/compressed and currently cannot be patched into Local Language. Please download and use the official English version.'}
                   </p>
                   <a
                     href={game.fling_url || 'https://flingtrainer.com/'}
@@ -311,14 +311,14 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
               </div>
             ) : (
               <>
-                {locale !== 'ko' && (
+                {locale !== 'ko' && locale !== 'ja' && (
                   <div className="w-full p-4 rounded-xl border border-amber-500/20 bg-amber-950/20 text-amber-400 text-xs sm:text-sm flex items-start gap-3">
                     <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
                     <div>
                       {locale === 'ja' ? (
                         "【翻訳対応言語に関するお知らせ】現在、パッチによる翻訳は「韓国語(ko)」のみサポートされています。本ページでパッチを適用すると、トレーナーのテキストが韓国語に翻訳されます。日本語は今後対応予定です。"
                       ) : (
-                        "【Translation Support Notice】Currently, the translation patch only supports Korean (ko). Applying the patch on this trainer will localize the option descriptions into Korean. Japanese and other languages are planned for future updates."
+                        "【Translation Support Notice】Currently, the translation patch only supports Korean (ko) and Japanese (ja). Applying the patch on this trainer will localize the option descriptions. English and other languages are planned for future updates."
                       )}
                     </div>
                   </div>
