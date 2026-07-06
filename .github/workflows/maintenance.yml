@@ -1,0 +1,30 @@
+name: "\U0001F527 Game Cover Image Maintenance"
+
+on:
+  schedule:
+    # 매 2일마다 UTC 03:00 (KST 12:00)에 자동 실행
+    - cron: '0 3 */2 * *'
+  workflow_dispatch:
+    # GitHub Actions 탭에서 수동 실행 허용
+
+jobs:
+  update-covers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run cover image maintenance
+        run: npx tsx scripts/update-covers.ts
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
