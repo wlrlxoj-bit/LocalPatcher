@@ -77,7 +77,7 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
   const humbleUrl = partnerKey
     ? `https://www.humblebundle.com/store/search?sort=bestselling&search=${encodeURIComponent(game.title_en)}&partner=${partnerKey}`
     : `https://www.humblebundle.com/store/search?sort=bestselling&search=${encodeURIComponent(game.title_en)}`;
-  const gogUrl = `https://www.gog.com/en/games?search=${encodeURIComponent(game.title_en)}`;
+  const gogUrl = `https://www.gog.com/games?search=${encodeURIComponent(game.title_en)}`;
 
   useEffect(() => {
     let active = true;
@@ -126,15 +126,27 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
   let bestDealStore: 'steam' | 'gmg' | 'humble' | 'gog' | null = null;
   if (prices) {
     const { steam, gmg, humble, gog } = prices.stores;
-    const activePrices: { store: 'steam' | 'gmg' | 'humble' | 'gog'; current: number }[] = [
-      { store: 'steam', current: steam.current }
-    ];
-    if (gmg) activePrices.push({ store: 'gmg', current: gmg.current });
-    if (humble) activePrices.push({ store: 'humble', current: humble.current });
-    if (gog) activePrices.push({ store: 'gog', current: gog.current });
+    const activePrices: { store: 'steam' | 'gmg' | 'humble' | 'gog'; current: number }[] = [];
+    
+    // 수수료를 주는 파트너 샵들만 우선 최저가 비교 후보군으로 등록
+    if (gmg !== null) activePrices.push({ store: 'gmg', current: gmg.current });
+    if (humble !== null) activePrices.push({ store: 'humble', current: humble.current });
+    if (gog !== null) activePrices.push({ store: 'gog', current: gog.current });
     
     activePrices.sort((a, b) => a.current - b.current);
-    bestDealStore = activePrices[0].store;
+    
+    if (activePrices.length > 0) {
+      const bestPartner = activePrices[0];
+      const steamCurrent = steam?.current ?? 999.0;
+      // 스팀 가격과 동가이거나, 다른 파트너샵 가격이 $0.5 이내로 소폭 차이일 때도 파트너사에게 최저가 뱃지를 양보해 줍니다.
+      if (bestPartner.current <= steamCurrent + 0.5) {
+        bestDealStore = bestPartner.store;
+      } else {
+        bestDealStore = 'steam';
+      }
+    } else {
+      bestDealStore = 'steam';
+    }
   }
 
   const rates = prices?.rates || { USD: 1, KRW: 1380, JPY: 155, EUR: 0.92 };
@@ -161,9 +173,9 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
     }
 
     const priceInfo = prices.stores[storeName];
-    if (!priceInfo) {
+    if (priceInfo === null) {
       return {
-        priceStr: '',
+        priceStr: t.noPriceInfo || 'Check Price (Storefront)',
         originalStr: null as string | null,
         discountBadge: null as React.ReactNode,
         isBestDeal: false,
@@ -231,10 +243,7 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
     }
   ];
 
-  const filteredStoresList = storesList.filter((store) => {
-    if (loading || !prices) return true;
-    return prices.stores[store.key] !== null;
-  });
+  const filteredStoresList = storesList;
 
   return (
     <div className="relative rounded-2xl border border-cyan-500/20 bg-slate-950/60 p-6 overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.1)] flex flex-col gap-4">
