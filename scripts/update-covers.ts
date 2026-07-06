@@ -107,6 +107,15 @@ function initSupabase(): SupabaseClient {
     );
   }
 
+  // Node.js 20 환경에서 Supabase 실시간 소켓 초기화 에러(WebSocket support 누락) 방지를 위한 더미 WebSocket 주입
+  if (typeof (global as any).WebSocket === 'undefined') {
+    (global as any).WebSocket = class DummyWebSocket {
+      addEventListener() {}
+      removeEventListener() {}
+      close() {}
+    };
+  }
+
   // 서비스 역할 키를 사용하여 RLS 우회 가능한 관리자 클라이언트 생성
   return createClient(url, key, {
     auth: {
