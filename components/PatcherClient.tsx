@@ -128,24 +128,22 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
     const { steam, gmg, humble, gog } = prices.stores;
     const activePrices: { store: 'steam' | 'gmg' | 'humble' | 'gog'; current: number }[] = [];
     
-    // 수수료를 주는 파트너 샵들만 우선 최저가 비교 후보군으로 등록
+    if (steam !== null) activePrices.push({ store: 'steam', current: steam.current });
     if (gmg !== null) activePrices.push({ store: 'gmg', current: gmg.current });
     if (humble !== null) activePrices.push({ store: 'humble', current: humble.current });
     if (gog !== null) activePrices.push({ store: 'gog', current: gog.current });
     
-    activePrices.sort((a, b) => a.current - b.current);
-    
     if (activePrices.length > 0) {
-      const bestPartner = activePrices[0];
-      const steamCurrent = steam?.current ?? 999.0;
-      // 스팀 가격과 동가이거나, 다른 파트너샵 가격이 $0.5 이내로 소폭 차이일 때도 파트너사에게 최저가 뱃지를 양보해 줍니다.
-      if (bestPartner.current <= steamCurrent + 0.5) {
-        bestDealStore = bestPartner.store;
-      } else {
-        bestDealStore = 'steam';
-      }
-    } else {
-      bestDealStore = 'steam';
+      activePrices.sort((a, b) => {
+        if (a.current !== b.current) {
+          return a.current - b.current; // 1차 정렬: 가격이 저렴한 순
+        }
+        // 2차 정렬: 가격이 완벽히 동가일 때, 수수료가 없는 스팀(steam)을 맨 뒤로 밀어냄
+        if (a.store === 'steam') return 1;
+        if (b.store === 'steam') return -1;
+        return 0;
+      });
+      bestDealStore = activePrices[0].store;
     }
   }
 
