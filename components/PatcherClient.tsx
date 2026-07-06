@@ -68,9 +68,7 @@ interface PricesResponse {
 function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
   const [prices, setPrices] = useState<PricesResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [currency, setCurrency] = useState<string>(
-    locale === 'ko' ? 'KRW' : locale === 'ja' ? 'JPY' : 'USD'
-  );
+  const [currency, setCurrency] = useState<string>('USD');
 
   const steamUrl = `https://store.steampowered.com/search/?term=${encodeURIComponent(game.title_en)}`;
   const gmgUrl = `https://www.greenmangaming.com/search?query=${encodeURIComponent(game.title_en)}`;
