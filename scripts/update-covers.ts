@@ -192,40 +192,50 @@ async function identifyProblematicGames(
   const brokenCover: GameRow[] = [];
   const missingTitleKo: GameRow[] = [];
 
-  // 1단계: NULL/빈 문자열 커버 이미지 탐지 (즉시 분류)
+  // 1단계: NULL, 빈값, 혹은 기지의 플링 플레이스홀더/자체 업로드 이미지 즉시 분류
   const gamesWithCovers: GameRow[] = [];
   for (const game of games) {
-    if (!game.cover_image_url || game.cover_image_url.trim() === '') {
-      missingCover.push(game);
-    } else {
-      gamesWithCovers.push(game);
-    }
-
     // 한국어 제목 누락 여부 체크
     if (!game.title_ko || game.title_ko.trim() === '') {
       missingTitleKo.push(game);
+    }
+
+    const url = game.cover_image_url;
+    if (!url || url.trim() === '') {
+      missingCover.push(game);
+    } else if (
+      url.includes('default_cover.jpg') || 
+      url.includes('default_cover.png') || 
+      url.includes('default_cover') ||
+      url.includes('wp-content/uploads') // 플링 서버 자체 업로드 주소는 정식 스팀 커버가 아니므로 복구 대상으로 간주
+    ) {
+      console.log(`  🔍 임시/플링 업로드 커버 감지 (강제 복구 대상): [${game.title_en}] ${url}`);
+      brokenCover.push(game);
+    } else {
+      gamesWithCovers.push(game);
     }
   }
 
   console.log(`🔍 커버 이미지 NULL/빈값: ${missingCover.length}건`);
   console.log(`🔍 한국어 제목 누락: ${missingTitleKo.length}건`);
+  console.log(`🔍 임시/플링 업로드 커버 감지: ${brokenCover.length}건`);
 
-  // 2단계: 기존 커버 URL이 404인지 HEAD 요청으로 확인 (최대 50건)
+  // 2단계: 기존 커버 URL이 실제 404인지 추가 HEAD 요청 (최대 50건 샘플)
   const checkLimit = Math.min(gamesWithCovers.length, 50);
   console.log(
-    `🔎 커버 이미지 깨짐 확인 중... (최대 ${checkLimit}/${gamesWithCovers.length}건 검사)`
+    `🔎 남은 커버 중 추가 깨짐 확인... (최대 ${checkLimit}/${gamesWithCovers.length}건 검사)`
   );
 
   for (let i = 0; i < checkLimit; i++) {
     const game = gamesWithCovers[i];
     const accessible = await isUrlAccessible(game.cover_image_url!);
     if (!accessible) {
-      console.log(`  ⚠️ 깨진 커버 발견: [${game.title_en}] ${game.cover_image_url}`);
+      console.log(`  ⚠️ 실측 404 깨진 커버 발견: [${game.title_en}] ${game.cover_image_url}`);
       brokenCover.push(game);
     }
   }
 
-  console.log(`🔍 깨진 커버 이미지: ${brokenCover.length}건`);
+  console.log(`🔍 총 복구 대상 커버 이미지: ${brokenCover.length}건`);
 
   return { missingCover, brokenCover, missingTitleKo };
 }
