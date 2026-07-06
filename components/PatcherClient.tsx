@@ -190,16 +190,12 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
       </span>
     ) : null;
 
-    const targetUrl = priceInfo.dealId
-      ? `https://www.cheapshark.com/redirect?dealID=${priceInfo.dealId}`
-      : fallbackUrl;
-
     return {
       priceStr,
       originalStr,
       discountBadge,
       isBestDeal,
-      url: targetUrl,
+      url: fallbackUrl,
     };
   };
 
