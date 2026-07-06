@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
         const original = discountPercent > 0 
           ? parseFloat((current / (1 - discountPercent / 100)).toFixed(2)) 
           : current;
-        return { original, current, discountPercent };
+        return { original, current, discountPercent, dealId: null as string | null };
       };
       
       return NextResponse.json({
@@ -204,6 +204,7 @@ export async function GET(request: NextRequest) {
       original: 59.99,
       current: 59.99,
       discountPercent: 0,
+      dealId: null as string | null,
     };
     
     if (steamDeal) {
@@ -211,36 +212,40 @@ export async function GET(request: NextRequest) {
         original: parseFloat(steamDeal.retailPrice),
         current: parseFloat(steamDeal.price),
         discountPercent: Math.round(parseFloat(steamDeal.savings)),
+        dealId: steamDeal.dealID || null,
       };
     } else {
       const fallback = DEFAULT_BASE_PRICES[resolvedAppId] || { original: 59.99, current: 59.99, discountPercent: 0 };
-      steamPrice = { ...fallback };
+      steamPrice = { ...fallback, dealId: null };
     }
     
-    let gmgPrice: { original: number; current: number; discountPercent: number } | null = null;
+    let gmgPrice: { original: number; current: number; discountPercent: number; dealId: string | null } | null = null;
     if (gmgDeal) {
       gmgPrice = {
         original: parseFloat(gmgDeal.retailPrice),
         current: parseFloat(gmgDeal.price),
         discountPercent: Math.round(parseFloat(gmgDeal.savings)),
+        dealId: gmgDeal.dealID || null,
       };
     }
     
-    let humblePrice: { original: number; current: number; discountPercent: number } | null = null;
+    let humblePrice: { original: number; current: number; discountPercent: number; dealId: string | null } | null = null;
     if (humbleDeal) {
       humblePrice = {
         original: parseFloat(humbleDeal.retailPrice),
         current: parseFloat(humbleDeal.price),
         discountPercent: Math.round(parseFloat(humbleDeal.savings)),
+        dealId: humbleDeal.dealID || null,
       };
     }
     
-    let gogPrice: { original: number; current: number; discountPercent: number } | null = null;
+    let gogPrice: { original: number; current: number; discountPercent: number; dealId: string | null } | null = null;
     if (gogDeal) {
       gogPrice = {
         original: parseFloat(gogDeal.retailPrice),
         current: parseFloat(gogDeal.price),
         discountPercent: Math.round(parseFloat(gogDeal.savings)),
+        dealId: gogDeal.dealID || null,
       };
     }
     

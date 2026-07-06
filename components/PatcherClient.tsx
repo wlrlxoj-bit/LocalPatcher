@@ -51,6 +51,7 @@ interface PriceData {
   original: number;
   current: number;
   discountPercent: number;
+  dealId?: string | null;
 }
 
 interface PricesResponse {
@@ -77,7 +78,7 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
   const humbleUrl = partnerKey
     ? `https://www.humblebundle.com/store/search?sort=bestselling&search=${encodeURIComponent(game.title_en)}&partner=${partnerKey}`
     : `https://www.humblebundle.com/store/search?sort=bestselling&search=${encodeURIComponent(game.title_en)}`;
-  const gogUrl = `https://www.gog.com/games?search=${encodeURIComponent(game.title_en)}`;
+  const gogUrl = `https://www.gog.com/games?query=${encodeURIComponent(game.title_en)}`;
 
   useEffect(() => {
     let active = true;
@@ -189,12 +190,16 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
       </span>
     ) : null;
 
+    const targetUrl = priceInfo.dealId
+      ? `https://www.cheapshark.com/redirect?dealID=${priceInfo.dealId}`
+      : fallbackUrl;
+
     return {
       priceStr,
       originalStr,
       discountBadge,
       isBestDeal,
-      url: fallbackUrl,
+      url: targetUrl,
     };
   };
 
