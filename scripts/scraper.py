@@ -838,8 +838,8 @@ def main():
         print("[-] No new updates found.")
         return
         
-    # Process the most recent updates
-    for post in posts[:3]:
+    # 최근 20개의 신작/업데이트 피드를 수집하도록 범위를 대폭 확장 (4위 이하 누락 방지)
+    for post in posts[:20]:
         scrape_and_patch_trainer(post, db, force=args.force)
 
 if __name__ == "__main__":
