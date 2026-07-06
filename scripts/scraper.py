@@ -196,7 +196,7 @@ def translate_via_llm(lines_to_translate):
                 ],
                 "response_format": {"type": "json_object"}
             }
-            res = requests.post(url, headers=headers, json=payload, timeout=15)
+            res = requests.post(url, headers=headers, json=payload, timeout=60)
             if res.status_code == 200:
                 res_data = res.json()
                 text_response = res_data["choices"][0]["message"]["content"]
@@ -373,7 +373,7 @@ def translate_via_llm_ja(lines_to_translate):
                 ],
                 "response_format": {"type": "json_object"}
             }
-            res = requests.post(url, headers=headers, json=payload, timeout=15)
+            res = requests.post(url, headers=headers, json=payload, timeout=60)
             if res.status_code == 200:
                 res_data = res.json()
                 text_response = res_data["choices"][0]["message"]["content"]
