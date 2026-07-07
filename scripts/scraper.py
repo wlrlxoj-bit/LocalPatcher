@@ -728,7 +728,7 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
                     trainer_id = trainer_res.data[0]['id']
                     # Check if it has any translation mappings
                     mappings_res = db.table('translation_mappings').select('id').eq('trainer_id', trainer_id).execute()
-                    if mappings_res.data and len(mappings_res.data) > 0:
+                    if mappings_res.data and len(mappings_res.data) > 0 and not force:
                         print(f"    [*] Skip/Protect: Trainer ID {trainer_id} has existing translation mappings. Skipping overwrite.")
                         continue
 
