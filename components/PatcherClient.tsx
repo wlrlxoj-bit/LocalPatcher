@@ -329,7 +329,7 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
 export default function PatcherClient({ game, trainers, mappingsMap, locale }: PatcherClientProps) {
   const sortedTrainers = [...trainers].sort((a, b) => b.id - a.id);
   const t = getDictionary(locale);
-  const displayTitle = locale === 'ko' ? game.title_ko : game.title_en;
+  const displayTitle = locale === 'ko' ? game.title_ko : locale === 'ja' ? (game.title_ja || game.title_en) : game.title_en;
   // Set default selected trainer version
   const [selectedTrainerId, setSelectedTrainerId] = useState<number>(
     sortedTrainers.length > 0 ? sortedTrainers[0].id : 0
@@ -872,7 +872,7 @@ function TrainerUIPreview({ game, trainer, mappings, locale }: TrainerUIPreviewP
           
           <div className="z-10 py-3">
             <h4 className="text-base sm:text-lg font-bold text-white font-outfit drop-shadow-md">
-              {locale === 'ko' ? game.title_ko : game.title_en}
+              {locale === 'ko' ? game.title_ko : locale === 'ja' ? (game.title_ja || game.title_en) : game.title_en}
             </h4>
             <p className="text-slate-400 text-xs mt-1 font-mono">{trainer.version_str}</p>
             <div className="flex gap-2 mt-2">

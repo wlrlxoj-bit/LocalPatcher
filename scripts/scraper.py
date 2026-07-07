@@ -534,10 +534,11 @@ def fetch_recent_trainers():
         return []
 
 def fetch_steam_meta(game_title: str):
-    """Queries Steam Store Search and App Details APIs to fetch appid, cover art, and official Korean title."""
+    """Queries Steam Store Search and App Details APIs to fetch appid, cover art, and official Korean/Japanese titles."""
     default_meta = {
         'appid': '1091500',
         'title_ko': game_title,
+        'title_ja': game_title,
         'cover_url': '/images/default_cover.jpg'
     }
     try:
@@ -560,14 +561,24 @@ def fetch_steam_meta(game_title: str):
                     d_data = d_res.json()
                     if d_data.get(appid, {}).get("success"):
                         title_ko = d_data[appid]["data"]["name"]
-                        # Clean up formatting symbols
                         title_ko = title_ko.replace("®", "").replace("™", "").strip()
+                
+                # Step 3: Fetch Japanese details
+                details_ja_url = f"https://store.steampowered.com/api/appdetails?appids={appid}&l=japanese"
+                d_ja_res = requests.get(details_ja_url, timeout=5)
+                title_ja = title_en  # fallback
+                if d_ja_res.status_code == 200:
+                    d_ja_data = d_ja_res.json()
+                    if d_ja_data.get(appid, {}).get("success"):
+                        title_ja = d_ja_data[appid]["data"]["name"]
+                        title_ja = title_ja.replace("®", "").replace("™", "").strip()
                         
                 cover_url = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/header.jpg"
-                print(f"[+] Found Steam AppID: {appid}, Korean Name: {title_ko}")
+                print(f"[+] Found Steam AppID: {appid}, Korean: {title_ko}, Japanese: {title_ja}")
                 return {
                     'appid': appid,
                     'title_ko': title_ko,
+                    'title_ja': title_ja,
                     'cover_url': cover_url
                 }
     except Exception as e:
@@ -625,6 +636,7 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
             insert_game = db.table('games').insert({
                 'title_en': game_title_en,
                 'title_ko': steam_meta['title_ko'],
+                'title_ja': steam_meta['title_ja'],
                 'slug': post['slug'],
                 'cover_image_url': steam_meta['cover_url'],
                 'anti_cheat': 'none',

@@ -34,20 +34,21 @@ export async function generateMetadata({ params }: PatcherPageProps) {
     title = `${game.title_ko} 트레이너 한글 패치 - 100% 안전한 무설치 로컬 패처 | LocalPatcher`;
     description = `${game.title_ko} (${game.title_en}) 최신 트레이너 한글 번역 패치(${versionsStr})를 제공합니다. 서버에 파일을 올릴 필요 없이, 웹브라우저에서 3초 만에 안전하게 한글로 변환하여 사용하세요.`;
   } else if (currentLocale === 'ja') {
-    title = `${game.title_en} ${game.title_ko !== game.title_en ? `(${game.title_ko})` : ''} トレーナー日本語化パッチ - 安全なウェブ版ローカル変換 | LocalPatcher`;
-    description = `${game.title_en}の最新トレーナー用日本語化翻訳パッチ(${versionsStr})です。サーバーにファイルを一切アップロードせず、Webブラウザ内で完全にローカルで日本語化できます。`;
+    const titleJa = game.title_ja || game.title_en;
+    title = `${titleJa} トレーナー日本語化パッチ - 安全なウェブ版ローカル変換 | LocalPatcher`;
+    description = `${titleJa}の最新トレーナー用日本語化翻訳パッチ(${versionsStr})です。サーバーにファイルを一切アップロードせず、Webブラウザ内で完全にローカルで日本語化できます。`;
   } else {
     title = `${game.title_en} Trainer Translation & Localization Patch | LocalPatcher`;
     description = `Apply client-side translation and localization patches for ${game.title_en} game trainers (${versionsStr}). Safely modify original files directly in your web browser with no server uploads.`;
   }
 
-  const gameName = game.title_ko || game.title_en;
+  const gameName = currentLocale === 'ko' ? game.title_ko : currentLocale === 'ja' ? (game.title_ja || game.title_en) : game.title_en;
   const gameNameEn = game.title_en;
 
   const keywords = currentLocale === 'ko'
     ? [gameName, gameNameEn, '게임', '한글', '패치', '트레이너', '치트', '스팀', '플링', '번역', '다운로드', '무료']
     : currentLocale === 'ja'
-      ? [gameNameEn, gameName !== gameNameEn ? gameName : '', 'ゲーム', '日本語化', 'パッチ', 'トレーナー', 'チート', '無料', 'ダウンロード', '日本'].filter(Boolean)
+      ? [gameName, gameNameEn, 'ゲーム', '日本語化', 'パッチ', 'トレーナー', 'チート', '無料', 'ダウンロード', '日本'].filter(Boolean)
       : [gameNameEn, 'game', 'trainer', 'cheats', 'translation', 'patch', 'download', 'free', 'localized'];
 
   return {

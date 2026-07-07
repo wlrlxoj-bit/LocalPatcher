@@ -242,7 +242,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
                     {game.cover_image_url ? (
                       <img
                         src={game.cover_image_url}
-                        alt={locale === 'ko' ? game.title_ko : game.title_en}
+                        alt={locale === 'ko' ? game.title_ko : locale === 'ja' ? (game.title_ja || game.title_en) : game.title_en}
                         className="w-10 h-12 object-cover rounded-lg bg-slate-800 shrink-0 border border-slate-800 group-hover:border-slate-700 transition-colors"
                       />
                     ) : (
@@ -254,7 +254,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
                     {/* Title & Info */}
                     <div className="min-w-0 flex-1">
                       <h4 className="text-sm font-semibold text-slate-200 truncate group-hover:text-cyan-400 transition-colors leading-tight">
-                        {locale === 'ko' ? game.title_ko : game.title_en}
+                        {locale === 'ko' ? game.title_ko : locale === 'ja' ? (game.title_ja || game.title_en) : game.title_en}
                       </h4>
                       <p className="text-xs text-slate-500 mt-1 font-outfit">
                         {trainer.count} {t.optionsCount}
