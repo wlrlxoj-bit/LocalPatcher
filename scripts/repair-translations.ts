@@ -102,9 +102,26 @@ function adjustLineLength(translated: string, original: string): string {
 }
 
 // ─────────────────────────────────────────────
+// 실패 사례 CSV 로깅 헬퍼 함수
+// ─────────────────────────────────────────────
+function logFailureToCSV(trainerId: number, gameId: number, versionStr: string, errMsg: string): void {
+  const csvPath = path.resolve(process.cwd(), 'failed_repaired_trainers.csv');
+  const safeVersion = versionStr.replace(/"/g, '""');
+  const safeMsg = errMsg.replace(/"/g, '""').replace(/\r?\n/g, ' ');
+  const timestamp = new Date().toISOString();
+  const row = `${trainerId},${gameId},"${safeVersion}","${safeMsg}",${timestamp}\n`;
+  fs.appendFileSync(csvPath, row, 'utf-8');
+}
+
+// ─────────────────────────────────────────────
 // OpenAI API 호출 번역 로직
 // ─────────────────────────────────────────────
-async function translateViaOpenAI(linesToTranslate: string[], lang: string): Promise<string[]> {
+async function translateViaOpenAI(
+  linesToTranslate: string[], 
+  lang: string, 
+  temperature: number = 0.7, 
+  extraPrompt: string = ''
+): Promise<string[]> {
   if (!OPENAI_API_KEY) {
     throw new Error('❌ OpenAI API Key가 설정되지 않았습니다.');
   }
@@ -123,7 +140,7 @@ CRITICAL RULES:
 
 List to translate:
 ${JSON.stringify(linesToTranslate)}
-`;
+${extraPrompt}`;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -137,6 +154,7 @@ ${JSON.stringify(linesToTranslate)}
         { role: 'system', content: 'You are a helpful game localization assistant.' },
         { role: 'user', content: prompt },
       ],
+      temperature: temperature,
       response_format: { type: 'json_object' },
     }),
     signal: AbortSignal.timeout(60000), // 60초 타임아웃
@@ -159,6 +177,10 @@ async function main(): Promise<void> {
   console.log('🚀 번역 데이터 복구 스크립트 실행 시작');
   console.log(`📅 실행 시각: ${new Date().toISOString()}`);
 
+  // CSV 파일 초기화
+  const csvPath = path.resolve(process.cwd(), 'failed_repaired_trainers.csv');
+  fs.writeFileSync(csvPath, 'Trainer ID,Game ID,Version String,Error Message,Timestamp\n', 'utf-8');
+
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     console.error('❌ 에러: Supabase 환경 변수가 설정되지 않았습니다.');
     process.exit(1);
@@ -171,27 +193,37 @@ async function main(): Promise<void> {
     },
   });
 
-  // 1. 전체 trainers 조회
+  // 1. 전체 trainers 조회 (1000개 PostgREST limit 우회용 청크 루프)
   console.log('[*] trainers 테이블 조회 중...');
-  const { data: trainers, error: trainersError } = await supabase
-    .from('trainers')
-    .select('id, game_id, version_str')
-    .order('id', { ascending: true });
+  let trainers: TrainerRow[] = [];
+  let offset = 0;
+  const limit = 1000;
+  let hasMore = true;
 
-  if (trainersError || !trainers) {
-    console.error(`❌ trainers 조회 실패: ${trainersError?.message}`);
-    process.exit(1);
+  while (hasMore) {
+    const { data: chunk, error: trainersError } = await supabase
+      .from('trainers')
+      .select('id, game_id, version_str')
+      .order('id', { ascending: true })
+      .range(offset, offset + limit - 1);
+
+    if (trainersError || !chunk) {
+      console.error(`❌ trainers 조회 실패: ${trainersError?.message}`);
+      process.exit(1);
+    }
+
+    trainers = trainers.concat(chunk);
+    if (chunk.length < limit) {
+      hasMore = false;
+    } else {
+      offset += limit;
+    }
   }
   console.log(`[+] 총 ${trainers.length}개의 트레이너 버전 발견`);
 
   let repairedCount = 0;
-  const maxRepairs = 30; // 1회 실행 시 복구 한계선
 
   for (const trainer of trainers) {
-    if (repairedCount >= maxRepairs) {
-      console.log(`\n⚠️ 1회 최대 복구 제한 수(${maxRepairs}개)에 도달하여 검사를 조기 중단합니다.`);
-      break;
-    }
 
     // 2. 해당 trainer의 모든 mapping 조회
     const { data: mappings, error: mappingsError } = await supabase
@@ -240,11 +272,41 @@ async function main(): Promise<void> {
       if (jaNeedRepair) languagesToRepair.push('ja');
 
       for (const lang of languagesToRepair) {
-        console.log(`   [*] OpenAI를 통한 ${lang} 번역 수행 중...`);
-        const translatedArray = await translateViaOpenAI(originalLines, lang);
+        let translatedArray: string[] = [];
+        let success = false;
+        let attempts = 4; // 총 4번 시도 (최초 시도 1회 + 재시도 최대 3회)
+        let lastErrorMsg = '';
 
-        if (translatedArray.length !== originalLines.length) {
-          throw new Error(`번역 라인 개수 불일치 (원문: ${originalLines.length}, 번역본: ${translatedArray.length})`);
+        for (let attempt = 1; attempt <= attempts; attempt++) {
+          try {
+            if (attempt === 1) {
+              console.log(`   [*] OpenAI를 통한 ${lang} 번역 수행 중... (시도 ${attempt}/${attempts})`);
+              translatedArray = await translateViaOpenAI(originalLines, lang, 0.7, '');
+            } else {
+              console.log(`   [⚠️] ${lang} 번역 재시도 중... (시도 ${attempt}/${attempts})`);
+              const extraPrompt = `\n\nIMPORTANT: Your previous output had a mismatch in lines. The input has exactly ${originalLines.length} elements. You MUST return exactly ${originalLines.length} translation strings.`;
+              translatedArray = await translateViaOpenAI(originalLines, lang, 0.1, extraPrompt);
+            }
+
+            if (translatedArray.length !== originalLines.length) {
+              throw new Error(`번역 라인 개수 불일치 (원문: ${originalLines.length}, 번역본: ${translatedArray.length})`);
+            }
+
+            success = true;
+            break;
+          } catch (err) {
+            lastErrorMsg = (err as Error).message;
+            console.log(`   [-] ${lang} 번역 시도 ${attempt} 실패: ${lastErrorMsg}`);
+            if (attempt < attempts) {
+              await delay(1000); // 시도 사이 1초 딜레이
+            }
+          }
+        }
+
+        if (!success) {
+          console.error(`   ❌ ${lang} 모든 번역 시도 실패. 이 트레이너를 건너뜁니다. 최종 오류: ${lastErrorMsg}`);
+          logFailureToCSV(trainer.id, trainer.game_id, trainer.version_str, `${lang} translation failed: ${lastErrorMsg}`);
+          continue;
         }
 
         // 라인 길이 동기화 처리
@@ -286,11 +348,14 @@ async function main(): Promise<void> {
       await delay(1000);
 
     } catch (err) {
-      console.error(`   ❌ 복구 도중 에러 발생: ${(err as Error).message}`);
+      const errMsg = (err as Error).message;
+      console.error(`   ❌ 복구 도중 에러 발생: ${errMsg}`);
+      logFailureToCSV(trainer.id, trainer.game_id, trainer.version_str, `Exception: ${errMsg}`);
     }
   }
 
   console.log(`\n🏁 복구 완료 (복구한 트레이너 버전 수: ${repairedCount}개)`);
+  console.log(`[+] 실패 보고서가 저장되었습니다: C:/Users/wlrlx/OneDrive/Documents/.My Project/trainer-translation-site/failed_repaired_trainers.csv`);
 }
 
 main().catch((err) => {
