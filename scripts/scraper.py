@@ -823,6 +823,7 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
 def main():
     parser = argparse.ArgumentParser(description="FLiNG Trainer Scraper Pipeline")
     parser.add_argument("--force", action="store_true", help="Force re-processing and overwriting of existing trainers")
+    parser.add_argument("--url", type=str, help="Pinpoint scrape a single target FLiNG trainer URL")
     args = parser.parse_args()
     
     if not SUPABASE_URL or not SUPABASE_KEY:
@@ -845,6 +846,21 @@ def main():
     except Exception as e:
         print(f"[*] Dynamic dictionary table not found, falling back to local dictionary. Error: {e}")
         
+    if args.url:
+        print(f"[*] Pinpoint scrape target URL: {args.url}")
+        clean_url = args.url.strip().rstrip('/')
+        url_slug = clean_url.split('/')[-1]
+        game_slug = url_slug.replace("-trainer", "")
+        game_title = game_slug.replace('-', ' ').title() + " Trainer"
+        
+        post = {
+            'title': game_title,
+            'link': args.url,
+            'slug': game_slug
+        }
+        scrape_and_patch_trainer(post, db, force=args.force)
+        return
+
     posts = fetch_recent_trainers()
     if not posts:
         print("[-] No new updates found.")
@@ -853,6 +869,7 @@ def main():
     # 최근 20개의 신작/업데이트 피드를 수집하도록 범위를 대폭 확장 (4위 이하 누락 방지)
     for post in posts[:20]:
         scrape_and_patch_trainer(post, db, force=args.force)
+
 
 if __name__ == "__main__":
     main()

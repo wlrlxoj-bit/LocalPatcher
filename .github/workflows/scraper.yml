@@ -5,7 +5,11 @@ on:
     # Runs every 3 hours
     - cron: '0 */3 * * *'
   workflow_dispatch:
-    # Allows manual trigger from GitHub Actions tab
+    inputs:
+      target_url:
+        description: 'Pinpoint scrape a single target FLiNG trainer URL'
+        required: false
+        default: ''
 
 jobs:
   scrape-and-update:
@@ -33,4 +37,9 @@ jobs:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
-        python scripts/scraper.py
+        if [ -n "${{ github.event.inputs.target_url }}" ]; then
+          python scripts/scraper.py --url "${{ github.event.inputs.target_url }}"
+        else
+          python scripts/scraper.py
+        fi
+
