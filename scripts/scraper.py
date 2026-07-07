@@ -858,8 +858,9 @@ def main():
             'link': args.url,
             'slug': game_slug
         }
-        scrape_and_patch_trainer(post, db, force=args.force)
+        scrape_and_patch_trainer(post, db, force=True)
         return
+
 
     posts = fetch_recent_trainers()
     if not posts:
