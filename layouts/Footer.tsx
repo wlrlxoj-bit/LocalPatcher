@@ -32,9 +32,6 @@ export default function Footer({ locale }: FooterProps) {
           <Link href={`/${locale}/faq`} className="hover:text-slate-200 transition-colors">
             {t.faq}
           </Link>
-          <Link href={`/${locale}/support`} className="hover:text-indigo-300 transition-colors text-indigo-400/90 font-semibold">
-            {t.sponsor}
-          </Link>
         </div>
 
       </div>
