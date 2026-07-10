@@ -7,6 +7,7 @@ import zipfile
 import io
 import argparse
 import subprocess
+import time
 import requests
 from bs4 import BeautifulSoup
 import pefile
@@ -140,74 +141,144 @@ def save_new_translations_to_dictionary(original_line: str, translated_line: str
         # Silently fail if table doesn't exist or duplicate key error occurs
         pass
 
-def translate_via_llm(lines_to_translate):
-    """Sends a batch of untranslated lines to Gemini or OpenAI API in JSON mode."""
+def _build_llm_prompt(lines_to_translate, language, example_translation, extra_prompt=""):
+    """중복 원문 줄이 합쳐지지 않도록 인덱스 키 기반 프롬프트를 만든다."""
+    lines_object = {f"line_{idx}": line for idx, line in enumerate(lines_to_translate)}
+    return f"""
+You are a professional game localization expert.
+Translate the following game trainer cheat options into natural, standard {language} used by gamers.
+
+CRITICAL RULES:
+1. KEEP the exact hotkey prefix (e.g. "Num 1 -", "Ctrl+Num 1 -", "Alt+Num 1 -") unchanged.
+2. Translate only the description label and any note texts (e.g. Translate "Infinite HP" to "{example_translation}").
+3. Return strictly one JSON object. Every input key ("line_0", "line_1", etc.) must occur exactly once in the output and map to its translated string. Do not add, omit, rename, or reorder keys.
+
+Input to translate:
+{json.dumps(lines_object, ensure_ascii=False, indent=2)}
+{extra_prompt}
+"""
+
+
+def _parse_indexed_translations(text_response, expected_count):
+    """줄 위치를 보존하는 LLM 응답을 파싱하고 엄격히 검증한다."""
+    def reject_duplicate_keys(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"LLM 응답에 중복 키가 있습니다: {key}")
+            result[key] = value
+        return result
+
+    parsed = json.loads(text_response, object_pairs_hook=reject_duplicate_keys)
+    if not isinstance(parsed, dict):
+        raise ValueError("LLM 응답은 JSON 객체여야 합니다")
+
+    expected_keys = {f"line_{idx}" for idx in range(expected_count)}
+    actual_keys = set(parsed.keys())
+    if actual_keys != expected_keys:
+        missing = sorted(expected_keys - actual_keys)
+        unexpected = sorted(actual_keys - expected_keys)
+        raise ValueError(f"LLM 응답 키가 일치하지 않습니다 (누락={missing}, 추가={unexpected})")
+
+    translations = []
+    for idx in range(expected_count):
+        value = parsed[f"line_{idx}"]
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"LLM 응답의 line_{idx} 번역값이 올바르지 않습니다")
+        translations.append(value)
+    return translations
+
+
+def _call_gemini(lines_to_translate, prompt, _temperature):
+    print("[*] Gemini API에 일괄 번역을 요청합니다...")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key={GEMINI_API_KEY}"
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"responseMimeType": "application/json"}
+    }
+    res = requests.post(url, json=payload, timeout=15)
+    if res.status_code != 200:
+        raise RuntimeError(f"Gemini API가 HTTP {res.status_code}을 반환했습니다: {res.text[:500]}")
+    text_response = res.json()["candidates"][0]["content"]["parts"][0]["text"]
+    return _parse_indexed_translations(text_response, len(lines_to_translate))
+
+
+def _call_openai(lines_to_translate, prompt, temperature):
+    print("[*] OpenAI API(gpt-4.1-mini)에 일괄 번역을 요청합니다...")
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
+    payload = {
+        "model": "gpt-4.1-mini",
+        "messages": [
+            {"role": "system", "content": "You are a helpful game localization assistant."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": temperature,
+        "response_format": {"type": "json_object"}
+    }
+    res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=60)
+    if res.status_code != 200:
+        raise RuntimeError(f"OpenAI API가 HTTP {res.status_code}을 반환했습니다: {res.text[:500]}")
+    text_response = res.json()["choices"][0]["message"]["content"]
+    return _parse_indexed_translations(text_response, len(lines_to_translate))
+
+
+def _translate_via_llm_with_fallback(lines_to_translate, language, example_translation, providers):
+    """일괄 번역을 재시도하고, 실패한 줄은 위치를 보존해 개별 번역한다."""
     if not lines_to_translate:
-        return {}
+        return []
+    if not providers:
+        return list(lines_to_translate)
 
-    prompt = f"""
-    You are a professional game localization expert.
-    Translate the following list of game trainer cheat options into natural, standard Korean used by Korean gamers.
-    
-    CRITICAL RULES:
-    1. KEEP the exact hotkey prefix (e.g. "Num 1 -", "Ctrl+Num 1 -", "Alt+Num 1 -") unchanged.
-    2. Translate only the description label and any note texts (e.g. Translate "Infinite HP" to "무한 체력").
-    3. Return your output strictly as a JSON object with a single key "translations" containing an array of translated strings in the EXACT same order.
-    
-    List to translate:
-    {json.dumps(lines_to_translate, ensure_ascii=False)}
-    """
+    language_label = "한국어" if language == "Korean" else "일본어"
+    last_error = "번역 제공자가 성공적으로 응답하지 않았습니다"
+    for attempt in range(1, 5):
+        extra_prompt = "" if attempt == 1 else (
+            f"\nIMPORTANT: The previous output was invalid. Return exactly these {len(lines_to_translate)} "
+            "indexed keys with string values and no other keys."
+        )
+        prompt = _build_llm_prompt(lines_to_translate, language, example_translation, extra_prompt)
+        for provider_name, provider in providers:
+            try:
+                return provider(lines_to_translate, prompt, 0.7 if attempt == 1 else 0.1)
+            except Exception as exc:
+                last_error = str(exc)
+                print(f"[-] {provider_name} {language_label} 일괄 번역 {attempt}/4회 실패: {last_error}")
+        if attempt < 4:
+            time.sleep(1)
 
-    # 1. Try Gemini API
+    print(f"[!] {language_label} 일괄 번역에 실패해 줄 단위 폴백을 실행합니다.")
+    translated_lines = []
+    for idx, line in enumerate(lines_to_translate):
+        translated = None
+        for attempt in range(1, 4):
+            prompt = _build_llm_prompt([line], language, example_translation)
+            for provider_name, provider in providers:
+                try:
+                    translated = provider([line], prompt, 0.3)[0]
+                    break
+                except Exception as exc:
+                    last_error = str(exc)
+                    print(f"[-] {provider_name} {language_label} {idx}번 줄 번역 {attempt}/3회 실패: {last_error}")
+            if translated is not None:
+                break
+            if attempt < 3:
+                time.sleep(1)
+        if translated is None:
+            print(f"[!] {language_label} {idx}번 줄을 번역하지 못해 원문을 유지합니다.")
+            translated = line
+        translated_lines.append(translated)
+        time.sleep(0.2)
+    return translated_lines
+
+
+def translate_via_llm(lines_to_translate):
+    """모든 원문 줄의 위치를 보존하면서 한국어로 번역한다."""
+    providers = []
     if GEMINI_API_KEY:
-        try:
-            print("[*] Calling Gemini API for batch translation...")
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key={GEMINI_API_KEY}"
-            payload = {
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    "responseMimeType": "application/json"
-                }
-            }
-            res = requests.post(url, json=payload, timeout=15)
-            if res.status_code == 200:
-                res_data = res.json()
-                text_response = res_data["candidates"][0]["content"]["parts"][0]["text"]
-                translated_array = json.loads(text_response).get("translations", [])
-                if len(translated_array) == len(lines_to_translate):
-                    return dict(zip(lines_to_translate, translated_array))
-        except Exception as e:
-            print(f"[-] Gemini API translation failed: {e}")
-
-    # 2. Try OpenAI API
+        providers.append(("Gemini", _call_gemini))
     if OPENAI_API_KEY:
-        try:
-            print("[*] Calling OpenAI API (gpt-4.1-mini) for batch translation...")
-            url = "https://api.openai.com/v1/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": "gpt-4.1-mini",
-                "messages": [
-                    {"role": "system", "content": "You are a helpful localization assistant."},
-                    {"role": "user", "content": prompt}
-                ],
-                "response_format": {"type": "json_object"}
-            }
-            res = requests.post(url, headers=headers, json=payload, timeout=60)
-            if res.status_code == 200:
-                res_data = res.json()
-                text_response = res_data["choices"][0]["message"]["content"]
-                translated_array = json.loads(text_response).get("translations", [])
-                if len(translated_array) == len(lines_to_translate):
-                    return dict(zip(lines_to_translate, translated_array))
-        except Exception as e:
-            print(f"[-] OpenAI API translation failed: {e}")
-
-    # If both APIs fail or are unconfigured, return empty mapping (fallback to original English)
-    return {}
+        providers.append(("OpenAI", _call_openai))
+    return _translate_via_llm_with_fallback(lines_to_translate, "Korean", "무한 체력", providers)
 
 def translate_line(line: str):
     """Attempts dictionary translation for a single line. Returns None if it needs LLM translation."""
@@ -270,12 +341,13 @@ def process_translation_block(text: str, db: Client) -> str:
             lines_needing_llm.append(line)
 
     # Second Pass: Perform batch LLM translation if keys are set
-    llm_map = {}
+    llm_results = []
     if lines_needing_llm and (GEMINI_API_KEY or OPENAI_API_KEY):
-        llm_map = translate_via_llm(lines_needing_llm)
+        llm_results = translate_via_llm(lines_needing_llm)
 
     # Third Pass: Assemble and apply Space Padding to synchronize lengths
     translated_lines = []
+    llm_index = 0
     for idx, line in enumerate(lines):
         if not line or line.strip() == "":
             translated_lines.append(line)
@@ -286,8 +358,9 @@ def process_translation_block(text: str, db: Client) -> str:
         # Get translation from first pass or fallback to LLM / original
         trans_line = dict_results[idx]
         if trans_line is None:
-            # Check if LLM mapped it, otherwise fallback to original line
-            trans_line = llm_map.get(line, line)
+            # 인덱스 기반 결과이므로 같은 영문 줄도 서로 다른 위치로 보존한다.
+            trans_line = llm_results[llm_index] if llm_index < len(llm_results) else line
+            llm_index += 1
             # Save newly translated term to dynamic dictionary table for self-learning caching
             if trans_line != line:
                 save_new_translations_to_dictionary(line, trans_line, db)
@@ -339,8 +412,8 @@ def translate_line_ja(line: str):
     
     return None
 
-def translate_via_llm_ja(lines_to_translate):
-    """Sends a batch of untranslated lines to OpenAI API in JSON mode for Japanese."""
+def _translate_via_llm_ja_legacy(lines_to_translate):
+    """기존 일본어 일괄 번역 방식이다. 호환성 보존용이며 현재 호출하지 않는다."""
     if not lines_to_translate:
         return {}
 
@@ -359,7 +432,7 @@ def translate_via_llm_ja(lines_to_translate):
 
     if OPENAI_API_KEY:
         try:
-            print("[*] Calling OpenAI API (gpt-4.1-mini) for batch translation to Japanese...")
+            print("[*] OpenAI API(gpt-4.1-mini)에 일본어 일괄 번역을 요청합니다...")
             url = "https://api.openai.com/v1/chat/completions"
             headers = {
                 "Authorization": f"Bearer {OPENAI_API_KEY}",
@@ -385,6 +458,11 @@ def translate_via_llm_ja(lines_to_translate):
 
     return {}
 
+def translate_via_llm_ja(lines_to_translate):
+    """모든 원문 줄의 위치를 보존하면서 일본어로 번역한다."""
+    providers = [("OpenAI", _call_openai)] if OPENAI_API_KEY else []
+    return _translate_via_llm_with_fallback(lines_to_translate, "Japanese", "無限体力", providers)
+
 def process_translation_block_ja(text: str, db: Client) -> str:
     """Splits a multi-line options string, translates each line to Japanese (Dictionary + LLM Fallback), and pads with spaces."""
     lines = text.split("\n")
@@ -403,11 +481,12 @@ def process_translation_block_ja(text: str, db: Client) -> str:
             dict_results.append(None)
             lines_needing_llm.append(line)
 
-    llm_map = {}
+    llm_results = []
     if lines_needing_llm and OPENAI_API_KEY:
-        llm_map = translate_via_llm_ja(lines_needing_llm)
+        llm_results = translate_via_llm_ja(lines_needing_llm)
 
     translated_lines = []
+    llm_index = 0
     for idx, line in enumerate(lines):
         if not line or line.strip() == "":
             translated_lines.append(line)
@@ -417,7 +496,8 @@ def process_translation_block_ja(text: str, db: Client) -> str:
         
         trans_line = dict_results[idx]
         if trans_line is None:
-            trans_line = llm_map.get(line, line)
+            trans_line = llm_results[llm_index] if llm_index < len(llm_results) else line
+            llm_index += 1
 
         if len(trans_line) < orig_len:
             trans_line += " " * (orig_len - len(trans_line))
@@ -835,16 +915,26 @@ def main():
     
     # Load dynamic dictionary from Supabase
     try:
-        res = db.table('common_dictionary').select('english_term, korean_translation, translated_ja').execute()
-        if res.data:
+        dictionary_offset = 0
+        dictionary_page_size = 1000
+        while True:
+            res = (db.table('common_dictionary')
+                   .select('english_term, korean_translation, translated_ja')
+                   .range(dictionary_offset, dictionary_offset + dictionary_page_size - 1)
+                   .execute())
+            if not res.data:
+                break
             for row in res.data:
                 eng_key = row['english_term'].lower().strip()
                 db_dictionary_ko[eng_key] = row['korean_translation']
                 if row.get('translated_ja'):
                     db_dictionary_ja[eng_key] = row['translated_ja']
-            print(f"[+] Loaded {len(db_dictionary_ko)} KO and {len(db_dictionary_ja)} JA translations from database.")
+            if len(res.data) < dictionary_page_size:
+                break
+            dictionary_offset += dictionary_page_size
+        print(f"[+] DB 사전에서 한국어 {len(db_dictionary_ko)}개, 일본어 {len(db_dictionary_ja)}개를 불러왔습니다.")
     except Exception as e:
-        print(f"[*] Dynamic dictionary table not found, falling back to local dictionary. Error: {e}")
+        print(f"[*] 동적 사전 테이블을 찾지 못해 로컬 사전을 사용합니다. 오류: {e}")
         
     if args.url:
         print(f"[*] Pinpoint scrape target URL: {args.url}")
