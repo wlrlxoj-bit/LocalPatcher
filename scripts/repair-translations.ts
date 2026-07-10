@@ -6,7 +6,7 @@
  * - Supabase 데이터베이스의 `trainers` 및 `translation_mappings` 조회
  * - 한국어(ko) 또는 일본어(ja) 번역이 없거나 영어로 유출된(bad translation) 항목 탐지
  * - OpenAI API (gpt-4.1-mini)를 사용하여 높은 품질의 일본어/한국어 번역 복구
- * - 과다 사용 방지를 위해 1회 실행당 최대 30개의 트레이너 버전만 복구 처리
+ * - 과다 사용 방지를 위해 1회 실행당 최대 100개의 트레이너 버전만 복구 처리
  *
  * @requires NEXT_PUBLIC_SUPABASE_URL - Supabase URL
  * @requires SUPABASE_SERVICE_ROLE_KEY - Supabase Service Role Key (RLS 우회용)
@@ -64,6 +64,11 @@ interface MappingRow {
   max_char_len: number;
 }
 
+// ─────────────────────────────────────────────
+// 번역 라인 파싱을 위한 정규식
+// ─────────────────────────────────────────────
+const LINE_PATTERN = /^([a-zA-Z0-9\+\s\.\-\*\/↑↓←→]+)\s*-\s*([^\*]+)(.*)$/;
+
 async function delay(ms: number = 1000): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -117,9 +122,9 @@ function logFailureToCSV(trainerId: number, gameId: number, versionStr: string, 
 // OpenAI API 호출 번역 로직
 // ─────────────────────────────────────────────
 async function translateViaOpenAI(
-  linesToTranslate: string[], 
-  lang: string, 
-  temperature: number = 0.7, 
+  linesToTranslate: string[],
+  lang: string,
+  temperature: number = 0.7,
   extraPrompt: string = ''
 ): Promise<string[]> {
   if (!OPENAI_API_KEY) {
@@ -128,18 +133,23 @@ async function translateViaOpenAI(
 
   const targetLangName = lang === 'ko' ? 'Korean' : 'Japanese';
   const exampleTranslation = lang === 'ko' ? '무한 체력' : '体力無限';
-  
+
+  const linesObject: Record<string, string> = {};
+  linesToTranslate.forEach((line, idx) => {
+    linesObject[`line_${idx}`] = line;
+  });
+
   const prompt = `
 You are a professional game localization expert.
-Translate the following list of game trainer cheat options into natural, standard ${targetLangName} used by gamers.
+Translate the following game trainer cheat options into natural, standard ${targetLangName} used by gamers.
 
 CRITICAL RULES:
 1. KEEP the exact hotkey prefix (e.g. "Num 1 -", "Ctrl+Num 1 -", "Alt+Num 1 -") unchanged.
 2. Translate only the description label and any note texts (e.g. Translate "Infinite HP" to "${exampleTranslation}").
-3. Return your output strictly as a JSON object with a single key "translations" containing an array of translated strings in the EXACT same order.
+3. Return your output strictly as a JSON object where each key ("line_0", "line_1", etc.) maps to its translated value. Keep the exact same keys as the input.
 
-List to translate:
-${JSON.stringify(linesToTranslate)}
+Input to translate:
+${JSON.stringify(linesObject, null, 2)}
 ${extraPrompt}`;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -166,7 +176,23 @@ ${extraPrompt}`;
   }
 
   const data = await response.json();
-  const translations: string[] = JSON.parse(data.choices[0].message.content).translations;
+  const content = data.choices[0].message.content;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(content);
+  } catch (e) {
+    throw new Error(`OpenAI JSON 파싱 실패: ${(e as Error).message}`);
+  }
+
+  const translations: string[] = [];
+  for (let i = 0; i < linesToTranslate.length; i++) {
+    const key = `line_${i}`;
+    const val = parsed[key];
+    if (val === undefined || val === null) {
+      throw new Error(`OpenAI 응답에 누락된 번역 키가 존재합니다: ${key}`);
+    }
+    translations.push(typeof val === 'object' ? JSON.stringify(val) : String(val));
+  }
   return translations;
 }
 
@@ -192,6 +218,45 @@ async function main(): Promise<void> {
       persistSession: false,
     },
   });
+
+  // 0. common_dictionary 테이블 조회 및 캐싱
+  console.log('[*] common_dictionary 테이블 조회 및 캐싱 중...');
+  const dictCache = new Map<string, { ko?: string; ja?: string }>();
+  let dictOffset = 0;
+  const dictLimit = 1000;
+  let dictHasMore = true;
+
+  while (dictHasMore) {
+    const { data: dictChunk, error: dictError } = await supabase
+      .from('common_dictionary')
+      .select('english_term, korean_translation, translated_ja')
+      .range(dictOffset, dictOffset + dictLimit - 1);
+
+    if (dictError) {
+      console.error(`❌ common_dictionary 조회 실패: ${dictError.message}`);
+      process.exit(1);
+    }
+
+    if (dictChunk) {
+      for (const item of dictChunk) {
+        const term = (item.english_term || '').trim().toLowerCase();
+        if (term) {
+          dictCache.set(term, {
+            ko: item.korean_translation || undefined,
+            ja: item.translated_ja || undefined
+          });
+        }
+      }
+      if (dictChunk.length < dictLimit) {
+        dictHasMore = false;
+      } else {
+        dictOffset += dictLimit;
+      }
+    } else {
+      dictHasMore = false;
+    }
+  }
+  console.log(`[+] 총 ${dictCache.size}개의 사전 용어 캐싱 완료`);
 
   // 1. 전체 trainers 조회 (1000개 PostgREST limit 우회용 청크 루프)
   console.log('[*] trainers 테이블 조회 중...');
@@ -267,51 +332,159 @@ async function main(): Promise<void> {
       const originalLines = originalText.split('\n');
 
       // 복구할 언어들에 대해 개별 번역 실행
-      const languagesToRepair = [];
+      const languagesToRepair: Array<'ko' | 'ja'> = [];
       if (koNeedRepair) languagesToRepair.push('ko');
       if (jaNeedRepair) languagesToRepair.push('ja');
 
       for (const lang of languagesToRepair) {
-        let translatedArray: string[] = [];
-        let success = false;
-        let attempts = 4; // 총 4번 시도 (최초 시도 1회 + 재시도 최대 3회)
-        let lastErrorMsg = '';
+        // 로컬 번역 시도 및 API 전송 대상 수집
+        const translatedLines = new Array<string>(originalLines.length);
+        const apiIndices: number[] = [];
+        const apiLinesToTranslate: string[] = [];
 
-        for (let attempt = 1; attempt <= attempts; attempt++) {
-          try {
-            if (attempt === 1) {
-              console.log(`   [*] OpenAI를 통한 ${lang} 번역 수행 중... (시도 ${attempt}/${attempts})`);
-              translatedArray = await translateViaOpenAI(originalLines, lang, 0.7, '');
-            } else {
-              console.log(`   [⚠️] ${lang} 번역 재시도 중... (시도 ${attempt}/${attempts})`);
-              const extraPrompt = `\n\nIMPORTANT: Your previous output had a mismatch in lines. The input has exactly ${originalLines.length} elements. You MUST return exactly ${originalLines.length} translation strings.`;
-              translatedArray = await translateViaOpenAI(originalLines, lang, 0.1, extraPrompt);
-            }
+        for (let i = 0; i < originalLines.length; i++) {
+          const line = originalLines[i];
+          if (line.trim() === '') {
+            translatedLines[i] = line;
+            continue;
+          }
 
-            if (translatedArray.length !== originalLines.length) {
-              throw new Error(`번역 라인 개수 불일치 (원문: ${originalLines.length}, 번역본: ${translatedArray.length})`);
-            }
+          let localTranslation: string | null = null;
+          const match = line.match(LINE_PATTERN);
 
-            success = true;
-            break;
-          } catch (err) {
-            lastErrorMsg = (err as Error).message;
-            console.log(`   [-] ${lang} 번역 시도 ${attempt} 실패: ${lastErrorMsg}`);
-            if (attempt < attempts) {
-              await delay(1000); // 시도 사이 1초 딜레이
+          if (match) {
+            const prefix = match[1];
+            const term = match[2].trim();
+            const suffix = match[3];
+            // Suffix에 알파벳 문자(영어 단어 등)가 없다면 suffix 번역이 필요 없다고 간주하고 term만 사전 매핑 시도
+            const hasNoSignificantSuffix = !/[a-zA-Z]/.test(suffix);
+
+            if (hasNoSignificantSuffix) {
+              const termKey = term.toLowerCase();
+              const cached = dictCache.get(termKey);
+              if (cached && cached[lang]) {
+                localTranslation = prefix + ' - ' + cached[lang] + suffix;
+              }
             }
+          } else {
+            // LINE_PATTERN에 매칭되지 않는 전체 라인 번역 매핑 시도
+            const lineKey = line.trim().toLowerCase();
+            const cached = dictCache.get(lineKey);
+            if (cached && cached[lang]) {
+              const leadingWhitespace = line.match(/^\s*/)?.[0] || '';
+              const trailingWhitespace = line.match(/\s*$/)?.[0] || '';
+              localTranslation = leadingWhitespace + cached[lang] + trailingWhitespace;
+            }
+          }
+
+          if (localTranslation !== null) {
+            translatedLines[i] = localTranslation;
+          } else {
+            apiIndices.push(i);
+            apiLinesToTranslate.push(line);
           }
         }
 
+        let success = false;
+        const attempts = 4; // 총 4번 시도 (최초 시도 1회 + 재시도 최대 3회)
+        let lastErrorMsg = '';
+
+        if (apiLinesToTranslate.length > 0) {
+          for (let attempt = 1; attempt <= attempts; attempt++) {
+            try {
+              let translatedArray: string[] = [];
+              if (attempt === 1) {
+                console.log(`   [*] OpenAI를 통한 ${lang} 번역 수행 중... (시도 ${attempt}/${attempts}, 대상: ${apiLinesToTranslate.length} 라인)`);
+                translatedArray = await translateViaOpenAI(apiLinesToTranslate, lang, 0.7, '');
+              } else {
+                console.log(`   [⚠️] ${lang} 번역 재시도 중... (시도 ${attempt}/${attempts})`);
+                const extraPrompt = `\n\nIMPORTANT: Your previous output had a mismatch in lines. The input has exactly ${apiLinesToTranslate.length} elements. You MUST return exactly ${apiLinesToTranslate.length} translation strings.`;
+                translatedArray = await translateViaOpenAI(apiLinesToTranslate, lang, 0.1, extraPrompt);
+              }
+
+              if (translatedArray.length !== apiLinesToTranslate.length) {
+                throw new Error(`번역 라인 개수 불일치 (원문: ${apiLinesToTranslate.length}, 번역본: ${translatedArray.length})`);
+              }
+
+              // 번역 결과 매핑
+              for (let j = 0; j < apiLinesToTranslate.length; j++) {
+                translatedLines[apiIndices[j]] = translatedArray[j];
+              }
+
+              success = true;
+              break;
+            } catch (err) {
+              lastErrorMsg = (err as Error).message;
+              console.log(`   [-] ${lang} 번역 시도 ${attempt} 실패: ${lastErrorMsg}`);
+              if (attempt < attempts) {
+                await delay(1000); // 시도 사이 1초 딜레이
+              }
+            }
+          }
+
+          if (!success) {
+            console.log(`   [⚠️] 배치 번역 실패. 개별 라인(1대1) 번역 폴백 실행 중... (대상: ${apiLinesToTranslate.length} 라인)`);
+            try {
+              const translatedArray: string[] = [];
+              for (let j = 0; j < apiLinesToTranslate.length; j++) {
+                const line = apiLinesToTranslate[j];
+                let lineSuccess = false;
+                let lineErrorMsg = '';
+                const lineAttempts = 3;
+                for (let lineAttempt = 1; lineAttempt <= lineAttempts; lineAttempt++) {
+                  try {
+                    const result = await translateViaOpenAI([line], lang, 0.3);
+                    if (result.length > 0) {
+                      translatedArray.push(result[0]);
+                      lineSuccess = true;
+                      break;
+                    } else {
+                      throw new Error('Empty translation response');
+                    }
+                  } catch (err) {
+                    lineErrorMsg = (err as Error).message;
+                    console.log(`     [-] 라인 ${j} 번역 시도 ${lineAttempt} 실패: ${lineErrorMsg}`);
+                    if (lineAttempt < lineAttempts) {
+                      await delay(1000);
+                    }
+                  }
+                }
+                if (!lineSuccess) {
+                  console.log(`     [⚠️] 라인 ${j} 번역 최종 실패. 원본 유지: "${line}"`);
+                  translatedArray.push(line);
+                }
+                // OpenAI rate limit 대비 딜레이
+                await delay(200);
+              }
+
+              // 번역 결과 매핑
+              for (let j = 0; j < apiLinesToTranslate.length; j++) {
+                translatedLines[apiIndices[j]] = translatedArray[j];
+              }
+              success = true;
+            } catch (err) {
+              lastErrorMsg = `개별 번역 도중 예외 발생: ${(err as Error).message}`;
+            }
+          }
+        } else {
+          // 모든 라인이 로컬 사전에서 번역됨
+          console.log(`   [*] ${lang} 모든 라인이 로컬 사전에서 번역되었습니다.`);
+          success = true;
+        }
+
         if (!success) {
-          console.error(`   ❌ ${lang} 모든 번역 시도 실패. 이 트레이너를 건너뜁니다. 최종 오류: ${lastErrorMsg}`);
-          logFailureToCSV(trainer.id, trainer.game_id, trainer.version_str, `${lang} translation failed: ${lastErrorMsg}`);
-          continue;
+          console.error(`   ❌ ${lang} 모든 번역 시도 실패. 원본 라인으로 대체하여 진행합니다. 최종 오류: ${lastErrorMsg}`);
+          logFailureToCSV(trainer.id, trainer.game_id, trainer.version_str, `${lang} translation failed (fallback to original): ${lastErrorMsg}`);
+
+          // 실패한 라인에 대해 원본 텍스트로 대체
+          for (let j = 0; j < apiLinesToTranslate.length; j++) {
+            translatedLines[apiIndices[j]] = apiLinesToTranslate[j];
+          }
         }
 
         // 라인 길이 동기화 처리
         const adjustedLines = originalLines.map((origLine, idx) => {
-          return adjustLineLength(translatedArray[idx], origLine);
+          return adjustLineLength(translatedLines[idx], origLine);
         });
         const finalTranslatedText = adjustedLines.join('\n');
 
@@ -346,6 +519,11 @@ async function main(): Promise<void> {
       repairedCount++;
       // API 호출 간격 1초 딜레이
       await delay(1000);
+
+      if (repairedCount >= 100) {
+        console.log('\n[!] 과다 사용 방지를 위해 1회 실행 최대 복구 제한(100개)에 도달하여 작업을 중단합니다.');
+        break;
+      }
 
     } catch (err) {
       const errMsg = (err as Error).message;
