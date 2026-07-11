@@ -1,160 +1,52 @@
-import React from 'react';
 import Link from 'next/link';
-import { EyeOff, Cpu, Cookie, Shield, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Cookie, Cpu, EyeOff, Shield, UserRoundX } from 'lucide-react';
 import { getDictionary, Locale } from '@/lib/i18n';
 
-export default async function PrivacyPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+type Content = { title: string; subtitle: string; updated: string; notice: string; sections: Array<{ title: string; text: string; icon: typeof EyeOff }> };
+
+const content: Record<Locale, Content> = {
+  ko: {
+    title: '개인정보처리방침', subtitle: '로컬 파일 처리와 서비스 운영을 위한 최소한의 데이터 사용 안내', updated: '최종 수정일: 2026년 7월 11일',
+    notice: '이 문서는 서비스의 현재 운영 방식을 설명하기 위한 정보이며, 개별 국가·지역의 법률 자문을 대신하지 않습니다.',
+    sections: [
+      { icon: UserRoundX, title: '1. 회원정보 및 직접 식별정보 미수집', text: 'LocalPatcher는 일반 사용자의 회원가입이나 로그인을 요구하지 않으며, 이름·이메일·소셜 계정 정보와 같은 직접적인 개인 식별정보를 자체 데이터베이스에 저장하지 않습니다. 다만 서비스 이용 현황 분석과 최소한의 광고 수익을 통한 운영을 위해 Google Analytics 4 및 Google AdSense가 쿠키, 기기 정보, 접속 정보 등을 처리할 수 있습니다.' },
+      { icon: EyeOff, title: '2. 로컬 파일 처리', text: '도구에서 선택한 트레이너 실행 파일은 사용자의 브라우저 안에서 처리됩니다. LocalPatcher는 해당 파일을 자체 서버에 업로드하거나 저장하도록 설계되지 않았습니다.' },
+      { icon: Cookie, title: '3. 분석·광고 서비스', text: '무료 서비스 운영에 필요한 최소한의 광고 수익과 이용 현황 파악을 위해 Google Analytics 4(GA4), Google AdSense 및 관련 제3자 서비스를 사용할 수 있습니다. 해당 서비스는 쿠키 또는 유사 기술을 사용할 수 있으며, 각 제공자의 정책이 적용됩니다.' },
+      { icon: Cpu, title: '4. 다운로드와 외부 광고 페이지', text: '다운로드를 시작하면 운영 지원 목적으로 외부 광고 페이지가 새 탭으로 열릴 수 있습니다. 다운로드 시작과 광고 탭 열림 여부 같은 이벤트에는 이름·이메일 등 직접 식별정보를 매개변수로 보내지 않습니다. 다만 제3자 제공자는 해당 이벤트를 쿠키, 기기 정보, 접속 정보와 함께 처리할 수 있습니다. 광고 차단 여부와 관계없이 파일 다운로드는 제공됩니다.' },
+    ],
+  },
+  en: {
+    title: 'Privacy Policy', subtitle: 'How local file processing and minimal service data are handled', updated: 'Last updated: July 11, 2026',
+    notice: 'This page describes the current operation of the service and is not legal advice for any particular jurisdiction.',
+    sections: [
+      { icon: UserRoundX, title: '1. No account or direct identity data collection', text: 'LocalPatcher does not require general users to create an account or sign in, and does not store direct identifiers such as names, email addresses, or social account details in its own database. Google Analytics 4 and Google AdSense may still process cookies, device information, and connection data for service analytics and minimal advertising revenue.' },
+      { icon: EyeOff, title: '2. Local file processing', text: 'Trainer executables selected in the tool are processed in your browser. LocalPatcher is not designed to upload or store those files on its own servers.' },
+      { icon: Cookie, title: '3. Analytics and advertising', text: 'To keep this free service operating with minimal advertising revenue and to understand usage, we may use Google Analytics 4 (GA4), Google AdSense, and related third-party services. Those providers may use cookies or similar technologies under their own policies.' },
+      { icon: Cpu, title: '4. Downloads and external ad pages', text: 'Starting a download may open an external advertising page in a new tab to support operation. Event parameters for download starts and ad-tab status do not include direct identifiers such as names or email addresses. Third-party providers may still process those events together with cookies, device information, and connection data. The file download remains available when an ad blocker is detected.' },
+    ],
+  },
+  ja: {
+    title: 'プライバシーポリシー', subtitle: 'ローカルファイル処理とサービス運営に必要な最小限のデータ利用について', updated: '最終更新日：2026年7月11日',
+    notice: '本ページはサービスの現在の運用方法を説明するものであり、特定の国や地域における法的助言ではありません。',
+    sections: [
+      { icon: UserRoundX, title: '1. 会員情報および直接識別情報を収集しません', text: 'LocalPatcherは一般利用者に会員登録やログインを求めず、氏名、メールアドレス、ソーシャルアカウント情報などの直接的な個人識別情報を自社データベースに保存しません。ただし、利用状況の分析と最小限の広告収益による運営のため、Google Analytics 4およびGoogle AdSenseがCookie、端末情報、接続情報などを処理する場合があります。' },
+      { icon: EyeOff, title: '2. ローカルファイル処理', text: 'ツールで選択したトレーナー実行ファイルは、お使いのブラウザ内で処理されます。LocalPatcherは、そのファイルを自社サーバーへアップロードまたは保存するようには設計されていません。' },
+      { icon: Cookie, title: '3. 分析・広告サービス', text: '無料サービスの運営に必要な最小限の広告収益と利用状況の把握のため、Google Analytics 4（GA4）、Google AdSenseおよび関連する第三者サービスを使用する場合があります。各サービスはCookieまたは類似技術を使用する場合があり、各提供者のポリシーが適用されます。' },
+      { icon: Cpu, title: '4. ダウンロードと外部広告ページ', text: 'ダウンロードを開始すると、運営支援のため外部広告ページが新しいタブで開く場合があります。ダウンロード開始や広告タブの状態に関するイベントのパラメータには、氏名やメールアドレスなどの直接識別情報を送信しません。ただし、第三者提供者がCookie、端末情報、接続情報とともにこれらのイベントを処理する場合があります。広告ブロッカーが検出されてもファイルはダウンロードできます。' },
+    ],
+  },
+};
+
+export default async function PrivacyPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko') ? locale : 'ko';
+  const currentLocale: Locale = locale === 'en' || locale === 'ja' || locale === 'ko' ? locale : 'ko';
   const t = getDictionary(currentLocale);
+  const page = content[currentLocale];
 
-  const content = {
-    ko: {
-      title: '개인정보 처리방침',
-      subtitle: '100% 로컬 클라이언트 웹 브라우저 기반 처리 및 데이터 수집 배제 고지',
-      lastUpdated: '최종 수정일: 2026년 6월 29일',
-      sections: [
-        {
-          icon: EyeOff,
-          title: '1. 0% 데이터 수집 (Zero Data Collection)',
-          text: 'LocalPatcher는 회원 가입 및 일반 로그인 과정을 완벽히 생략하여 운영됩니다. 사용자의 이메일, 이름, 소셜 계정 정보뿐만 아니라 접속 IP 로그 등 어떠한 형태의 개인 식별 정보도 사이트 DB에 영구 수집하거나 저장하지 않습니다.',
-        },
-        {
-          icon: Cpu,
-          title: '2. 로컬 브라우저 기반 파일 연산 (Client-Side Only)',
-          text: '사용자가 드래그 앤 드롭한 오리지널 게임 트레이너 실행 파일(.exe)은 외부 데이터 서버로 절대 업로드되지 않습니다. 모든 패치 프로세스는 HTML5 FileReader 및 ArrayBuffer Web API를 적용하여 사용자의 PC 내 브라우저 샌드박스 내부 메모리에서만 로컬 가공 및 텍스트 매칭 치환이 처리됩니다.',
-        },
-        {
-          icon: Cookie,
-          title: '3. 쿠키 및 마케팅 트래커 배제 (No Cookies & Analytics)',
-          text: '본 서비스는 사용자 식별을 위한 쿠키를 생성하거나 브라우저에 저장하지 않습니다. 아울러 상용 웹 분석 스크립트(Google Analytics 등) 및 마케팅 추적용 서드파티 스크립트를 심지 않아, 사용자의 웹 서핑 행태 추적 위협으로부터 완전히 자유롭습니다.',
-        },
-      ],
-      noticeTitle: '철저한 보안 및 투명성 보장',
-      noticeText: '로컬패쳐는 웹 브라우저가 제공하는 표준 보안 환경 속에서 구동되므로, 사용자의 PC 환경을 침해하거나 외부로 시스템 데이터를 유출할 우려가 전혀 없는 무해한 정적 웹 연산 도구입니다.',
-    },
-    en: {
-      title: 'Privacy Policy',
-      subtitle: '100% local client-side processing with zero data collection',
-      lastUpdated: 'Last Updated: June 29, 2026',
-      sections: [
-        {
-          icon: EyeOff,
-          title: '1. 0% Data Collection',
-          text: 'LocalPatcher does not require user registration or logins. We collect, store, or process absolutely zero personal data (names, email addresses, social media accounts, IP logs, etc.) in our database.',
-        },
-        {
-          icon: Cpu,
-          title: '2. Local Browser-Based Processing',
-          text: 'Your uploaded game trainer executables (.exe) are never sent to any server. File analysis and options overwriting are executed 100% within your local browser memory using standardized Web APIs (FileReader, ArrayBuffer).',
-        },
-        {
-          icon: Cookie,
-          title: '3. Zero Tracking & Cookies',
-          text: 'We do not generate or store cookies on your machine. We do not integrate any advertising pixels or analytical scripts (such as Google Analytics) that could trace your online footprints.',
-        },
-      ],
-      noticeTitle: 'Security & Transparency Guaranteed',
-      noticeText: 'LocalPatcher runs in a secure sandbox provided by your browser. Because no files are uploaded and no tracking occurs, your files and identity remain completely private.',
-    },
-    ja: {
-      title: 'プライバシーポリシー',
-      subtitle: '100%ローカルクライアント処理およびデータ収集の完全排除に関する告知',
-      lastUpdated: '最終更新日: 2026年6月29日',
-      sections: [
-        {
-          icon: EyeOff,
-          title: '1. 0% データ収集 (Zero Data Collection)',
-          text: 'LocalPatcherは、会員登録やログインを必要としないサービスです。メールアドレス、名前、SNSアカウント、接続IPログなど、いかなる個人情報も当サイトのデータベースに収集・保存することはありません。',
-        },
-        {
-          icon: Cpu,
-          title: '2. ローカルブラウザによる処理 (Client-Side Only)',
-          text: 'アップロードされたゲームトレーナー実行ファイル（.exe）が外部サーバーに送信されることはありません。すべての翻訳パッチ処理は、HTML5のFileReaderやArrayBufferなどのWeb APIを使用して、ユーザーのPCのブラウザメモリ内だけで実行されます。',
-        },
-        {
-          icon: Cookie,
-          title: '3. クッキーおよび追跡の排除 (No Cookies & Analytics)',
-          text: '当サイトは、ユーザーを識別するためのクッキーを生成・使用しません。また、マーケティング用のクッキーや解析ツール（Google Analyticsなど）も一切組み込んでおらず、ウェブ上の行動追跡の脅威から完全に保護されています。',
-        },
-      ],
-      noticeTitle: '厳格なセキュリティと透明性',
-      noticeText: 'LocalPatcherはブラウザの標準的なサンドボックス環境下で動作するため、PC環境を侵害したり、システムデータを外部に送信したりすることは一切ありません。',
-    },
-  };
-
-  const localizedContent = content[currentLocale as Locale] || content.ko;
-
-  return (
-    <div className="max-w-4xl mx-auto px-6 py-12">
-      {/* Back link */}
-      <div className="mb-6">
-        <Link 
-          href={`/${currentLocale}`} 
-          className="inline-flex items-center space-x-2 text-xs font-semibold text-slate-400 hover:text-cyan-400 transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>{t.backToHome}</span>
-        </Link>
-      </div>
-
-      {/* Header */}
-      <div className="text-center mb-12">
-        <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full border border-cyan-500/20 bg-cyan-950/20 text-[11px] font-bold text-cyan-400 mb-4 tracking-wide glow-cyan">
-          <Shield className="w-3.5 h-3.5" />
-          <span>{localizedContent.title}</span>
-        </div>
-        <h1 className="font-bold text-3xl md:text-4xl tracking-tight mb-3 text-white font-outfit">
-          {localizedContent.title}
-        </h1>
-        <p className="text-slate-400 text-sm max-w-xl mx-auto leading-relaxed">
-          {localizedContent.subtitle}
-        </p>
-        <span className="inline-block mt-3 text-xs text-slate-500 font-mono">
-          {localizedContent.lastUpdated}
-        </span>
-      </div>
-
-      {/* Info card */}
-      <div className="p-6 rounded-2xl border border-cyan-500/20 bg-cyan-950/10 mb-10 flex items-start space-x-4">
-        <div className="p-2 bg-cyan-500/10 text-cyan-400 rounded-lg shrink-0">
-          <Shield className="w-6 h-6" />
-        </div>
-        <div>
-          <h3 className="text-sm font-bold text-cyan-400 uppercase tracking-wide">
-            {localizedContent.noticeTitle}
-          </h3>
-          <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-            {localizedContent.noticeText}
-          </p>
-        </div>
-      </div>
-
-      {/* Content Sections */}
-      <div className="space-y-8">
-        {localizedContent.sections.map((section, idx) => {
-          const Icon = section.icon;
-          return (
-            <div key={idx} className="p-6 md:p-8 rounded-2xl border border-slate-800/80 bg-slate-900/20 hover:border-slate-800 transition-all">
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400">
-                  <Icon className="w-5 h-5" />
-                </div>
-                <h3 className="text-base md:text-lg font-bold text-white">
-                  {section.title}
-                </h3>
-              </div>
-              <p className="text-xs md:text-sm text-slate-400 leading-relaxed pl-1">
-                {section.text}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  return <main className="max-w-4xl mx-auto px-6 py-12">
+    <Link href={`/${currentLocale}`} className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-cyan-400"><ArrowLeft className="w-3.5 h-3.5" />{t.backToHome}</Link>
+    <header className="text-center my-12"><Shield className="w-8 h-8 text-cyan-400 mx-auto mb-4" /><h1 className="font-bold text-3xl text-white">{page.title}</h1><p className="text-slate-400 text-sm mt-3">{page.subtitle}</p><p className="text-xs text-slate-500 mt-3">{page.updated}</p></header>
+    <p className="p-5 mb-8 rounded-2xl border border-cyan-500/20 bg-cyan-950/10 text-xs leading-relaxed text-slate-300">{page.notice}</p>
+    <div className="space-y-6">{page.sections.map(({ icon: Icon, title, text }) => <section key={title} className="p-6 rounded-2xl border border-slate-800 bg-slate-900/20"><Icon className="w-5 h-5 text-cyan-400 mb-3" /><h2 className="font-bold text-white">{title}</h2><p className="text-sm leading-relaxed text-slate-400 mt-3">{text}</p></section>)}</div>
+  </main>;
 }

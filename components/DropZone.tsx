@@ -1,14 +1,18 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
 import { UploadCloud, CheckCircle2, AlertTriangle, Loader2, Info, Download } from 'lucide-react';
 import { Locale, getDictionary } from '@/lib/i18n';
 import { ZipWriter, BlobWriter, BlobReader } from '@zip.js/zip.js';
 import { supabase } from '@/lib/supabase';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 interface DropZoneProps {
   locale: Locale;
   gameId: number;
+  gameSlug?: string;
+  gameTitle?: string;
   trainer: {
     id: number;
     version_str: string;
@@ -51,7 +55,7 @@ const adBlockTexts = {
   }
 };
 
-export default function DropZone({ locale, gameId, trainer, allTrainers, mappingsMap, onTrainerDetected }: DropZoneProps) {
+export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer, allTrainers, mappingsMap, onTrainerDetected }: DropZoneProps) {
   const t = getDictionary(locale);
   const adText = adBlockTexts[locale] || adBlockTexts.en;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -91,6 +95,7 @@ export default function DropZone({ locale, gameId, trainer, allTrainers, mapping
             bait.clientHeight === 0;
             
           setIsAdBlockActive(isBlocked);
+          if (isBlocked) trackAnalyticsEvent('adblock_detected', { adblock: 'detected' });
           
           if (document.body.contains(bait)) {
             document.body.removeChild(bait);
@@ -100,6 +105,7 @@ export default function DropZone({ locale, gameId, trainer, allTrainers, mapping
         console.error('AdBlock detection failed:', err);
         // Fallback to true if appending element throws an error (usually indicates strict sandboxing/adblock)
         setIsAdBlockActive(true);
+        trackAnalyticsEvent('adblock_detected', { adblock: 'detected' });
       }
     };
 
@@ -413,12 +419,31 @@ export default function DropZone({ locale, gameId, trainer, allTrainers, mapping
   };
 
   const handleDownloadClick = async () => {
+    const analyticsContext = {
+      game_id: gameId,
+      trainer_id: trainer.id,
+      locale,
+      game_slug: gameSlug || '',
+      game_title: gameTitle || '',
+      trainer_version: trainer.version_str,
+      source_page: 'patcher',
+    };
+
+    trackAnalyticsEvent('download_started', analyticsContext);
     try {
       const adUrl = process.env.NEXT_PUBLIC_AD_GATE_URL || "https://www.effectivecpmnetwork.com/idhbg4vm?key=33b748a68cf17f28c5cf24a5aabfb561";
-      const adWindow = window.open(adUrl, '_blank');
-      if (adWindow) {
-        adWindow.blur();
-        window.focus();
+      try {
+        const adWindow = window.open(adUrl, '_blank');
+        if (adWindow) {
+          trackAnalyticsEvent('ad_gate_opened', { ...analyticsContext, ad_gate: 'opened' });
+          adWindow.blur();
+          window.focus();
+        } else {
+          trackAnalyticsEvent('popup_blocked', { ...analyticsContext, ad_gate: 'blocked' });
+        }
+      } catch (popupErr) {
+        trackAnalyticsEvent('popup_blocked', { ...analyticsContext, ad_gate: 'blocked', reason: 'exception' });
+        console.warn('Ad pop-up blocked or failed.', popupErr);
       }
 
       // Increment download count in Supabase asynchronously using RPC
@@ -566,7 +591,7 @@ export default function DropZone({ locale, gameId, trainer, allTrainers, mapping
             <p className="text-[10px] text-slate-500 mt-1 font-mono">File: {fileName}</p>
             <p className="text-[10px] text-cyan-400 mt-1 font-semibold">감지된 버전: {trainer.version_str}</p>
             
-            {/* Big, beautiful download button or AdBlock warning */}
+            {/* 광고 차단 여부와 관계없이 다운로드는 항상 제공합니다. */}
             {isAdBlockActive ? (
               <div className="mt-6 border-emerald-500/20 bg-slate-900/40 p-5 rounded-2xl border text-left max-w-sm w-full space-y-4">
                 <div className="text-sm font-semibold text-emerald-400 flex items-center space-x-1.5">
@@ -583,6 +608,14 @@ export default function DropZone({ locale, gameId, trainer, allTrainers, mapping
                   >
                     {adText.primaryBtn}
                   </button>
+                  <a
+                    href={patchedFileUrl || '#'}
+                    download={patchedFileName}
+                    onClick={handleDownloadClick}
+                    className="w-full px-4 py-2.5 rounded-xl border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/10 font-bold text-xs transition-all text-center"
+                  >
+                    {adText.secondaryBtn}
+                  </a>
                 </div>
               </div>
             ) : (
@@ -602,6 +635,17 @@ export default function DropZone({ locale, gameId, trainer, allTrainers, mapping
                 </span>
               </a>
             )}
+
+            <p className="mt-3 max-w-sm text-center text-[10px] leading-relaxed text-slate-500">
+              {locale === 'ko'
+                ? '다운로드를 시작하면 서비스 운영을 위한 광고 페이지가 새 탭에서 열릴 수 있습니다. 광고 차단 여부와 관계없이 파일 다운로드는 계속됩니다. '
+                : locale === 'ja'
+                  ? 'ダウンロード開始時に、サービス運営のための広告ページが新しいタブで開く場合があります。広告ブロックの有無にかかわらず、ファイルのダウンロードは続行されます。 '
+                  : 'Starting the download may open a new tab with an advertisement that supports the service. Your file download continues whether or not an ad blocker is active. '}
+              <Link href={`/${locale}/privacy`} className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">
+                {locale === 'ko' ? '개인정보처리방침' : locale === 'ja' ? 'プライバシーポリシー' : 'Privacy Policy'}
+              </Link>
+            </p>
 
             {/* Password Notice */}
             <div className="mt-4 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-left max-w-xs w-full">

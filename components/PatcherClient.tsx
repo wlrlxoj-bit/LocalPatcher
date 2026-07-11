@@ -337,6 +337,30 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
 
   const selectedTrainer = sortedTrainers.find(t => t.id === selectedTrainerId);
 
+  const startGuide = locale === 'ko'
+    ? {
+        eyebrow: '처음이신가요?', title: '3단계로 바로 시작하세요',
+        description: '원본 트레이너를 준비한 뒤 변환기에 넣으면 한국어 패치 파일을 받을 수 있습니다.',
+        steps: ['FLiNG에서 원본 트레이너(.exe) 받기', '아래 파일 변환기에 .exe 올리기', '받은 ZIP을 압축 해제해 실행하기'],
+        fling: 'FLiNG 공식 원본 다운로드', guide: '전체 작동 가이드 보기', missingFling: '이 게임의 FLiNG 공식 링크가 아직 등록되지 않았습니다.',
+        zipNotice: 'ZIP 압축 비밀번호는 11111111입니다. 트레이너 특성상 백신이 오진할 수 있습니다.',
+      }
+    : locale === 'ja'
+      ? {
+          eyebrow: '初めてですか？', title: '3ステップですぐに始められます',
+          description: '元のトレーナーを用意して変換ツールに入れると、日本語パッチ済みファイルを受け取れます。',
+          steps: ['FLiNGから元のトレーナー（.exe）を入手', '下のファイル変換ツールに.exeをアップロード', 'ダウンロードしたZIPを展開して実行'],
+          fling: 'FLiNG公式から元ファイルを入手', guide: '詳しい操作ガイドを見る', missingFling: 'このゲームのFLiNG公式リンクはまだ登録されていません。',
+          zipNotice: 'ZIPのパスワードは11111111です。トレーナーの特性上、ウイルス対策ソフトが誤検知する場合があります。',
+        }
+      : {
+          eyebrow: 'New here?', title: 'Get started in 3 simple steps',
+          description: 'Download the original trainer, upload it to the converter, then extract and run the converted file.',
+          steps: ['Download the original trainer (.exe) from FLiNG', 'Upload the .exe to the converter below', 'Extract the downloaded ZIP and run the trainer'],
+          fling: 'Download from FLiNG Official', guide: 'View the full guide', missingFling: 'The official FLiNG link for this game has not been registered yet.',
+          zipNotice: 'ZIP password: 11111111. Antivirus software may flag trainer files incorrectly.',
+        };
+
   const partnerKey = process.env.NEXT_PUBLIC_HUMBLE_PARTNER_KEY;
   const purchaseUrl = partnerKey
     ? `https://www.humblebundle.com/store/search?search=${encodeURIComponent(game.title_en)}&partner=${partnerKey}`
@@ -616,9 +640,42 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                   </div>
                 )}
 
+                <section aria-labelledby="patcher-start-guide-title" className="rounded-2xl border border-cyan-500/35 bg-gradient-to-br from-cyan-950/35 via-slate-900/70 to-indigo-950/30 p-5 sm:p-6 shadow-[0_0_30px_rgba(6,182,212,0.12)]">
+                  <div className="grid grid-cols-1 gap-5 md:grid-cols-[3fr_2fr] md:items-center">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-400">{startGuide.eyebrow}</p>
+                      <h2 id="patcher-start-guide-title" className="mt-2 text-xl font-bold text-white font-outfit sm:text-2xl">{startGuide.title}</h2>
+                      <p className="mt-2 text-sm leading-relaxed text-slate-300">{startGuide.description}</p>
+                      <ol className="mt-5 grid gap-3">
+                        {startGuide.steps.map((step, index) => (
+                          <li key={step} className="flex items-center gap-3 text-sm text-slate-200">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-500/15 font-bold text-cyan-300">{index + 1}</span>
+                            <span>{step}</span>
+                          </li>
+                        ))}
+                      </ol>
+                      <p className="mt-4 rounded-lg border border-amber-500/20 bg-amber-950/20 px-3 py-2 text-xs leading-relaxed text-amber-300/90">{startGuide.zipNotice}</p>
+                    </div>
+                    <div className="flex w-full flex-col gap-3">
+                      {game.fling_url ? (
+                        <a href={game.fling_url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 text-center text-sm font-bold text-slate-950 transition-colors hover:bg-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950">
+                          {startGuide.fling}<ArrowRight className="h-4 w-4" aria-hidden="true" />
+                        </a>
+                      ) : (
+                        <p className="rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-center text-xs leading-relaxed text-slate-400">{startGuide.missingFling}</p>
+                      )}
+                      <Link href={`/${locale}/guides`} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-950/40 px-5 py-3 text-center text-sm font-semibold text-slate-200 transition-colors hover:border-cyan-400/60 hover:text-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950">
+                        {startGuide.guide}<ArrowRight className="h-4 w-4" aria-hidden="true" />
+                      </Link>
+                    </div>
+                  </div>
+                </section>
+
                 <DropZone 
                   locale={locale} 
                   gameId={game.id}
+                  gameSlug={game.slug}
+                  gameTitle={displayTitle}
                   trainer={selectedTrainer} 
                   allTrainers={sortedTrainers}
                   mappingsMap={mappingsMap}
@@ -626,28 +683,6 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                 />
               </>
             )}
-
-            {/* Quick instructions */}
-            <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/10 text-xs text-slate-400">
-              <h5 className="font-bold text-slate-300 uppercase tracking-wider mb-2">
-                {locale === 'ko' ? '작동 가이드 (Quick Help)' : locale === 'ja' ? '操作ガイド (Quick Help)' : 'Quick Help'}
-              </h5>
-              {locale === 'ja' ? (
-                <ul className="space-y-1.5 list-decimal list-inside leading-relaxed text-slate-400">
-                  <li>対象バージョンに適合する FLiNG のオリジナル実行ファイル(.exe)を用意します。</li>
-                  <li>用意した実行ファイルを上の点線エリア(ドロップゾーン)にドラッグ＆ドロップします。</li>
-                  <li>パッチ適用完了後、有効化されたダウンロードボタンをクリックして保存します。</li>
-                  <li>ダウンロードされた ZIP ファイルはウイルス誤検出およびダウンロード強制削除を防止するため、解凍パスワード <strong className="text-amber-400 font-mono">11111111</strong> が設定されています。解凍後に実行してください。</li>
-                </ul>
-              ) : (
-                <ul className="space-y-1.5 list-decimal list-inside leading-relaxed text-slate-400">
-                  <li>해당 버전에 맞는 FLiNG 원본 실행 파일(.exe)을 준비합니다.</li>
-                  <li>준비한 실행 파일을 위의 점선 영역(드롭존)에 드래그 앤 드롭합니다.</li>
-                  <li>해시 검증 및 패치 성공 시 활성화되는 다운로드 버튼을 눌러 저장합니다.</li>
-                  <li>다운로드된 ZIP 파일은 백신 오진 방지를 위해 비밀번호 <strong className="text-amber-400 font-mono">11111111</strong>이 걸려 있습니다. 압축 해제 후 가동하십시오.</li>
-                </ul>
-              )}
-            </div>
 
             {/* Supported Trainer Builds */}
             <div className="p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.05)]">

@@ -57,6 +57,14 @@ interface DictItem {
   korean_translation: string;
 }
 
+interface MonthlyMetrics {
+  status: 'available' | 'unavailable';
+  reason?: string;
+  monthlyActiveUsers: number | null;
+  previousMonthActiveUsers: number | null;
+  downloadStarts: number | null;
+}
+
 export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
@@ -72,6 +80,12 @@ export default function AdminDashboard() {
   });
   const [topGames, setTopGames] = useState<Game[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [monthlyMetrics, setMonthlyMetrics] = useState<MonthlyMetrics>({
+    status: 'unavailable',
+    monthlyActiveUsers: null,
+    previousMonthActiveUsers: null,
+    downloadStarts: null,
+  });
 
   // Popular Games State
   const [games, setGames] = useState<Game[]>([]);
@@ -99,12 +113,11 @@ export default function AdminDashboard() {
   const [newKorTrans, setNewKorTrans] = useState('');
   const [dictEdits, setDictEdits] = useState<Record<number, string>>({});
 
-  // Auth checking
+  // HttpOnly 세션 쿠키는 JavaScript에서 읽지 않고 보호된 API 응답으로만 확인합니다.
   useEffect(() => {
-    const isAuth = sessionStorage.getItem('admin_authenticated');
-    if (isAuth === 'true') {
-      setIsAuthenticated(true);
-    }
+    fetch('/api/admin/metrics').then((response) => {
+      if (response.ok) setIsAuthenticated(true);
+    }).catch(() => undefined);
   }, []);
 
   // Fetch stats when authenticated or tab changes
@@ -112,6 +125,7 @@ export default function AdminDashboard() {
     if (isAuthenticated) {
       if (activeTab === 'stats') {
         fetchStats();
+        fetchMonthlyMetrics();
       } else if (activeTab === 'popular') {
         fetchGamesForPopular();
       } else if (activeTab === 'translations') {
@@ -134,7 +148,6 @@ export default function AdminDashboard() {
       });
       const data = await res.json();
       if (data.success) {
-        sessionStorage.setItem('admin_authenticated', 'true');
         setIsAuthenticated(true);
       } else {
         setLoginError('Invalid administrator password.');
@@ -146,10 +159,25 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('admin_authenticated');
+  const handleLogout = async () => {
+    await fetch('/api/admin/verify', { method: 'DELETE' }).catch(() => undefined);
     setIsAuthenticated(false);
     setPassword('');
+  };
+
+  const fetchMonthlyMetrics = async () => {
+    try {
+      const response = await fetch('/api/admin/metrics');
+      if (response.status === 401) {
+        setIsAuthenticated(false);
+        return;
+      }
+      if (!response.ok) return;
+      const data = await response.json() as MonthlyMetrics;
+      setMonthlyMetrics(data);
+    } catch (err) {
+      console.error('월간 GA4 지표를 불러오지 못했습니다.', err);
+    }
   };
 
   // Stats Logic
@@ -507,6 +535,25 @@ export default function AdminDashboard() {
             <div className="py-20 text-center text-slate-500 text-xs">Loading analytics data...</div>
           ) : (
             <>
+              <section className="rounded-2xl border border-cyan-500/20 bg-cyan-950/10 p-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-cyan-300">월간 방문 성장 목표</h3>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-400">1차 Humble 체크포인트 10,000명, 장기 성장 목표 100,000명. GA4 활성 사용자는 내부 참고 지표이며 파트너가 정의하는 UMV와 다를 수 있습니다.</p>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-[10px] font-bold ${monthlyMetrics.status === 'available' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
+                    {monthlyMetrics.status === 'available' ? 'GA4 연결됨' : 'GA4 연결 필요'}
+                  </span>
+                </div>
+                {monthlyMetrics.status === 'available' && monthlyMetrics.monthlyActiveUsers !== null ? (() => {
+                  const humbleProgress = Math.min(100, (monthlyMetrics.monthlyActiveUsers / 10000) * 100);
+                  const growthProgress = Math.min(100, (monthlyMetrics.monthlyActiveUsers / 100000) * 100);
+                  const change = monthlyMetrics.previousMonthActiveUsers && monthlyMetrics.previousMonthActiveUsers > 0
+                    ? ((monthlyMetrics.monthlyActiveUsers - monthlyMetrics.previousMonthActiveUsers) / monthlyMetrics.previousMonthActiveUsers) * 100
+                    : null;
+                  return <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-4"><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">최근 30일 활성 사용자</p><p className="mt-1 text-3xl font-extrabold text-white">{monthlyMetrics.monthlyActiveUsers.toLocaleString()}</p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">10k Humble 체크</p><p className="mt-1 text-3xl font-extrabold text-cyan-400">{humbleProgress.toFixed(1)}%</p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">100k 성장 목표</p><p className="mt-1 text-3xl font-extrabold text-emerald-400">{growthProgress.toFixed(1)}%</p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">이전 30일 대비 / 다운로드 시작</p><p className="mt-1 text-lg font-bold text-slate-200">{change === null ? '비교 데이터 없음' : `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`} <span className="text-xs font-normal text-slate-500">/ {monthlyMetrics.downloadStarts?.toLocaleString() ?? '—'}</span></p></div><div className="sm:col-span-2 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-indigo-400" style={{ width: `${humbleProgress}%` }} /></div><div className="sm:col-span-2 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400" style={{ width: `${growthProgress}%` }} /></div></div>;
+                })() : <p className="mt-5 text-xs leading-relaxed text-slate-400">{monthlyMetrics.reason || 'GA4 속성 ID와 서버 전용 서비스 계정 설정 후 월간 활성 사용자, 전월 대비, 다운로드 시작 수가 표시됩니다. 이 값은 내부 참고 지표이며 파트너가 정의하는 UMV와 다를 수 있습니다.'}</p>}
+              </section>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/20 flex flex-col justify-between">
                   <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Supported Games</div>
