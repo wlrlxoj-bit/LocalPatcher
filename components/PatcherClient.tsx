@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ArrowRight, AlertTriangle, Share2 } from 'lucide-react';
 import { Locale, getDictionary } from '@/lib/i18n';
 import DropZone from '@/components/DropZone';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 interface Game {
   id: number;
@@ -45,6 +46,7 @@ interface PartnerStoreWidgetProps {
   game: Game;
   locale: Locale;
   t: any;
+  trainerId?: number;
 }
 
 interface PriceData {
@@ -65,10 +67,12 @@ interface PricesResponse {
   };
 }
 
-function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
+function PartnerStoreWidget({ game, locale, t, trainerId }: PartnerStoreWidgetProps) {
   const [prices, setPrices] = useState<PricesResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [currency, setCurrency] = useState<string>('USD');
+  const widgetRef = useRef<HTMLDivElement>(null);
+  const viewTrackedRef = useRef(false);
 
   const steamUrl = `https://store.steampowered.com/search/?term=${encodeURIComponent(game.title_en)}`;
   const gmgUrl = `https://www.greenmangaming.com/search?query=${encodeURIComponent(game.title_en)}`;
@@ -104,6 +108,46 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
       active = false;
     };
   }, [game.title_en, game.cover_image_url]);
+
+  const hasRenderableOffer = Boolean(partnerKey) || Boolean(prices && Object.values(prices.stores).some(
+    (store) => store !== null && Number.isFinite(store.current)
+  ));
+
+  useEffect(() => {
+    const element = widgetRef.current;
+    if (loading || !hasRenderableOffer || !element || viewTrackedRef.current || typeof IntersectionObserver === 'undefined') return;
+
+    let visibleTimer: ReturnType<typeof setTimeout> | null = null;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+        if (!visibleTimer) {
+          visibleTimer = setTimeout(() => {
+            if (!viewTrackedRef.current) {
+              viewTrackedRef.current = true;
+              trackAnalyticsEvent('price_compare_viewed', {
+                game_id: game.id,
+                game_slug: game.slug,
+                locale,
+                trainer_id: trainerId || 0,
+                placement: 'below_supported_builds',
+                source_page: 'patcher',
+              });
+              observer.disconnect();
+            }
+          }, 1000);
+        }
+      } else if (visibleTimer) {
+        clearTimeout(visibleTimer);
+        visibleTimer = null;
+      }
+    }, { threshold: [0.5] });
+
+    observer.observe(element);
+    return () => {
+      if (visibleTimer) clearTimeout(visibleTimer);
+      observer.disconnect();
+    };
+  }, [game.id, game.slug, hasRenderableOffer, loading, locale, trainerId]);
 
   const formatPrice = (valueInUSD: number, targetCurrency: string, rates: Record<string, number>) => {
     const rate = rates[targetCurrency] || 1.0;
@@ -205,8 +249,8 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
       badge: <span className="text-xs text-slate-500 mt-1 block">{t.steamBadge}</span>,
       normalBorder: 'border-slate-800/80 bg-slate-900/25 hover:bg-slate-900/40 hover:border-slate-700',
       normalBtn: 'text-slate-300 hover:text-white border-slate-700 hover:border-slate-600 bg-slate-950/20 hover:bg-slate-950/40',
-      neonBorder: 'border-cyan-500/50 bg-slate-900/30 shadow-[0_0_15px_rgba(6,182,212,0.3)]',
-      neonBtn: 'text-cyan-400 hover:text-cyan-300 border-cyan-500 hover:border-cyan-400 bg-cyan-950/40 hover:bg-cyan-950/60 shadow-[0_0_10px_rgba(6,182,212,0.3)]',
+      neonBorder: 'border-slate-700 bg-slate-900/35',
+      neonBtn: 'text-cyan-300 border-cyan-500/30 bg-cyan-950/20 hover:bg-cyan-950/35',
     },
     {
       key: 'gmg' as const,
@@ -215,8 +259,8 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
       badge: <span className="text-xs text-cyan-400 font-medium mt-1 block">{t.gmgBadge}</span>,
       normalBorder: 'border-slate-800/80 bg-slate-900/25 hover:bg-slate-900/40 hover:border-slate-700',
       normalBtn: 'text-emerald-400 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40 bg-emerald-950/20 hover:bg-emerald-950/40',
-      neonBorder: 'border-emerald-500 bg-slate-900/30 shadow-[0_0_20px_rgba(16,185,129,0.4)]',
-      neonBtn: 'text-emerald-450 hover:text-emerald-350 border-emerald-500 hover:border-emerald-400 bg-emerald-950/40 hover:bg-emerald-950/60 shadow-[0_0_10px_rgba(16,185,129,0.3)]',
+      neonBorder: 'border-slate-700 bg-slate-900/35',
+      neonBtn: 'text-emerald-300 border-emerald-500/30 bg-emerald-950/20 hover:bg-emerald-950/35',
     },
     {
       key: 'humble' as const,
@@ -225,8 +269,8 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
       badge: <span className="text-xs text-emerald-400 font-medium mt-1 block">{t.humbleBadge}</span>,
       normalBorder: 'border-slate-800/80 bg-slate-900/25 hover:bg-slate-900/40 hover:border-slate-700',
       normalBtn: 'text-cyan-400 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40 bg-cyan-950/20 hover:bg-cyan-950/40',
-      neonBorder: 'border-cyan-500 bg-slate-900/30 shadow-[0_0_20px_rgba(6,182,212,0.4)]',
-      neonBtn: 'text-cyan-400 hover:text-cyan-300 border-cyan-500 hover:border-cyan-400 bg-cyan-950/40 hover:bg-cyan-950/60 shadow-[0_0_10px_rgba(6,182,212,0.3)]',
+      neonBorder: 'border-slate-700 bg-slate-900/35',
+      neonBtn: 'text-cyan-300 border-cyan-500/30 bg-cyan-950/20 hover:bg-cyan-950/35',
     },
     {
       key: 'gog' as const,
@@ -235,21 +279,43 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
       badge: <span className="text-xs text-purple-400 font-medium mt-1 block">{t.gogBadge}</span>,
       normalBorder: 'border-slate-800/80 bg-slate-900/25 hover:bg-slate-900/40 hover:border-slate-700',
       normalBtn: 'text-purple-400 hover:text-purple-300 border-purple-500/20 hover:border-purple-500/40 bg-purple-950/20 hover:bg-purple-950/40',
-      neonBorder: 'border-purple-500 bg-slate-900/30 shadow-[0_0_20px_rgba(168,85,247,0.4)]',
-      neonBtn: 'text-purple-400 hover:text-purple-300 border-purple-500 hover:border-purple-400 bg-purple-950/40 hover:bg-purple-950/60 shadow-[0_0_10px_rgba(168,85,247,0.3)]',
+      neonBorder: 'border-slate-700 bg-slate-900/35',
+      neonBtn: 'text-purple-300 border-purple-500/30 bg-purple-950/20 hover:bg-purple-950/35',
     }
   ];
 
   const filteredStoresList = storesList;
 
+  if (loading || !hasRenderableOffer) return null;
+
+  const trackMerchantClick = (merchant: 'steam' | 'gmg' | 'humble' | 'gog') => {
+    const affiliate = merchant === 'humble' && Boolean(partnerKey);
+    const parameters = {
+      game_id: game.id,
+      game_slug: game.slug,
+      locale,
+      trainer_id: trainerId || 0,
+      merchant,
+      affiliate,
+      placement: 'below_supported_builds',
+      source_page: 'patcher',
+    };
+    trackAnalyticsEvent('merchant_clicked', parameters);
+    if (affiliate) trackAnalyticsEvent('affiliate_merchant_clicked', parameters);
+  };
+
   return (
-    <div className="relative rounded-2xl border border-cyan-500/20 bg-slate-950/60 p-6 overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.1)] flex flex-col gap-4">
-      <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-purple-500/5 to-transparent pointer-events-none"></div>
+    <div ref={widgetRef} className="relative mt-8 rounded-2xl border border-slate-800 bg-slate-950/40 p-5 sm:p-6 overflow-hidden flex flex-col gap-4">
       
       <div className="z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-left">
-        <h3 className="text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-400 font-outfit">
-          {locale === 'ko' ? '실시간 패키지 구매 가격 비교' : locale === 'ja' ? 'リアルタイム価格比較' : 'Real-time Price Comparison'}
-        </h3>
+        <div>
+          <h3 className="text-base font-bold text-slate-200 font-outfit">
+            {locale === 'ko' ? '게임 판매처 가격 확인' : locale === 'ja' ? 'ゲーム販売ストアの価格を確認' : 'Check game store prices'}
+          </h3>
+          <p className="mt-1 max-w-xl text-xs leading-relaxed text-slate-500">
+            {locale === 'ko' ? '패치 작업과 별개인 외부 판매처 정보입니다. 일부 링크는 사이트 운영에 도움이 되는 제휴 링크일 수 있습니다.' : locale === 'ja' ? 'パッチ機能とは別の外部ストア情報です。一部のリンクはサイト運営を支援するアフィリエイトリンクの場合があります。' : 'These external store links are separate from the patcher. Some may be affiliate links that help support the site.'}
+          </p>
+        </div>
         
         {/* Currency Selector */}
         <div className="flex bg-slate-900/80 border border-slate-800 rounded-lg p-0.5 text-xs font-mono">
@@ -301,7 +367,7 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
                       {store.originalStr}
                     </span>
                   )}
-                  <span className={`text-sm font-bold ${store.isBestDeal ? 'text-emerald-400 drop-shadow-[0_0_6px_rgba(16,185,129,0.4)]' : 'text-slate-300'}`}>
+                  <span className={`text-sm font-bold ${store.isBestDeal ? 'text-emerald-300' : 'text-slate-300'}`}>
                     {store.priceStr}
                   </span>
                 </div>
@@ -309,6 +375,8 @@ function PartnerStoreWidget({ game, locale, t }: PartnerStoreWidgetProps) {
                   href={store.url}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => trackMerchantClick(store.key)}
+                  aria-label={`${store.name} - ${store.priceStr}`}
                   className={`inline-flex items-center justify-center px-4 py-2 rounded-lg border text-xs font-bold transition-all duration-200 shrink-0 w-full sm:w-auto ${btnStyle}`}
                 >
                   {store.key === 'steam' ? (t.goToSteam || 'Go to Steam ↗') : (t.viewDeal || 'View Deal')}
@@ -334,8 +402,46 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
   const [selectedTrainerId, setSelectedTrainerId] = useState<number>(
     sortedTrainers.length > 0 ? sortedTrainers[0].id : 0
   );
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const patcherViewTrackedRef = useRef(false);
+  const patcherSectionRef = useRef<HTMLDivElement>(null);
 
   const selectedTrainer = sortedTrainers.find(t => t.id === selectedTrainerId);
+
+  useEffect(() => {
+    const element = patcherSectionRef.current;
+    if (!element || patcherViewTrackedRef.current || typeof IntersectionObserver === 'undefined') return;
+
+    let visibleTimer: ReturnType<typeof setTimeout> | null = null;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && entry.intersectionRatio >= 1) {
+        if (!visibleTimer) {
+          visibleTimer = setTimeout(() => {
+            if (!patcherViewTrackedRef.current) {
+              patcherViewTrackedRef.current = true;
+              trackAnalyticsEvent('patcher_viewed', {
+                game_id: game.id,
+                game_slug: game.slug,
+                locale,
+                trainer_id: selectedTrainerId,
+                source_page: 'patcher',
+              });
+              observer.disconnect();
+            }
+          }, 1000);
+        }
+      } else if (visibleTimer) {
+        clearTimeout(visibleTimer);
+        visibleTimer = null;
+      }
+    }, { threshold: [1] });
+
+    observer.observe(element);
+    return () => {
+      if (visibleTimer) clearTimeout(visibleTimer);
+      observer.disconnect();
+    };
+  }, [game.id, game.slug, locale, selectedTrainerId]);
 
   const startGuide = locale === 'ko'
     ? {
@@ -433,11 +539,6 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
           </div>
         </div>
 
-        {/* Triple Store Widget */}
-        <div className="mb-6">
-          <PartnerStoreWidget game={game} locale={locale} t={t} />
-        </div>
-
         {/* Secondary Clean Card for original FLiNG download */}
         <div className="relative rounded-xl border border-slate-800 bg-slate-900/30 p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 mb-8 shadow-md">
           <div className="flex flex-col text-center md:text-left gap-1">
@@ -504,6 +605,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
             </table>
           </div>
         </div>
+        <PartnerStoreWidget game={game} locale={locale} t={t} trainerId={selectedTrainerId} />
       </div>
     );
   }
@@ -576,21 +678,6 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
           </button>
         </div>
       </div>
-
-      {/* Triple Store Widget */}
-      <div className="mb-6">
-        <PartnerStoreWidget game={game} locale={locale} t={t} />
-      </div>
-
-      {/* Trainer UI Preview — right below title */}
-      {selectedTrainer && (
-        <TrainerUIPreview 
-          game={game}
-          trainer={selectedTrainer}
-          mappings={mappingsMap[selectedTrainer.id] || []}
-          locale={locale}
-        />
-      )}
 
       {/* Main Patcher Area */}
       {selectedTrainer ? (() => {
@@ -671,6 +758,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                   </div>
                 </section>
 
+                <div ref={patcherSectionRef} className="h-px w-full" aria-hidden="true" />
                 <DropZone 
                   locale={locale} 
                   gameId={game.id}
@@ -729,6 +817,46 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                 </table>
               </div>
             </div>
+
+            <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-5" aria-labelledby="trainer-preview-heading">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 id="trainer-preview-heading" className="text-sm font-bold text-slate-200">
+                    {locale === 'ko' ? '번역 옵션 미리보기' : locale === 'ja' ? '翻訳オプションのプレビュー' : 'Translation option preview'}
+                  </h2>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                    {locale === 'ko'
+                      ? `지원 옵션 ${selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length}개를 변환 전에 확인할 수 있습니다.`
+                      : locale === 'ja'
+                        ? `対応する${selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length}個のオプションを変換前に確認できます。`
+                        : `Review ${selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length} supported options before converting.`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPreviewOpen((open) => !open)}
+                  aria-expanded={isPreviewOpen}
+                  aria-controls="trainer-ui-preview"
+                  className="min-h-10 shrink-0 rounded-lg border border-slate-700 bg-slate-950/40 px-4 py-2 text-xs font-semibold text-slate-300 transition-colors hover:border-cyan-500/40 hover:text-cyan-300"
+                >
+                  {isPreviewOpen
+                    ? (locale === 'ko' ? '미리보기 접기' : locale === 'ja' ? 'プレビューを閉じる' : 'Hide preview')
+                    : (locale === 'ko' ? '전체 미리보기 펼치기' : locale === 'ja' ? '全体プレビューを開く' : 'Show full preview')}
+                </button>
+              </div>
+              {isPreviewOpen && (
+                <div id="trainer-ui-preview">
+                  <TrainerUIPreview
+                    game={game}
+                    trainer={selectedTrainer}
+                    mappings={mappingsMap[selectedTrainer.id] || []}
+                    locale={locale}
+                  />
+                </div>
+              )}
+            </section>
+
+            <PartnerStoreWidget game={game} locale={locale} t={t} trainerId={selectedTrainerId} />
 
           </div>
         );

@@ -55,6 +55,78 @@ type ReportBody = {
   };
 };
 
+const PRICE_EVENTS = ['price_compare_viewed', 'merchant_clicked', 'affiliate_merchant_clicked', 'patcher_viewed', 'file_selected', 'patch_completed'] as const;
+
+type PriceEventName = typeof PRICE_EVENTS[number];
+
+type PriceEventCounts = Record<PriceEventName, number>;
+
+/** 여러 가격 비교 퍼널 이벤트를 한 번의 GA4 요청으로 조회합니다. */
+async function runEventReport(propertyId: string, accessToken: string, startDate: string, endDate: string) {
+  const response = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${encodeURIComponent(propertyId)}:runReport`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      dateRanges: [{ startDate, endDate }],
+      dimensions: [{ name: 'eventName' }],
+      metrics: [{ name: 'eventCount' }],
+      dimensionFilter: {
+        filter: {
+          fieldName: 'eventName',
+          inListFilter: { values: PRICE_EVENTS },
+        },
+      },
+      limit: '10',
+    }),
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new Error(`GA4 event report request failed: ${response.status}`);
+
+  const data = await response.json() as {
+    rows?: Array<{
+      dimensionValues?: Array<{ value?: string }>;
+      metricValues?: Array<{ value?: string }>;
+    }>;
+  };
+  const counts: PriceEventCounts = {
+    price_compare_viewed: 0,
+    merchant_clicked: 0,
+    affiliate_merchant_clicked: 0,
+    patcher_viewed: 0,
+    file_selected: 0,
+    patch_completed: 0,
+  };
+  for (const row of data.rows ?? []) {
+    const eventName = row.dimensionValues?.[0]?.value as PriceEventName | undefined;
+    const value = Number(row.metricValues?.[0]?.value ?? 0);
+    if (eventName && eventName in counts && Number.isFinite(value)) counts[eventName] = value;
+  }
+  return counts;
+}
+
+function percentage(numerator: number, denominator: number) {
+  return denominator > 0 ? (numerator / denominator) * 100 : null;
+}
+
+function relativeDecline(current: number | null, previous: number | null) {
+  return current !== null && previous !== null && previous > 0
+    ? ((previous - current) / previous) * 100
+    : null;
+}
+
+function addUtcDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function formatDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
 /** GA4 보고서가 반환한 첫 번째 합계 값을 안전한 숫자로 변환합니다. */
 async function runReport(propertyId: string, accessToken: string, body: ReportBody) {
   const response = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${encodeURIComponent(propertyId)}:runReport`, {
@@ -88,6 +160,7 @@ export async function GET(request: Request) {
   const propertyId = process.env.GA4_PROPERTY_ID?.trim();
   const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
   const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n').trim();
+  const measurementStartDate = process.env.PRICE_COMPARE_MEASUREMENT_START_DATE?.trim();
 
   if (!propertyId || !serviceAccountEmail || !privateKey) {
     return NextResponse.json({
@@ -96,6 +169,7 @@ export async function GET(request: Request) {
       monthlyActiveUsers: null,
       previousMonthActiveUsers: null,
       downloadStarts: null,
+      pricePlacement: null,
     });
   }
 
@@ -103,7 +177,19 @@ export async function GET(request: Request) {
     const accessToken = await getAccessToken(serviceAccountEmail, privateKey);
     const activeUsersMetric = [{ name: 'activeUsers' }];
     const eventCountMetric = [{ name: 'eventCount' }];
-    const [monthlyActiveUsers, previousMonthActiveUsers, downloadStarts] = await Promise.all([
+    const today = new Date();
+    const todayDate = formatDate(today);
+    const parsedStartDate = measurementStartDate && /^\d{4}-\d{2}-\d{2}$/.test(measurementStartDate)
+      ? new Date(`${measurementStartDate}T00:00:00Z`)
+      : null;
+    const validStartDate = parsedStartDate
+      && !Number.isNaN(parsedStartDate.getTime())
+      && formatDate(parsedStartDate) === measurementStartDate
+      && parsedStartDate.getTime() <= today.getTime()
+      ? parsedStartDate
+      : null;
+
+    const [monthlyActiveUsers, previousMonthActiveUsers, downloadStarts, recentPriceEvents, previousPriceEvents, cumulativePriceEvents] = await Promise.all([
       runReport(propertyId, accessToken, {
         dateRanges: [{ startDate: '29daysAgo', endDate: 'today' }],
         metrics: activeUsersMetric,
@@ -122,13 +208,87 @@ export async function GET(request: Request) {
           },
         },
       }),
+      runEventReport(propertyId, accessToken, '27daysAgo', 'today'),
+      runEventReport(propertyId, accessToken, '55daysAgo', '28daysAgo'),
+      validStartDate
+        ? runEventReport(propertyId, accessToken, measurementStartDate!, todayDate)
+        : Promise.resolve(null),
     ]);
+
+    let pricePlacement = null;
+    if (validStartDate && cumulativePriceEvents) {
+      const daysCollected = Math.max(1, Math.floor((today.getTime() - validStartDate.getTime()) / 86_400_000) + 1);
+      const recentViews = recentPriceEvents.price_compare_viewed;
+      const recentClicks = recentPriceEvents.affiliate_merchant_clicked;
+      const clickThroughRate = percentage(recentClicks, recentViews);
+      const selectionRate = percentage(recentPriceEvents.file_selected, recentPriceEvents.patcher_viewed);
+      const previousSelectionRate = percentage(previousPriceEvents.file_selected, previousPriceEvents.patcher_viewed);
+      const completionRate = percentage(recentPriceEvents.patch_completed, recentPriceEvents.file_selected);
+      const previousCompletionRate = percentage(previousPriceEvents.patch_completed, previousPriceEvents.file_selected);
+      const selectionDecline = relativeDecline(selectionRate, previousSelectionRate);
+      const completionDecline = relativeDecline(completionRate, previousCompletionRate);
+      const funnelComparisonAvailable = daysCollected >= 56
+        && previousPriceEvents.patcher_viewed > 0
+        && previousPriceEvents.file_selected > 0;
+      const enoughData = daysCollected >= 28 && cumulativePriceEvents.price_compare_viewed >= 500;
+      const funnelDeclined = funnelComparisonAvailable
+        && ((selectionDecline ?? 0) >= 10 || (completionDecline ?? 0) >= 10);
+
+      let status: 'collecting' | 'keep_bottom' | 'consider_raise' = 'collecting';
+      let reason = '최소 28일과 누적 노출 500회를 충족할 때까지 하단에서 데이터를 수집합니다.';
+      if (enoughData) {
+        if (clickThroughRate === null || clickThroughRate < 1) {
+          status = 'keep_bottom';
+          reason = '제휴 클릭률이 1% 미만이므로 하단을 유지하고, 계속 낮으면 영역 숨김을 검토하세요.';
+        } else if (clickThroughRate < 3) {
+          status = 'keep_bottom';
+          reason = '제휴 클릭률이 1~3% 구간이므로 가격 비교는 하단에 유지하는 것이 좋습니다.';
+        } else if (funnelDeclined) {
+          status = 'keep_bottom';
+          reason = '가격 비교 관심은 있지만 파일 선택 또는 패치 완료율이 이전 기간보다 10% 이상 하락해 하단 유지가 안전합니다.';
+        } else {
+          status = 'consider_raise';
+          reason = clickThroughRate >= 5
+            ? '제휴 클릭률이 5% 이상이고 핵심 퍼널의 뚜렷한 하락이 없어 강한 위치 상승 후보입니다. 실제 수익은 제휴사 자료에서 별도로 확인해야 하며 자동 이동되지는 않습니다.'
+            : '제휴 클릭률이 3% 이상이고 핵심 퍼널의 뚜렷한 하락이 없어 한 단계 위 배치를 검토할 수 있습니다. 자동 이동되지는 않습니다.';
+        }
+      }
+
+      const minimumReviewDate = addUtcDays(validStartDate, 27);
+      pricePlacement = {
+        status,
+        measurementStartDate,
+        daysCollected,
+        minDays: 28,
+        cumulativeViews: cumulativePriceEvents.price_compare_viewed,
+        minViews: 500,
+        recentViews,
+        recentClicks,
+        affiliateClicks: recentPriceEvents.affiliate_merchant_clicked,
+        allMerchantClicks: recentPriceEvents.merchant_clicked,
+        recentPatcherViews: recentPriceEvents.patcher_viewed,
+        previousPatcherViews: previousPriceEvents.patcher_viewed,
+        clickThroughRate,
+        fileSelected: recentPriceEvents.file_selected,
+        previousFileSelected: previousPriceEvents.file_selected,
+        patchCompleted: recentPriceEvents.patch_completed,
+        previousPatchCompleted: previousPriceEvents.patch_completed,
+        selectionRate,
+        previousSelectionRate,
+        completionRate,
+        previousCompletionRate,
+        funnelComparisonAvailable,
+        reason,
+        nextReviewDate: daysCollected < 28 ? formatDate(minimumReviewDate) : null,
+      };
+    }
 
     return NextResponse.json({
       status: 'available',
       monthlyActiveUsers,
       previousMonthActiveUsers,
       downloadStarts,
+      pricePlacement,
     });
   } catch (error) {
     console.error('관리자용 GA4 통계를 조회하지 못했습니다.', error instanceof Error ? error.message : 'unknown error');
@@ -138,6 +298,7 @@ export async function GET(request: Request) {
       monthlyActiveUsers: null,
       previousMonthActiveUsers: null,
       downloadStarts: null,
+      pricePlacement: null,
     });
   }
 }

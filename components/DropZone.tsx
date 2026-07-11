@@ -69,6 +69,18 @@ export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer,
   const [patchedFileUrl, setPatchedFileUrl] = useState<string | null>(null);
   const [patchedFileName, setPatchedFileName] = useState('');
   const [isAdBlockActive, setIsAdBlockActive] = useState(false);
+  const fileSelectedTrackedRef = useRef(false);
+  const patchCompletedTrackedRef = useRef(false);
+
+  const analyticsContext = {
+    game_id: gameId,
+    trainer_id: trainer.id,
+    locale,
+    game_slug: gameSlug || '',
+    game_title: gameTitle || '',
+    trainer_version: trainer.version_str,
+    source_page: 'patcher',
+  };
 
   useEffect(() => {
     const detectAdBlock = () => {
@@ -171,6 +183,19 @@ export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer,
       // 1. File Size Verification (Max 15MB size limit)
       if (file.size > 15 * 1024 * 1024) {
         throw new Error('파일 크기가 최대 제한 용량(15MB)을 초과합니다.');
+      }
+
+      if (!file.name.toLowerCase().endsWith('.exe') || file.size < 64) {
+        throw new Error('올바른 형식의 원본 트레이너 실행 파일(.exe)을 선택해 주세요.');
+      }
+
+      if (!fileSelectedTrackedRef.current) {
+        fileSelectedTrackedRef.current = true;
+        trackAnalyticsEvent('file_selected', {
+          ...analyticsContext,
+          input_method: 'file_or_drop',
+          file_size: file.size,
+        });
       }
 
       const buffer = await file.arrayBuffer();
@@ -401,6 +426,10 @@ export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer,
 
       setPatchedFileUrl(downloadUrl);
       setPatchedFileName(targetZipName);
+      if (!patchCompletedTrackedRef.current) {
+        patchCompletedTrackedRef.current = true;
+        trackAnalyticsEvent('patch_completed', analyticsContext);
+      }
       setStatus('packaging');
     } catch (err: any) {
       console.error(err);
@@ -419,16 +448,6 @@ export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer,
   };
 
   const handleDownloadClick = async () => {
-    const analyticsContext = {
-      game_id: gameId,
-      trainer_id: trainer.id,
-      locale,
-      game_slug: gameSlug || '',
-      game_title: gameTitle || '',
-      trainer_version: trainer.version_str,
-      source_page: 'patcher',
-    };
-
     trackAnalyticsEvent('download_started', analyticsContext);
     try {
       const adUrl = process.env.NEXT_PUBLIC_AD_GATE_URL || "https://www.effectivecpmnetwork.com/idhbg4vm?key=33b748a68cf17f28c5cf24a5aabfb561";

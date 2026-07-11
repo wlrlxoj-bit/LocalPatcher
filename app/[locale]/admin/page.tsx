@@ -63,6 +63,32 @@ interface MonthlyMetrics {
   monthlyActiveUsers: number | null;
   previousMonthActiveUsers: number | null;
   downloadStarts: number | null;
+  pricePlacement: {
+    status: 'collecting' | 'keep_bottom' | 'consider_raise';
+    measurementStartDate: string;
+    daysCollected: number;
+    minDays: number;
+    cumulativeViews: number;
+    minViews: number;
+    recentViews: number;
+    recentClicks: number;
+    affiliateClicks: number;
+    allMerchantClicks: number;
+    recentPatcherViews: number;
+    previousPatcherViews: number;
+    clickThroughRate: number | null;
+    fileSelected: number;
+    previousFileSelected: number;
+    patchCompleted: number;
+    previousPatchCompleted: number;
+    selectionRate: number | null;
+    previousSelectionRate: number | null;
+    completionRate: number | null;
+    previousCompletionRate: number | null;
+    funnelComparisonAvailable: boolean;
+    reason: string;
+    nextReviewDate: string | null;
+  } | null;
 }
 
 export default function AdminDashboard() {
@@ -85,6 +111,7 @@ export default function AdminDashboard() {
     monthlyActiveUsers: null,
     previousMonthActiveUsers: null,
     downloadStarts: null,
+    pricePlacement: null,
   });
 
   // Popular Games State
@@ -554,6 +581,35 @@ export default function AdminDashboard() {
                   return <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-4"><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">최근 30일 활성 사용자</p><p className="mt-1 text-3xl font-extrabold text-white">{monthlyMetrics.monthlyActiveUsers.toLocaleString()}</p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">10k Humble 체크</p><p className="mt-1 text-3xl font-extrabold text-cyan-400">{humbleProgress.toFixed(1)}%</p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">100k 성장 목표</p><p className="mt-1 text-3xl font-extrabold text-emerald-400">{growthProgress.toFixed(1)}%</p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">이전 30일 대비 / 다운로드 시작</p><p className="mt-1 text-lg font-bold text-slate-200">{change === null ? '비교 데이터 없음' : `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`} <span className="text-xs font-normal text-slate-500">/ {monthlyMetrics.downloadStarts?.toLocaleString() ?? '—'}</span></p></div><div className="sm:col-span-2 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-indigo-400" style={{ width: `${humbleProgress}%` }} /></div><div className="sm:col-span-2 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400" style={{ width: `${growthProgress}%` }} /></div></div>;
                 })() : <p className="mt-5 text-xs leading-relaxed text-slate-400">{monthlyMetrics.reason || 'GA4 속성 ID와 서버 전용 서비스 계정 설정 후 월간 활성 사용자, 전월 대비, 다운로드 시작 수가 표시됩니다. 이 값은 내부 참고 지표이며 파트너가 정의하는 UMV와 다를 수 있습니다.'}</p>}
               </section>
+
+              <section className="rounded-2xl border border-indigo-500/30 bg-indigo-950/10 p-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-indigo-200">가격 비교 배치 판단</h3>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-400">가격 비교를 언제 위로 올릴지 GA4 데이터로 판단합니다. 권고만 표시하며 위치는 자동으로 바뀌지 않습니다.</p>
+                  </div>
+                  {monthlyMetrics.pricePlacement && <span className={`w-fit rounded-full px-3 py-1 text-[10px] font-bold ${monthlyMetrics.pricePlacement.status === 'consider_raise' ? 'bg-emerald-500/15 text-emerald-300' : monthlyMetrics.pricePlacement.status === 'keep_bottom' ? 'bg-amber-500/15 text-amber-300' : 'bg-indigo-500/15 text-indigo-200'}`}>{monthlyMetrics.pricePlacement.status === 'consider_raise' ? '위치 상승 검토' : monthlyMetrics.pricePlacement.status === 'keep_bottom' ? '하단 유지' : '데이터 수집 중'}</span>}
+                </div>
+                {monthlyMetrics.pricePlacement ? (() => {
+                  const metric = monthlyMetrics.pricePlacement;
+                  const dayProgress = Math.min(100, (metric.daysCollected / metric.minDays) * 100);
+                  const viewProgress = Math.min(100, (metric.cumulativeViews / metric.minViews) * 100);
+                  return <div className="mt-5 space-y-5">
+                    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                      <div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">수집 기간</p><p className="mt-1 text-xl font-extrabold text-white">{metric.daysCollected}일 <span className="text-xs font-normal text-slate-500">/ {metric.minDays}일</span></p></div>
+                      <div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">누적 노출</p><p className="mt-1 text-xl font-extrabold text-white">{metric.cumulativeViews.toLocaleString()}회 <span className="text-xs font-normal text-slate-500">/ {metric.minViews}회</span></p></div>
+                      <div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">최근 28일 제휴 클릭률</p><p className="mt-1 text-xl font-extrabold text-cyan-300">{metric.clickThroughRate === null ? '데이터 없음' : `${metric.clickThroughRate.toFixed(1)}%`}</p><p className="mt-1 text-[10px] text-slate-500">가격 영역 노출 {metric.recentViews.toLocaleString()} / 제휴 클릭 {metric.affiliateClicks.toLocaleString()} · 전체 판매처 클릭 {metric.allMerchantClicks.toLocaleString()}</p></div>
+                      <div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">최근 28일 패처 퍼널</p><p className="mt-1 text-sm font-bold text-slate-200">패처 도달 {metric.recentPatcherViews.toLocaleString()} · 파일 선택 {metric.fileSelected.toLocaleString()} · 패치 완료 {metric.patchCompleted.toLocaleString()}</p><p className="mt-1 text-[10px] text-slate-500">선택률(파일 선택 ÷ 패처 도달) {metric.selectionRate === null ? '—' : `${metric.selectionRate.toFixed(1)}%`} · 완료율 {metric.completionRate === null ? '—' : `${metric.completionRate.toFixed(1)}%`}</p></div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div><div className="mb-1 flex justify-between text-[10px] text-slate-500"><span>28일 수집</span><span>{dayProgress.toFixed(0)}%</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-indigo-400" style={{ width: `${dayProgress}%` }} /></div></div>
+                      <div><div className="mb-1 flex justify-between text-[10px] text-slate-500"><span>노출 500회</span><span>{viewProgress.toFixed(0)}%</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-cyan-400" style={{ width: `${viewProgress}%` }} /></div></div>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4 text-xs leading-relaxed text-slate-300"><p className="font-bold text-white">현재 권고</p><p className="mt-1">{metric.reason}</p>{metric.status === 'collecting' && <p className="mt-2 text-slate-500">{metric.nextReviewDate ? `최초 날짜 검토: ${metric.nextReviewDate}` : '28일 조건 충족'} · 남은 노출 {Math.max(0, metric.minViews - metric.cumulativeViews).toLocaleString()}회</p>}{!metric.funnelComparisonAvailable && <p className="mt-2 text-amber-300/80">이전 기간과 퍼널 하락을 비교하려면 최소 56일의 이벤트 데이터와 충분한 이전 기간 모수가 필요합니다.</p>}</div>
+                  </div>;
+                })() : <p className="mt-5 text-xs leading-relaxed text-slate-400">가격 비교 측정 시작일이 설정되지 않았습니다. 배포 환경변수 <span className="font-mono text-slate-300">PRICE_COMPARE_MEASUREMENT_START_DATE</span>에 측정 배포일을 YYYY-MM-DD 형식으로 설정하면 집계를 시작합니다.</p>}
+              </section>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/20 flex flex-col justify-between">
                   <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Supported Games</div>
