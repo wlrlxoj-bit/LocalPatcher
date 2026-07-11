@@ -31,15 +31,15 @@ export async function generateMetadata({ params }: PatcherPageProps) {
   let description = '';
 
   if (currentLocale === 'ko') {
-    title = `${game.title_ko} 트레이너 한글 패치 - 100% 안전한 무설치 로컬 패처 | LocalPatcher`;
-    description = `${game.title_ko} (${game.title_en}) 최신 트레이너 한글 번역 패치(${versionsStr})를 제공합니다. 서버에 파일을 올릴 필요 없이, 웹브라우저에서 3초 만에 안전하게 한글로 변환하여 사용하세요.`;
+    title = `${game.title_ko} 트레이너 한글 패치 - 무설치 브라우저 로컬 변환 | LocalPatcher`;
+    description = `${game.title_ko} (${game.title_en}) 트레이너 한글 번역 패치(${versionsStr})를 제공합니다. 파일을 서버에 올리지 않고 웹브라우저에서 로컬로 변환할 수 있습니다.`;
   } else if (currentLocale === 'ja') {
     const titleJa = game.title_ja || game.title_en;
-    title = `${titleJa} トレーナー日本語化パッチ - 安全なウェブ版ローカル変換 | LocalPatcher`;
+    title = `${titleJa} トレーナー日本語化パッチ - ブラウザでのローカル変換 | LocalPatcher`;
     description = `${titleJa}の最新トレーナー用日本語化翻訳パッチ(${versionsStr})です。サーバーにファイルを一切アップロードせず、Webブラウザ内で完全にローカルで日本語化できます。`;
   } else {
     title = `${game.title_en} Trainer Translation & Localization Patch | LocalPatcher`;
-    description = `Apply client-side translation and localization patches for ${game.title_en} game trainers (${versionsStr}). Safely modify original files directly in your web browser with no server uploads.`;
+    description = `Apply client-side translation and localization patches for ${game.title_en} game trainers (${versionsStr}) directly in your web browser with no server uploads.`;
   }
 
   const gameName = currentLocale === 'ko' ? game.title_ko : currentLocale === 'ja' ? (game.title_ja || game.title_en) : game.title_en;
@@ -119,13 +119,13 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
       'priceCurrency': 'USD',
     },
     'description': currentLocale === 'ko'
-      ? `${game.title_ko} (${game.title_en})의 최신 트레이너 한글 패치를 브라우저 로컬에서 설치 없이 안전하게 지원하는 유틸리티입니다.`
+      ? `${game.title_ko} (${game.title_en}) 트레이너 한글 패치를 설치 없이 브라우저에서 로컬로 적용하는 유틸리티입니다.`
       : currentLocale === 'ja'
-        ? `${game.title_en}の最新トレーナー日本語化パッチをブラウザローカルで安全かつ迅速に適用するツール。`
+        ? `${game.title_en}のトレーナー日本語化パッチをブラウザ上でローカルに適用するツール。`
         : `Free browser-based patch tool to translate and localize ${game.title_en} game trainers client-side.`,
     'screenshot': game.cover_image_url,
     'softwareVersion': trainers[0]?.version_str || '1.0',
-    'downloadUrl': `https://local-patcher.vercel.app/${currentLocale}/patcher/${game_slug}`,
+    'downloadUrl': `https://localpatcher.com/${currentLocale}/patcher/${game.slug}`,
   };
 
   const partnerKey = process.env.NEXT_PUBLIC_HUMBLE_PARTNER_KEY;

@@ -17,7 +17,7 @@ export default async function SupportPage({
       title: 'Patreon 후원',
       subtitle: 'LocalPatcher의 지속 가능한 운영과 서비스 개선을 지원해 주세요.',
       cardTitle: 'LocalPatcher 후원자(Sponsor) 되기',
-      cardIntro: 'LocalPatcher는 광고가 없고 쾌적한 100% 무료 웹 패칭 서비스를 제공하고 있습니다. 하지만 서비스가 지연 없이 원활하게 구동되기 위해 다음과 같은 정기적인 인프라 유지 비용이 매달 발생하고 있습니다.',
+      cardIntro: 'LocalPatcher는 무료로 이용할 수 있으며 최소한의 광고 수익으로 운영됩니다. 자발적인 후원은 광고와 별개로 다음과 같은 정기적인 인프라 유지 비용을 지원하는 데 사용됩니다.',
       costs: [
         {
           icon: Database,
@@ -41,9 +41,9 @@ export default async function SupportPage({
     },
     en: {
       title: 'Sponsor on Patreon',
-      subtitle: 'Help keep LocalPatcher ad-free, fast, and sustainable for players worldwide.',
+      subtitle: 'Help keep LocalPatcher available, fast, and sustainable for players worldwide.',
       cardTitle: 'Become a Sponsor',
-      cardIntro: 'LocalPatcher is committed to remaining 100% free and clean. However, ensuring sub-second local file matching and maintaining a clean, fast experience incurs monthly infrastructure costs:',
+      cardIntro: 'LocalPatcher is free to use and is operated with limited advertising revenue. Voluntary sponsorship is separate from advertising and helps cover the following recurring infrastructure costs:',
       costs: [
         {
           icon: Database,
@@ -67,9 +67,9 @@ export default async function SupportPage({
     },
     ja: {
       title: 'Patreonで支援する',
-      subtitle: 'LocalPatcher の広告なし・無償サービスの持続的な運営を支えてください。',
+      subtitle: 'LocalPatcher の無償サービスを安定して継続できるよう、ご支援ください。',
       cardTitle: 'パトロン（支援者）になる',
-      cardIntro: 'LocalPatcherは広告を一切掲載せず、100%無料でローカライズ機能を提供しています。しかし、ユーザーの皆様が安定して高速に処理を行える環境を維持するために、毎月以下のインフラインフラ費用が発生しています。',
+      cardIntro: 'LocalPatcherは無料で利用でき、必要最小限の広告収益により運営されています。任意のご支援は広告とは別に、以下の継続的なインフラ維持費に充てられます。',
       costs: [
         {
           icon: Database,

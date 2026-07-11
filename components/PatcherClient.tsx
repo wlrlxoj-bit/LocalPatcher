@@ -375,11 +375,11 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
     let promoText = '';
     
     if (locale === 'ko') {
-      promoText = `🎮 [${game.title_ko}] 트레이너 100% 안전한 한글 패치 완료!\n개인정보 수집 및 서버 업로드 없이 브라우저 로컬에서 안전하고 빠르게 번역 패치해보세요. 지금 바로 다운로드 가능!\n🔗 ${currentUrl}`;
+      promoText = `🎮 [${game.title_ko}] LocalPatcher 로컬 한글 변환 완료!\n선택한 파일을 서버에 업로드하지 않고 브라우저에서 번역 패치를 적용했습니다.\n🔗 ${currentUrl}`;
     } else if (locale === 'ja') {
-      promoText = `🎮 [${game.title_ja || game.title_en}] トレーナー 100% 安全な日本語化パッチ完了!\n個人情報の収集やサーバーへのアップロードなしで、ブラウザローカルで安全かつ迅速に翻訳パッチを適用できます。今すぐダウンロード可能!\n🔗 ${currentUrl}`;
+      promoText = `🎮 [${game.title_ja || game.title_en}] LocalPatcherでローカル日本語変換が完了!\n選択したファイルをサーバーへアップロードせず、ブラウザ内で翻訳パッチを適用しました。\n🔗 ${currentUrl}`;
     } else {
-      promoText = `🎮 [${game.title_en}] Trainer 100% Safe Local Language Patch applied!\nApply localization patches safely and instantly in your local browser, without any file uploads or registration. Get yours now!\n🔗 ${currentUrl}`;
+      promoText = `🎮 [${game.title_en}] LocalPatcher local language conversion complete!\nThe selected file was patched locally in the browser without being uploaded to the server.\n🔗 ${currentUrl}`;
     }
     
     navigator.clipboard.writeText(promoText)
