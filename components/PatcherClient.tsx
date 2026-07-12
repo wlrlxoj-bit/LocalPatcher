@@ -476,6 +476,18 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
     setSelectedTrainerId(id);
   };
 
+  /** FLiNG 원본 링크의 위치별 클릭만 집계하며, 사용자 파일이나 개인 정보는 보내지 않습니다. */
+  const handleFlingDownloadClick = (placement: 'header' | 'start_guide' | 'unsupported_trainer') => {
+    trackAnalyticsEvent('fling_download_clicked', {
+      game_id: game.id,
+      game_slug: game.slug,
+      locale,
+      trainer_id: selectedTrainerId,
+      placement,
+      source_page: 'patcher',
+    });
+  };
+
   const handleShare = () => {
     const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
     let promoText = '';
@@ -554,6 +566,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
             href={game.fling_url || 'https://flingtrainer.com/'}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => handleFlingDownloadClick('header')}
             className="inline-flex items-center justify-center px-5 py-2.5 rounded-lg border border-cyan-500/30 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/10 hover:border-cyan-500/50 transition-all duration-200 shrink-0"
           >
             Go to FLiNG Official Download Page ↗
@@ -657,6 +670,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
               href={game.fling_url}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => handleFlingDownloadClick('header')}
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/20 transition-all duration-200"
             >
               <span>{
@@ -702,6 +716,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                     href={game.fling_url || 'https://flingtrainer.com/'}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={() => handleFlingDownloadClick('unsupported_trainer')}
                     className="inline-flex items-center justify-center bg-rose-500 hover:bg-rose-600 text-white font-bold px-4 py-2 rounded-xl shadow-lg shadow-rose-500/20 transition-all duration-200"
                   >
                     {locale === 'ko' 
@@ -745,7 +760,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                     </div>
                     <div className="flex w-full flex-col gap-3">
                       {game.fling_url ? (
-                        <a href={game.fling_url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 text-center text-sm font-bold text-slate-950 transition-colors hover:bg-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950">
+                        <a href={game.fling_url} target="_blank" rel="noopener noreferrer" onClick={() => handleFlingDownloadClick('start_guide')} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 text-center text-sm font-bold text-slate-950 transition-colors hover:bg-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950">
                           {startGuide.fling}<ArrowRight className="h-4 w-4" aria-hidden="true" />
                         </a>
                       ) : (
@@ -763,8 +778,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                   locale={locale} 
                   gameId={game.id}
                   gameSlug={game.slug}
-                  gameTitle={displayTitle}
-                  trainer={selectedTrainer} 
+                  trainer={selectedTrainer}
                   allTrainers={sortedTrainers}
                   mappingsMap={mappingsMap}
                   onTrainerDetected={handleTrainerDetected}

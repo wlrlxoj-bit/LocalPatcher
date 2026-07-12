@@ -12,7 +12,6 @@ interface DropZoneProps {
   locale: Locale;
   gameId: number;
   gameSlug?: string;
-  gameTitle?: string;
   trainer: {
     id: number;
     version_str: string;
@@ -33,6 +32,16 @@ interface DropZoneProps {
     max_char_len: number;
   }>>;
   onTrainerDetected: (trainerId: number) => void;
+}
+
+type PatchFailureReason = 'invalid_type' | 'file_too_large' | 'not_pe' | 'unsupported_version' | 'processing_error';
+
+/** 사용자 파일의 실제 내용은 노출하지 않고, 퍼널 분석에 필요한 실패 유형만 전달합니다. */
+class PatchFailureError extends Error {
+  constructor(public readonly reason: PatchFailureReason, message: string) {
+    super(message);
+    this.name = 'PatchFailureError';
+  }
 }
 const adBlockTexts = {
   ko: {
@@ -55,7 +64,7 @@ const adBlockTexts = {
   }
 };
 
-export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer, allTrainers, mappingsMap, onTrainerDetected }: DropZoneProps) {
+export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainers, mappingsMap, onTrainerDetected }: DropZoneProps) {
   const t = getDictionary(locale);
   const adText = adBlockTexts[locale] || adBlockTexts.en;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -69,7 +78,10 @@ export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer,
   const [patchedFileUrl, setPatchedFileUrl] = useState<string | null>(null);
   const [patchedFileName, setPatchedFileName] = useState('');
   const [isAdBlockActive, setIsAdBlockActive] = useState(false);
+  // 퍼널 비교를 위해 첫 시도만 집계합니다. 성공/실패 재시도 횟수는 별도 지표에 섞지 않습니다.
+  const fileSelectionAttemptTrackedRef = useRef(false);
   const fileSelectedTrackedRef = useRef(false);
+  const patchFailedTrackedRef = useRef(false);
   const patchCompletedTrackedRef = useRef(false);
 
   const analyticsContext = {
@@ -77,7 +89,6 @@ export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer,
     trainer_id: trainer.id,
     locale,
     game_slug: gameSlug || '',
-    game_title: gameTitle || '',
     trainer_version: trainer.version_str,
     source_page: 'patcher',
   };
@@ -174,7 +185,14 @@ export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer,
   };
 
   // Perform binary patch process
-  const processFile = async (file: File) => {
+  const processFile = async (file: File, inputMethod: 'drag_and_drop' | 'file_picker') => {
+    if (!fileSelectionAttemptTrackedRef.current) {
+      fileSelectionAttemptTrackedRef.current = true;
+      trackAnalyticsEvent('file_selection_attempted', {
+        ...analyticsContext,
+        input_method: inputMethod,
+      });
+    }
     setStatus('processing');
     setErrorMsg('');
     setFileName(file.name);
@@ -182,14 +200,14 @@ export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer,
     try {
       // 1. File Size Verification (Max 15MB size limit)
       if (file.size > 15 * 1024 * 1024) {
-        throw new Error('파일 크기가 최대 제한 용량(15MB)을 초과합니다.');
+        throw new PatchFailureError('file_too_large', '파일 크기가 최대 제한 용량(15MB)을 초과합니다.');
       }
 
       if (!file.name.toLowerCase().endsWith('.exe') || file.size < 64) {
-        throw new Error('올바른 형식의 원본 트레이너 실행 파일(.exe)을 선택해 주세요.');
+        throw new PatchFailureError('invalid_type', '올바른 형식의 원본 트레이너 실행 파일(.exe)을 선택해 주세요.');
       }
 
-      if (!fileSelectedTrackedRef.current) {
+      if (!fileSelectedTrackedRef.current && !patchFailedTrackedRef.current) {
         fileSelectedTrackedRef.current = true;
         trackAnalyticsEvent('file_selected', {
           ...analyticsContext,
@@ -243,7 +261,7 @@ export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer,
       if (!bypassCheck) {
         if (!isPE) {
           console.warn('Uploaded file is not a valid PE executable.');
-          throw new Error('올바른 정식 원본 트레이너 파일이 아닙니다. 버전에 맞는 FLiNG 원본 실행 파일을 올려주십시오.');
+          throw new PatchFailureError('not_pe', '올바른 정식 원본 트레이너 파일이 아닙니다. 버전에 맞는 FLiNG 원본 실행 파일을 올려주십시오.');
         }
 
         // 1. Check if the uploaded file's size matches the currently selected trainer.original_file_size
@@ -261,11 +279,11 @@ export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer,
               activeMappings = mappingsMap[matchingTrainer.id] || [];
             } else {
               console.warn(`No trainer version matches file hash ${fileHash}.`);
-              throw new Error('올바른 정식 원본 트레이너 파일이 아닙니다. 버전에 맞는 FLiNG 원본 실행 파일을 올려주십시오.');
+              throw new PatchFailureError('unsupported_version', '올바른 정식 원본 트레이너 파일이 아닙니다. 버전에 맞는 FLiNG 원본 실행 파일을 올려주십시오.');
             }
           } else {
             console.warn(`No trainer version matches file size ${file.size} bytes.`);
-            throw new Error('올바른 정식 원본 트레이너 파일이 아닙니다. 버전에 맞는 FLiNG 원본 실행 파일을 올려주십시오.');
+            throw new PatchFailureError('unsupported_version', '올바른 정식 원본 트레이너 파일이 아닙니다. 버전에 맞는 FLiNG 원본 실행 파일을 올려주십시오.');
           }
         } else {
           // File size matches the currently selected trainer
@@ -281,7 +299,7 @@ export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer,
               activeMappings = mappingsMap[otherTrainer.id] || [];
             } else {
               console.warn(`No trainer version matches file size and hash.`);
-              throw new Error('올바른 정식 원본 트레이너 파일이 아닙니다. 버전에 맞는 FLiNG 원본 실행 파일을 올려주십시오.');
+              throw new PatchFailureError('unsupported_version', '올바른 정식 원본 트레이너 파일이 아닙니다. 버전에 맞는 FLiNG 원본 실행 파일을 올려주십시오.');
             }
           } else {
             // Perfect match with currently selected trainer
@@ -296,7 +314,7 @@ export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer,
           const { offset_dec } = mapping;
           if (offset_dec >= textSectionOffset && offset_dec < textSectionOffset + textSectionSize) {
             console.warn(`Blocked attempt to patch executable code in .text section at offset: ${offset_dec} (range: [${textSectionOffset}, ${textSectionOffset + textSectionSize}))`);
-            throw new Error('올바른 정식 원본 트레이너 파일이 아닙니다. 버전에 맞는 FLiNG 원본 실행 파일을 올려주십시오.');
+            throw new PatchFailureError('unsupported_version', '올바른 정식 원본 트레이너 파일이 아닙니다. 버전에 맞는 FLiNG 원본 실행 파일을 올려주십시오.');
           }
         }
       }
@@ -426,15 +444,23 @@ export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer,
 
       setPatchedFileUrl(downloadUrl);
       setPatchedFileName(targetZipName);
-      if (!patchCompletedTrackedRef.current) {
+      if (!patchCompletedTrackedRef.current && !patchFailedTrackedRef.current) {
         patchCompletedTrackedRef.current = true;
         trackAnalyticsEvent('patch_completed', analyticsContext);
       }
       setStatus('packaging');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
+      const reason = err instanceof PatchFailureError ? err.reason : 'processing_error';
+      if (!patchFailedTrackedRef.current && !patchCompletedTrackedRef.current) {
+        patchFailedTrackedRef.current = true;
+        trackAnalyticsEvent('patch_failed', {
+          ...analyticsContext,
+          patch_failure_reason: reason,
+        });
+      }
       setStatus('error');
-      setErrorMsg(err.message || '파일 패치 중 알 수 없는 에러가 발생했습니다.');
+      setErrorMsg(err instanceof Error ? err.message : '파일 패치 중 알 수 없는 에러가 발생했습니다.');
     }
   };
 
@@ -494,13 +520,13 @@ export default function DropZone({ locale, gameId, gameSlug, gameTitle, trainer,
     setIsDragActive(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      await processFile(e.dataTransfer.files[0]);
+      await processFile(e.dataTransfer.files[0], 'drag_and_drop');
     }
   };
 
   const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      await processFile(e.target.files[0]);
+      await processFile(e.target.files[0], 'file_picker');
     }
   };
 

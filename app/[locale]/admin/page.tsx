@@ -63,6 +63,34 @@ interface MonthlyMetrics {
   monthlyActiveUsers: number | null;
   previousMonthActiveUsers: number | null;
   downloadStarts: number | null;
+  patchFunnel: {
+    flingClicks: number;
+    fileSelectionAttempted: number;
+    fileSelected: number;
+    patchCompleted: number;
+    downloadStarts: number;
+    adGateOpened: number;
+    popupBlocked: number;
+    patchFailed: number;
+    rates: {
+      flingToFileSelectionAttempt: number | null;
+      fileSelectionAttemptToValidation: number | null;
+      fileSelectionToPatchCompleted: number | null;
+      patchCompletedToDownload: number | null;
+      downloadToAdGateOpened: number | null;
+      popupBlockedRate: number | null;
+      patchFailureRate: number | null;
+    };
+    failureBreakdown: {
+      invalid_type: number;
+      file_too_large: number;
+      not_pe: number;
+      unsupported_version: number;
+      processing_error: number;
+    } | null;
+    failureBreakdownStatus: 'available' | 'not_configured' | 'unavailable';
+    mainFailureCategory: 'invalid_type' | 'file_too_large' | 'not_pe' | 'unsupported_version' | 'processing_error' | null;
+  } | null;
   pricePlacement: {
     status: 'collecting' | 'keep_bottom' | 'consider_raise';
     measurementStartDate: string;
@@ -111,6 +139,7 @@ export default function AdminDashboard() {
     monthlyActiveUsers: null,
     previousMonthActiveUsers: null,
     downloadStarts: null,
+    patchFunnel: null,
     pricePlacement: null,
   });
 
@@ -580,6 +609,44 @@ export default function AdminDashboard() {
                     : null;
                   return <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-4"><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">최근 30일 활성 사용자</p><p className="mt-1 text-3xl font-extrabold text-white">{monthlyMetrics.monthlyActiveUsers.toLocaleString()}</p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">10k Humble 체크</p><p className="mt-1 text-3xl font-extrabold text-cyan-400">{humbleProgress.toFixed(1)}%</p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">100k 성장 목표</p><p className="mt-1 text-3xl font-extrabold text-emerald-400">{growthProgress.toFixed(1)}%</p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">이전 30일 대비 / 다운로드 시작</p><p className="mt-1 text-lg font-bold text-slate-200">{change === null ? '비교 데이터 없음' : `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`} <span className="text-xs font-normal text-slate-500">/ {monthlyMetrics.downloadStarts?.toLocaleString() ?? '—'}</span></p></div><div className="sm:col-span-2 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-indigo-400" style={{ width: `${humbleProgress}%` }} /></div><div className="sm:col-span-2 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400" style={{ width: `${growthProgress}%` }} /></div></div>;
                 })() : <p className="mt-5 text-xs leading-relaxed text-slate-400">{monthlyMetrics.reason || 'GA4 속성 ID와 서버 전용 서비스 계정 설정 후 월간 활성 사용자, 전월 대비, 다운로드 시작 수가 표시됩니다. 이 값은 내부 참고 지표이며 파트너가 정의하는 UMV와 다를 수 있습니다.'}</p>}
+              </section>
+
+              <section className="rounded-2xl border border-emerald-500/25 bg-emerald-950/10 p-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-emerald-200">최근 30일 패치 퍼널</h3>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-400">사용자가 원본 받기부터 패치 파일 다운로드·광고 탭 열기까지 어느 단계에서 멈추는지 확인합니다.</p>
+                  </div>
+                  <span className={`w-fit rounded-full px-3 py-1 text-[10px] font-bold ${monthlyMetrics.patchFunnel ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-500/15 text-slate-300'}`}>
+                    {monthlyMetrics.patchFunnel ? '이벤트 집계됨' : '초기 데이터 수집 중'}
+                  </span>
+                </div>
+                {monthlyMetrics.patchFunnel ? (() => {
+                  const funnel = monthlyMetrics.patchFunnel;
+                  const failureLabels = {
+                    invalid_type: 'EXE 파일 아님',
+                    file_too_large: '파일 용량 초과',
+                    not_pe: '실행 파일 형식 아님',
+                    unsupported_version: '지원하지 않는 버전',
+                    processing_error: '처리 중 오류',
+                  } as const;
+                  const formatRate = (value: number | null) => value === null ? '—' : `${value.toFixed(1)}%`;
+                  return <div className="mt-5 space-y-5">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-7">
+                      <div className="rounded-xl bg-slate-950/40 p-3"><p className="text-[10px] font-bold text-slate-500">FLiNG 원본 받기</p><p className="mt-1 text-xl font-extrabold text-white">{funnel.flingClicks.toLocaleString()}</p></div>
+                      <div className="rounded-xl bg-slate-950/40 p-3"><p className="text-[10px] font-bold text-slate-500">파일 선택 시도</p><p className="mt-1 text-xl font-extrabold text-white">{funnel.fileSelectionAttempted.toLocaleString()}</p><p className="mt-1 text-[10px] text-cyan-300">{formatRate(funnel.rates.flingToFileSelectionAttempt)}</p></div>
+                      <div className="rounded-xl bg-slate-950/40 p-3"><p className="text-[10px] font-bold text-slate-500">기본 검증 통과</p><p className="mt-1 text-xl font-extrabold text-white">{funnel.fileSelected.toLocaleString()}</p><p className="mt-1 text-[10px] text-cyan-300">{formatRate(funnel.rates.fileSelectionAttemptToValidation)}</p></div>
+                      <div className="rounded-xl bg-slate-950/40 p-3"><p className="text-[10px] font-bold text-slate-500">패치 완료</p><p className="mt-1 text-xl font-extrabold text-white">{funnel.patchCompleted.toLocaleString()}</p><p className="mt-1 text-[10px] text-cyan-300">{formatRate(funnel.rates.fileSelectionToPatchCompleted)}</p></div>
+                      <div className="rounded-xl bg-slate-950/40 p-3"><p className="text-[10px] font-bold text-slate-500">다운로드 시작</p><p className="mt-1 text-xl font-extrabold text-white">{funnel.downloadStarts.toLocaleString()}</p><p className="mt-1 text-[10px] text-cyan-300">{formatRate(funnel.rates.patchCompletedToDownload)}</p></div>
+                      <div className="rounded-xl bg-slate-950/40 p-3"><p className="text-[10px] font-bold text-slate-500">광고 탭 열림</p><p className="mt-1 text-xl font-extrabold text-white">{funnel.adGateOpened.toLocaleString()}</p><p className="mt-1 text-[10px] text-cyan-300">{formatRate(funnel.rates.downloadToAdGateOpened)}</p></div>
+                      <div className="rounded-xl bg-slate-950/40 p-3"><p className="text-[10px] font-bold text-slate-500">팝업 차단</p><p className="mt-1 text-xl font-extrabold text-amber-300">{funnel.popupBlocked.toLocaleString()}</p><p className="mt-1 text-[10px] text-amber-300">{formatRate(funnel.rates.popupBlockedRate)}</p></div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl border border-rose-500/15 bg-rose-950/15 p-4 text-xs text-slate-300"><p className="font-bold text-rose-200">패치 실패 {funnel.patchFailed.toLocaleString()}건 <span className="font-normal text-rose-200/75">({formatRate(funnel.rates.patchFailureRate)})</span></p><p className="mt-1 text-slate-400">{funnel.failureBreakdownStatus === 'available' ? `주요 사유: ${funnel.mainFailureCategory ? failureLabels[funnel.mainFailureCategory] : '분류 데이터 없음'}` : funnel.failureBreakdownStatus === 'not_configured' ? '실패 사유 분류: GA4 맞춤 측정기준 등록 필요' : '실패 사유 분류를 불러오지 못했습니다.'}</p></div>
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4 text-xs text-slate-400"><p>이 수치는 고유 사용자 수가 아니라 이벤트 발생 횟수입니다. 새 추적이 배포된 직후에는 이전 행동이 없으므로 0건 또는 비어 보일 수 있습니다.</p></div>
+                    </div>
+                  </div>;
+                })() : <p className="mt-5 text-xs leading-relaxed text-slate-400">GA4 연결 후에도 새 추적 이벤트가 쌓이기 전까지는 표시할 데이터가 없습니다. 실제 사용 흐름을 기준으로 초기 수집 기간을 거친 뒤 확인하세요.</p>}
               </section>
 
               <section className="rounded-2xl border border-indigo-500/30 bg-indigo-950/10 p-6">

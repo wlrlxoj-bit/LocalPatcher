@@ -13,12 +13,17 @@ type AnalyticsEvent =
   | 'merchant_clicked'
   | 'affiliate_merchant_clicked'
   | 'patcher_viewed'
+  | 'file_selection_attempted'
   | 'file_selected'
-  | 'patch_completed';
+  | 'patch_completed'
+  | 'fling_download_clicked'
+  | 'patch_failed';
 
 type SafeEventParameters = {
   ad_gate?: 'opened' | 'blocked' | 'unavailable';
   adblock?: 'detected';
+  /** 파일명·해시·원본 오류를 보내지 않는 제한된 패치 실패 분류입니다. */
+  patch_failure_reason?: 'invalid_type' | 'file_too_large' | 'not_pe' | 'unsupported_version' | 'processing_error';
   [key: string]: string | number | boolean | undefined;
 };
 

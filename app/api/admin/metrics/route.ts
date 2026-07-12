@@ -57,9 +57,74 @@ type ReportBody = {
 
 const PRICE_EVENTS = ['price_compare_viewed', 'merchant_clicked', 'affiliate_merchant_clicked', 'patcher_viewed', 'file_selected', 'patch_completed'] as const;
 
+const PATCH_FUNNEL_EVENTS = [
+  'fling_download_clicked',
+  'file_selection_attempted',
+  'file_selected',
+  'patch_completed',
+  'download_started',
+  'ad_gate_opened',
+  'popup_blocked',
+  'patch_failed',
+] as const;
+
+const FAILURE_CATEGORIES = [
+  'invalid_type',
+  'file_too_large',
+  'not_pe',
+  'unsupported_version',
+  'processing_error',
+] as const;
+
 type PriceEventName = typeof PRICE_EVENTS[number];
 
 type PriceEventCounts = Record<PriceEventName, number>;
+
+type PatchFunnelEventName = typeof PATCH_FUNNEL_EVENTS[number];
+type PatchFunnelEventCounts = Record<PatchFunnelEventName, number>;
+type FailureCategory = typeof FAILURE_CATEGORIES[number];
+type FailureBreakdown = Record<FailureCategory, number>;
+type ReportRow = {
+  dimensionValues?: Array<{ value?: string }>;
+  metricValues?: Array<{ value?: string }>;
+};
+
+/** 지정한 이벤트만 한 번의 GA4 보고서로 집계합니다. */
+async function runNamedEventReport<T extends string>(
+  propertyId: string,
+  accessToken: string,
+  startDate: string,
+  endDate: string,
+  eventNames: readonly T[],
+) {
+  const response = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${encodeURIComponent(propertyId)}:runReport`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      dateRanges: [{ startDate, endDate }],
+      dimensions: [{ name: 'eventName' }],
+      metrics: [{ name: 'eventCount' }],
+      dimensionFilter: {
+        filter: { fieldName: 'eventName', inListFilter: { values: eventNames } },
+      },
+      limit: String(eventNames.length),
+    }),
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new Error(`GA4 event report request failed: ${response.status}`);
+
+  const data = await response.json() as { rows?: ReportRow[] };
+  const counts = Object.fromEntries(eventNames.map((eventName) => [eventName, 0])) as Record<T, number>;
+  for (const row of data.rows ?? []) {
+    const eventName = row.dimensionValues?.[0]?.value as T | undefined;
+    const value = Number(row.metricValues?.[0]?.value ?? 0);
+    if (eventName && eventName in counts && Number.isFinite(value)) counts[eventName] = value;
+  }
+  return counts;
+}
 
 /** 여러 가격 비교 퍼널 이벤트를 한 번의 GA4 요청으로 조회합니다. */
 async function runEventReport(propertyId: string, accessToken: string, startDate: string, endDate: string) {
@@ -105,6 +170,48 @@ async function runEventReport(propertyId: string, accessToken: string, startDate
     if (eventName && eventName in counts && Number.isFinite(value)) counts[eventName] = value;
   }
   return counts;
+}
+
+/** 실패 사유는 허용한 고정 분류만 반환하고, 맞춤 측정기준 상태를 함께 알려줍니다. */
+async function runFailureCategoryReport(propertyId: string, accessToken: string, startDate: string, endDate: string, isDimensionConfigured: boolean) {
+  if (!isDimensionConfigured) {
+    return { status: 'not_configured' as const, counts: null };
+  }
+
+  const counts = Object.fromEntries(FAILURE_CATEGORIES.map((category) => [category, 0])) as FailureBreakdown;
+  try {
+    const response = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${encodeURIComponent(propertyId)}:runReport`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        dateRanges: [{ startDate, endDate }],
+        dimensions: [{ name: 'customEvent:patch_failure_reason' }],
+        metrics: [{ name: 'eventCount' }],
+        dimensionFilter: {
+          filter: {
+            fieldName: 'eventName',
+            stringFilter: { value: 'patch_failed', matchType: 'EXACT' },
+          },
+        },
+        limit: String(FAILURE_CATEGORIES.length),
+      }),
+      cache: 'no-store',
+    });
+    if (!response.ok) return { status: 'unavailable' as const, counts: null };
+
+    const data = await response.json() as { rows?: ReportRow[] };
+    for (const row of data.rows ?? []) {
+      const category = row.dimensionValues?.[0]?.value as FailureCategory | undefined;
+      const value = Number(row.metricValues?.[0]?.value ?? 0);
+      if (category && category in counts && Number.isFinite(value)) counts[category] = value;
+    }
+  } catch {
+    return { status: 'unavailable' as const, counts: null };
+  }
+  return { status: 'available' as const, counts };
 }
 
 function percentage(numerator: number, denominator: number) {
@@ -161,6 +268,7 @@ export async function GET(request: Request) {
   const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
   const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n').trim();
   const measurementStartDate = process.env.PRICE_COMPARE_MEASUREMENT_START_DATE?.trim();
+  const isFailureReasonDimensionConfigured = process.env.GA4_PATCH_FAILURE_REASON_DIMENSION_READY === 'true';
 
   if (!propertyId || !serviceAccountEmail || !privateKey) {
     return NextResponse.json({
@@ -169,6 +277,7 @@ export async function GET(request: Request) {
       monthlyActiveUsers: null,
       previousMonthActiveUsers: null,
       downloadStarts: null,
+      patchFunnel: null,
       pricePlacement: null,
     });
   }
@@ -189,7 +298,7 @@ export async function GET(request: Request) {
       ? parsedStartDate
       : null;
 
-    const [monthlyActiveUsers, previousMonthActiveUsers, downloadStarts, recentPriceEvents, previousPriceEvents, cumulativePriceEvents] = await Promise.all([
+    const [monthlyActiveUsers, previousMonthActiveUsers, downloadStarts, recentFunnelEvents, failureBreakdownResult, recentPriceEvents, previousPriceEvents, cumulativePriceEvents] = await Promise.all([
       runReport(propertyId, accessToken, {
         dateRanges: [{ startDate: '29daysAgo', endDate: 'today' }],
         metrics: activeUsersMetric,
@@ -208,12 +317,42 @@ export async function GET(request: Request) {
           },
         },
       }),
+      runNamedEventReport(propertyId, accessToken, '29daysAgo', 'today', PATCH_FUNNEL_EVENTS) as Promise<PatchFunnelEventCounts>,
+      runFailureCategoryReport(propertyId, accessToken, '29daysAgo', 'today', isFailureReasonDimensionConfigured),
       runEventReport(propertyId, accessToken, '27daysAgo', 'today'),
       runEventReport(propertyId, accessToken, '55daysAgo', '28daysAgo'),
       validStartDate
         ? runEventReport(propertyId, accessToken, measurementStartDate!, todayDate)
         : Promise.resolve(null),
     ]);
+
+    const failureBreakdown = failureBreakdownResult.counts;
+    const mainFailureCategory = failureBreakdown && FAILURE_CATEGORIES.reduce<FailureCategory | null>((current, category) => {
+      if (failureBreakdown[category] === 0) return current;
+      return current === null || failureBreakdown[category] > failureBreakdown[current] ? category : current;
+    }, null);
+    const patchFunnel = {
+      flingClicks: recentFunnelEvents.fling_download_clicked,
+      fileSelectionAttempted: recentFunnelEvents.file_selection_attempted,
+      fileSelected: recentFunnelEvents.file_selected,
+      patchCompleted: recentFunnelEvents.patch_completed,
+      downloadStarts: recentFunnelEvents.download_started,
+      adGateOpened: recentFunnelEvents.ad_gate_opened,
+      popupBlocked: recentFunnelEvents.popup_blocked,
+      patchFailed: recentFunnelEvents.patch_failed,
+      rates: {
+        flingToFileSelectionAttempt: percentage(recentFunnelEvents.file_selection_attempted, recentFunnelEvents.fling_download_clicked),
+        fileSelectionAttemptToValidation: percentage(recentFunnelEvents.file_selected, recentFunnelEvents.file_selection_attempted),
+        fileSelectionToPatchCompleted: percentage(recentFunnelEvents.patch_completed, recentFunnelEvents.file_selected),
+        patchCompletedToDownload: percentage(recentFunnelEvents.download_started, recentFunnelEvents.patch_completed),
+        downloadToAdGateOpened: percentage(recentFunnelEvents.ad_gate_opened, recentFunnelEvents.download_started),
+        popupBlockedRate: percentage(recentFunnelEvents.popup_blocked, recentFunnelEvents.download_started),
+        patchFailureRate: percentage(recentFunnelEvents.patch_failed, recentFunnelEvents.file_selection_attempted),
+      },
+      failureBreakdown,
+      failureBreakdownStatus: failureBreakdownResult.status,
+      mainFailureCategory,
+    };
 
     let pricePlacement = null;
     if (validStartDate && cumulativePriceEvents) {
@@ -288,6 +427,7 @@ export async function GET(request: Request) {
       monthlyActiveUsers,
       previousMonthActiveUsers,
       downloadStarts,
+      patchFunnel,
       pricePlacement,
     });
   } catch (error) {
@@ -298,6 +438,7 @@ export async function GET(request: Request) {
       monthlyActiveUsers: null,
       previousMonthActiveUsers: null,
       downloadStarts: null,
+      patchFunnel: null,
       pricePlacement: null,
     });
   }
