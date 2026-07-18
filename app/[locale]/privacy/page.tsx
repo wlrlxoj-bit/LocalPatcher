@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { ArrowLeft, Cookie, Cpu, EyeOff, Shield, UserRoundX } from 'lucide-react';
 import { getDictionary, Locale } from '@/lib/i18n';
+import type { Metadata } from 'next';
+import { SITE_URL, localizedAlternates } from '@/lib/site';
 
 type Content = { title: string; subtitle: string; updated: string; notice: string; sections: Array<{ title: string; text: string; icon: typeof EyeOff }> };
 
@@ -36,6 +38,21 @@ const content: Record<Locale, Content> = {
     ],
   },
 };
+
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const { locale } = await params;
+  const currentLocale: Locale = locale === 'en' || locale === 'ja' ? locale : 'ko';
+  const page = content[currentLocale];
+
+  return {
+    title: `${page.title} | LocalPatcher`,
+    description: page.subtitle,
+    alternates: {
+      canonical: `${SITE_URL}/${currentLocale}/privacy`,
+      languages: localizedAlternates('/privacy'),
+    },
+  };
+}
 
 export default async function PrivacyPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;

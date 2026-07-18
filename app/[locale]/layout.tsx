@@ -3,6 +3,7 @@ import Header from '@/layouts/Header';
 import Footer from '@/layouts/Footer';
 import '@/app/globals.css';
 import Script from 'next/script';
+import { SITE_URL } from '@/lib/site';
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -30,7 +31,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
       : ['game', 'trainer', 'cheats', 'translation', 'patch', 'download', 'free', 'localized', 'localpatcher'];
 
   return {
-    metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://local-patcher.vercel.app'),
+    metadataBase: new URL(SITE_URL),
     title,
     description,
     keywords,
@@ -53,7 +54,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
       siteName: 'LocalPatcher',
       title,
       description,
-      url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://local-patcher.vercel.app'}/${currentLocale}`,
+      url: `${SITE_URL}/${currentLocale}`,
       locale: currentLocale === 'ko' ? 'ko_KR' : currentLocale === 'ja' ? 'ja_JP' : 'en_US',
     },
     twitter: {

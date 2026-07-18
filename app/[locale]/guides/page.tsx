@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, ExternalLink, ShieldAlert } from 'lucide-react';
+import { SITE_URL, localizedAlternates } from '@/lib/site';
 
 type Locale = 'ko' | 'en' | 'ja';
 
@@ -51,7 +52,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   const { locale } = await params;
   const currentLocale: Locale = locale === 'en' || locale === 'ja' ? locale : 'ko';
   const t = content[currentLocale];
-  return { title: `${t.title} | LocalPatcher`, description: t.description, alternates: { canonical: `https://localpatcher.com/${currentLocale}/guides`, languages: { ko: 'https://localpatcher.com/ko/guides', en: 'https://localpatcher.com/en/guides', ja: 'https://localpatcher.com/ja/guides' } } };
+  return { title: `${t.title} | LocalPatcher`, description: t.description, alternates: { canonical: `${SITE_URL}/${currentLocale}/guides`, languages: localizedAlternates('/guides') } };
 }
 
 export default async function GuidesPage({ params }: { params: Promise<{ locale: string }> }) {

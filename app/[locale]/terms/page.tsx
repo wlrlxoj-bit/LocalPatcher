@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { ArrowLeft, FileText, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { getDictionary, Locale } from '@/lib/i18n';
+import type { Metadata } from 'next';
+import { SITE_URL, localizedAlternates } from '@/lib/site';
 
 type Section = { title: string; text: string; icon: typeof FileText };
 type Content = { title: string; subtitle: string; updated: string; warning: string; privacy: string; sections: Section[] };
@@ -76,6 +78,21 @@ const content: Record<Locale, Content> = {
     ],
   },
 };
+
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const { locale } = await params;
+  const currentLocale: Locale = locale === 'en' || locale === 'ja' ? locale : 'ko';
+  const page = content[currentLocale];
+
+  return {
+    title: `${page.title} | LocalPatcher`,
+    description: page.subtitle,
+    alternates: {
+      canonical: `${SITE_URL}/${currentLocale}/terms`,
+      languages: localizedAlternates('/terms'),
+    },
+  };
+}
 
 export default async function TermsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;

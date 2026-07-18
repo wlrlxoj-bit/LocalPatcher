@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { cache } from 'react';
 
 // Get environment variables
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -347,7 +348,7 @@ export async function getGamesWithTrainers() {
   }
 }
 
-export async function getGameBySlug(slug: string) {
+export const getGameBySlug = cache(async (slug: string) => {
   if (!supabase) return mockGames.find(g => g.slug === slug) || null;
   try {
     const { data, error } = await supabase.from('games').select('*').eq('slug', slug).maybeSingle();
@@ -357,9 +358,9 @@ export async function getGameBySlug(slug: string) {
     console.warn('Supabase query failed, falling back to mock data:', err);
     return mockGames.find(g => g.slug === slug) || null;
   }
-}
+});
 
-export async function getTrainersForGame(gameId: number) {
+export const getTrainersForGame = cache(async (gameId: number) => {
   if (!supabase) return mockTrainers.filter(t => t.game_id === gameId);
   try {
     const { data, error } = await supabase.from('trainers').select('*').eq('game_id', gameId);
@@ -369,7 +370,7 @@ export async function getTrainersForGame(gameId: number) {
     console.warn('Supabase query failed, falling back to mock data:', err);
     return mockTrainers.filter(t => t.game_id === gameId);
   }
-}
+});
 
 export async function getMappingsForTrainer(trainerId: number, lang: string = 'ko') {
   if (!supabase) {

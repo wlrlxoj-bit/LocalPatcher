@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import PatcherClient from '@/components/PatcherClient';
 import { getGameBySlug, getTrainersForGame, getMappingsForTrainers } from '@/lib/supabase';
 import { Locale } from '@/lib/i18n';
+import { SITE_URL } from '@/lib/site';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,7 +69,7 @@ export async function generateMetadata({ params }: PatcherPageProps) {
       type: 'website',
       title,
       description,
-      url: `https://local-patcher.vercel.app/${currentLocale}/patcher/${game_slug}`,
+      url: `${SITE_URL}/${currentLocale}/patcher/${game_slug}`,
       images: [
         {
           url: game.cover_image_url,
@@ -125,7 +126,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
         : `Free browser-based patch tool to translate and localize ${game.title_en} game trainers client-side.`,
     'screenshot': game.cover_image_url,
     'softwareVersion': trainers[0]?.version_str || '1.0',
-    'downloadUrl': `https://localpatcher.com/${currentLocale}/patcher/${game.slug}`,
+    'downloadUrl': `${SITE_URL}/${currentLocale}/patcher/${game.slug}`,
   };
 
   const partnerKey = process.env.NEXT_PUBLIC_HUMBLE_PARTNER_KEY;

@@ -1,11 +1,11 @@
 import { MetadataRoute } from 'next';
 import { supabase, mockGames } from '@/lib/supabase';
+import { SITE_URL, SUPPORTED_LOCALES } from '@/lib/site';
 
 export const revalidate = 86400;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://local-patcher.vercel.app';
-  const locales = ['ko', 'en', 'ja'];
+  const locales = SUPPORTED_LOCALES;
   
   // 1. Fetch games and trainers from database to find patchable games
   let patchableGameSlugs: string[] = [];
@@ -47,8 +47,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   for (const locale of locales) {
     for (const path of staticPaths) {
       sitemapEntries.push({
-        url: `${BASE_URL}/${locale}${path}`,
-        lastModified: new Date(),
+        url: `${SITE_URL}/${locale}${path}`,
         changeFrequency: 'daily',
         priority: path === '' ? 1.0 : 0.5,
       });
@@ -59,8 +58,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   for (const locale of locales) {
     for (const slug of patchableGameSlugs) {
       sitemapEntries.push({
-        url: `${BASE_URL}/${locale}/patcher/${slug}`,
-        lastModified: new Date(),
+        url: `${SITE_URL}/${locale}/patcher/${slug}`,
         changeFrequency: 'weekly',
         priority: 0.8,
       });
