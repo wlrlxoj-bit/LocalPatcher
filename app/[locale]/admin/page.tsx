@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import TranslationJobPanel from '@/components/admin/translation/TranslationJobPanel';
 import { 
   Lock, 
   LayoutDashboard, 
@@ -374,22 +375,6 @@ export default function AdminDashboard() {
       console.error('Error fetching mappings:', err);
     } finally {
       setTransLoading(false);
-    }
-  };
-
-  const saveMappingEdit = async (mappingId: number) => {
-    if (!supabase) return;
-    const newText = mappingEdits[mappingId];
-    try {
-      const { error } = await supabase
-        .from('translation_mappings')
-        .update({ translated_text: newText })
-        .eq('id', mappingId);
-      if (error) throw error;
-      alert('Mapping saved successfully.');
-    } catch (err) {
-      console.error('Error updating mapping:', err);
-      alert('Failed to update mapping.');
     }
   };
 
@@ -938,7 +923,9 @@ export default function AdminDashboard() {
                 No translation mappings exist for this trainer version yet.
               </div>
             ) : (
-              <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+              <div className="space-y-4">
+                <TranslationJobPanel trainerId={selectedTrainerId} />
+                <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
                 {mappings.map((m) => (
                   <div key={m.id} className="p-4 rounded-xl border border-slate-850 bg-slate-950/60 space-y-3">
                     <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono">
@@ -957,13 +944,7 @@ export default function AdminDashboard() {
                       <div>
                         <div className="text-[9px] font-bold text-cyan-500/70 uppercase mb-1 flex items-center justify-between">
                           <span>Translated Text (Korean)</span>
-                          <button
-                            onClick={() => saveMappingEdit(m.id)}
-                            className="text-[9px] font-bold text-cyan-400 hover:text-cyan-300 flex items-center space-x-0.5"
-                          >
-                            <Save className="w-3 h-3" />
-                            <span>Save Item</span>
-                          </button>
+                          <span className="text-[9px] text-slate-500">Read-only source · use reviewed job approval</span>
                         </div>
                         <textarea
                           rows={2}
@@ -978,6 +959,7 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 ))}
+                </div>
               </div>
             )}
           </div>

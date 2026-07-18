@@ -43,6 +43,15 @@ loadEnvLocal();
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const AZURE_TRANSLATOR_KEY = process.env.AZURE_TRANSLATOR_KEY;
+const AZURE_TRANSLATOR_REGION = process.env.AZURE_TRANSLATOR_REGION;
+const AZURE_TRANSLATOR_ENDPOINT = (process.env.AZURE_TRANSLATOR_ENDPOINT?.trim() || 'https://api.cognitive.microsofttranslator.com').replace(/\/$/, '');
+const providerArg = process.argv.find((value) => value.startsWith('--provider='))?.split('=')[1] || 'azure';
+const paidConfirmed = process.argv.includes('--confirm-paid');
+if (providerArg === 'openai_paid' && !paidConfirmed) throw new Error('openai_paid 사용에는 --confirm-paid가 필요합니다.');
+if (providerArg !== 'azure' && providerArg !== 'openai_paid') throw new Error('지원하지 않는 번역 공급자입니다.');
+
+class TranslationQuotaError extends Error {}
 
 // ─────────────────────────────────────────────
 // 헬퍼 및 인터페이스 정의
@@ -62,6 +71,7 @@ interface MappingRow {
   offset_dec: number;
   encoding: string;
   max_char_len: number;
+  is_approved: boolean;
 }
 
 // ─────────────────────────────────────────────
@@ -167,7 +177,7 @@ ${extraPrompt}`;
       temperature: temperature,
       response_format: { type: 'json_object' },
     }),
-    signal: AbortSignal.timeout(60000), // 60초 타임아웃
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!response.ok) {
@@ -194,6 +204,47 @@ ${extraPrompt}`;
     translations.push(typeof val === 'object' ? JSON.stringify(val) : String(val));
   }
   return translations;
+}
+
+async function translateViaAzure(lines: string[], lang: string): Promise<string[]> {
+  if (!AZURE_TRANSLATOR_KEY || !AZURE_TRANSLATOR_REGION) throw new Error('Azure Translator 환경 변수가 설정되지 않았습니다.');
+  const output: string[] = [];
+  let batch: string[] = [];
+  let characters = 0;
+  const flush = async () => {
+    if (!batch.length) return;
+    let response: Response | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        response = await fetch(`${AZURE_TRANSLATOR_ENDPOINT}/translate?api-version=3.0&from=en&to=${lang}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Ocp-Apim-Subscription-Key': AZURE_TRANSLATOR_KEY, 'Ocp-Apim-Subscription-Region': AZURE_TRANSLATOR_REGION }, body: JSON.stringify(batch.map((text) => ({ Text: text }))), signal: AbortSignal.timeout(30000) });
+      } catch (error) {
+        if (attempt === 2) throw error;
+        await delay(500 * (attempt + 1));
+        continue;
+      }
+      if (response.status === 403 || response.status === 429) throw new TranslationQuotaError(`Azure Translator 할당량 중단: HTTP ${response.status}`);
+      if (response.status >= 500 && attempt < 2) {
+        await delay(500 * (attempt + 1));
+        continue;
+      }
+      break;
+    }
+    if (!response?.ok) throw new Error(`Azure Translator 오류: HTTP ${response?.status || 0}`);
+    const data = await response.json() as Array<{ translations: Array<{ text: string }> }>;
+    output.push(...data.map((row) => row.translations[0].text));
+    batch = []; characters = 0;
+  };
+  for (const line of lines) {
+    const length = Array.from(line).length;
+    if (batch.length >= 25 || characters + length > 5000) await flush();
+    batch.push(line); characters += length;
+  }
+  await flush();
+  return output;
+}
+
+async function translateViaConfiguredProvider(lines: string[], lang: string, temperature = 0.7, extraPrompt = '') {
+  return providerArg === 'azure' ? translateViaAzure(lines, lang) : translateViaOpenAI(lines, lang, temperature, extraPrompt);
 }
 
 // ─────────────────────────────────────────────
@@ -301,42 +352,33 @@ async function main(): Promise<void> {
       continue;
     }
 
-    const koMappings = mappings.filter((m) => m.language_code === 'ko');
-    const jaMappings = mappings.filter((m) => m.language_code === 'ja');
-
-    // 대표 원본 텍스트 및 오프셋 정보 확보
-    const templateMapping = mappings[0] as MappingRow | undefined;
-    if (!templateMapping) {
-      // 아예 맵핑 데이터가 전무한 특이 케이스는 자동 복구 불가
-      continue;
+    const sourceByOffset = new Map<number, MappingRow>();
+    for (const mapping of (mappings as MappingRow[]).filter((row) => row.is_approved).sort((left, right) => left.id - right.id)) {
+      const existing = sourceByOffset.get(mapping.offset_dec);
+      if (existing && (existing.original_text !== mapping.original_text || existing.encoding !== mapping.encoding || existing.max_char_len !== mapping.max_char_len)) {
+        throw new Error(`동일 offset 원문 슬롯 충돌: ${mapping.offset_dec}`);
+      }
+      if (!existing) sourceByOffset.set(mapping.offset_dec, mapping);
     }
-
-    const originalText = templateMapping.original_text;
-    const offsetDec = templateMapping.offset_dec;
-    const encoding = templateMapping.encoding;
-    const maxCharLen = templateMapping.max_char_len;
-
-    // 복구 여부 판정
-    const koNeedRepair = koMappings.length === 0 || koMappings.some((m) => isBadTranslation(m.translated_text, 'ko', originalText));
-    const jaNeedRepair = jaMappings.length === 0 || jaMappings.some((m) => isBadTranslation(m.translated_text, 'ja', originalText));
-
-    if (!koNeedRepair && !jaNeedRepair) {
-      continue;
+    const repairTasks: Array<{ lang: 'ko' | 'ja'; templateMapping: MappingRow }> = [];
+    for (const templateMapping of sourceByOffset.values()) {
+      for (const lang of ['ko', 'ja'] as const) {
+        const target = (mappings as MappingRow[]).find((mapping) => mapping.language_code === lang && mapping.offset_dec === templateMapping.offset_dec);
+        if (!target || isBadTranslation(target.translated_text, lang, templateMapping.original_text)) repairTasks.push({ lang, templateMapping });
+      }
     }
+    if (!repairTasks.length) continue;
 
     console.log(`\n🔍 복구 대상 발견: Trainer ID ${trainer.id} (${trainer.version_str})`);
-    if (koNeedRepair) console.log('   - 한국어(ko) 번역 유실/불량 감지');
-    if (jaNeedRepair) console.log('   - 일본어(ja) 번역 유실/불량 감지');
+    console.log(`   - 옵션 슬롯 ${repairTasks.length}건 복구 필요`);
 
     try {
-      const originalLines = originalText.split('\n');
-
-      // 복구할 언어들에 대해 개별 번역 실행
-      const languagesToRepair: Array<'ko' | 'ja'> = [];
-      if (koNeedRepair) languagesToRepair.push('ko');
-      if (jaNeedRepair) languagesToRepair.push('ja');
-
-      for (const lang of languagesToRepair) {
+      for (const { lang, templateMapping } of repairTasks) {
+        const originalText = templateMapping.original_text;
+        const offsetDec = templateMapping.offset_dec;
+        const encoding = templateMapping.encoding;
+        const maxCharLen = templateMapping.max_char_len;
+        const originalLines = originalText.split('\n');
         // 로컬 번역 시도 및 API 전송 대상 수집
         const translatedLines = new Array<string>(originalLines.length);
         const apiIndices: number[] = [];
@@ -395,11 +437,11 @@ async function main(): Promise<void> {
               let translatedArray: string[] = [];
               if (attempt === 1) {
                 console.log(`   [*] OpenAI를 통한 ${lang} 번역 수행 중... (시도 ${attempt}/${attempts}, 대상: ${apiLinesToTranslate.length} 라인)`);
-                translatedArray = await translateViaOpenAI(apiLinesToTranslate, lang, 0.7, '');
+                translatedArray = await translateViaConfiguredProvider(apiLinesToTranslate, lang, 0.7, '');
               } else {
                 console.log(`   [⚠️] ${lang} 번역 재시도 중... (시도 ${attempt}/${attempts})`);
                 const extraPrompt = `\n\nIMPORTANT: Your previous output had a mismatch in lines. The input has exactly ${apiLinesToTranslate.length} elements. You MUST return exactly ${apiLinesToTranslate.length} translation strings.`;
-                translatedArray = await translateViaOpenAI(apiLinesToTranslate, lang, 0.1, extraPrompt);
+                translatedArray = await translateViaConfiguredProvider(apiLinesToTranslate, lang, 0.1, extraPrompt);
               }
 
               if (translatedArray.length !== apiLinesToTranslate.length) {
@@ -414,6 +456,7 @@ async function main(): Promise<void> {
               success = true;
               break;
             } catch (err) {
+              if (err instanceof TranslationQuotaError) throw err;
               lastErrorMsg = (err as Error).message;
               console.log(`   [-] ${lang} 번역 시도 ${attempt} 실패: ${lastErrorMsg}`);
               if (attempt < attempts) {
@@ -433,7 +476,7 @@ async function main(): Promise<void> {
                 const lineAttempts = 3;
                 for (let lineAttempt = 1; lineAttempt <= lineAttempts; lineAttempt++) {
                   try {
-                    const result = await translateViaOpenAI([line], lang, 0.3);
+                    const result = await translateViaConfiguredProvider([line], lang, 0.3);
                     if (result.length > 0) {
                       translatedArray.push(result[0]);
                       lineSuccess = true;
@@ -442,6 +485,7 @@ async function main(): Promise<void> {
                       throw new Error('Empty translation response');
                     }
                   } catch (err) {
+                    if (err instanceof TranslationQuotaError) throw err;
                     lineErrorMsg = (err as Error).message;
                     console.log(`     [-] 라인 ${j} 번역 시도 ${lineAttempt} 실패: ${lineErrorMsg}`);
                     if (lineAttempt < lineAttempts) {
@@ -488,17 +532,9 @@ async function main(): Promise<void> {
         });
         const finalTranslatedText = adjustedLines.join('\n');
 
-        // 기존 불량 맵핑 삭제
-        await supabase
-          .from('translation_mappings')
-          .delete()
-          .eq('trainer_id', trainer.id)
-          .eq('language_code', lang);
-
-        // 신규 매핑 삽입
-        const { error: insertError } = await supabase
-          .from('translation_mappings')
-          .insert({
+        // 자동 결과는 검수 전까지 공개하지 않고 동일 trainer/language 행을 갱신한다.
+        const { data: draftResult, error: insertError } = await supabase
+          .rpc('upsert_translation_draft', { p_mapping: {
             trainer_id: trainer.id,
             language_code: lang,
             original_text: originalText,
@@ -506,13 +542,13 @@ async function main(): Promise<void> {
             offset_dec: offsetDec,
             encoding: encoding,
             max_char_len: maxCharLen,
-            is_approved: true,
-          });
+            translation_provider: providerArg,
+          } });
 
         if (insertError) {
           console.error(`   ❌ ${lang} DB 삽입 실패: ${insertError.message}`);
         } else {
-          console.log(`   ✅ ${lang} 번역 복구 및 승인 완료`);
+          console.log(draftResult?.saved ? `   ✅ ${lang} 번역 초안 저장 완료` : `   ℹ️ ${lang} 승인 매핑을 보존해 초안을 건너뜀`);
         }
       }
 

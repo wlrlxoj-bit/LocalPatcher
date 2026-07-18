@@ -25,6 +25,13 @@ SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("NE
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+AZURE_TRANSLATOR_KEY = os.environ.get("AZURE_TRANSLATOR_KEY")
+AZURE_TRANSLATOR_REGION = os.environ.get("AZURE_TRANSLATOR_REGION")
+AZURE_TRANSLATOR_ENDPOINT = (os.environ.get("AZURE_TRANSLATOR_ENDPOINT") or "https://api.cognitive.microsofttranslator.com").rstrip("/")
+TRANSLATION_PROVIDER = "azure"
+
+class TranslationQuotaError(RuntimeError):
+    pass
 
 # Dictionary of common trainer translations for cost-free instant translation mapping
 COMMON_TRANSLATIONS = {
@@ -215,11 +222,33 @@ def _call_openai(lines_to_translate, prompt, temperature):
         "temperature": temperature,
         "response_format": {"type": "json_object"}
     }
-    res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=60)
+    res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=30)
+    if res.status_code in (403, 429):
+        raise TranslationQuotaError(f"OpenAI 유료 번역 할당량 중단: HTTP {res.status_code}")
     if res.status_code != 200:
         raise RuntimeError(f"OpenAI API가 HTTP {res.status_code}을 반환했습니다: {res.text[:500]}")
     text_response = res.json()["choices"][0]["message"]["content"]
     return _parse_indexed_translations(text_response, len(lines_to_translate))
+
+def _call_azure(lines_to_translate, _prompt, _temperature):
+    """Azure Translator F0 기본 경로. 항목 25개·유니코드 5000자 이내 배치만 호출한다."""
+    if not AZURE_TRANSLATOR_KEY or not AZURE_TRANSLATOR_REGION:
+        raise RuntimeError("Azure Translator 환경 변수가 설정되지 않았습니다")
+    if len(lines_to_translate) > 25 or sum(len(line) for line in lines_to_translate) > 5000:
+        raise RuntimeError("Azure Translator 배치 제한을 초과했습니다")
+    headers = {"Content-Type": "application/json", "Ocp-Apim-Subscription-Key": AZURE_TRANSLATOR_KEY, "Ocp-Apim-Subscription-Region": AZURE_TRANSLATOR_REGION}
+    for attempt in range(3):
+        target_language = "ja" if "Japanese" in _prompt else "ko"
+        res = requests.post(f"{AZURE_TRANSLATOR_ENDPOINT}/translate?api-version=3.0&from=en&to={target_language}", headers=headers, json=[{"Text": line} for line in lines_to_translate], timeout=30)
+        if res.status_code in (403, 429):
+            raise TranslationQuotaError(f"Azure Translator 할당량 중단: HTTP {res.status_code}")
+        if res.status_code >= 500 and attempt < 2:
+            time.sleep(attempt + 1)
+            continue
+        if res.status_code != 200:
+            raise RuntimeError(f"Azure Translator HTTP {res.status_code}")
+        return [row["translations"][0]["text"] for row in res.json()]
+    raise RuntimeError("Azure Translator 요청 실패")
 
 
 def _translate_via_llm_with_fallback(lines_to_translate, language, example_translation, providers):
@@ -241,6 +270,8 @@ def _translate_via_llm_with_fallback(lines_to_translate, language, example_trans
             try:
                 return provider(lines_to_translate, prompt, 0.7 if attempt == 1 else 0.1)
             except Exception as exc:
+                if isinstance(exc, TranslationQuotaError):
+                    raise
                 last_error = str(exc)
                 print(f"[-] {provider_name} {language_label} 일괄 번역 {attempt}/4회 실패: {last_error}")
         if attempt < 4:
@@ -257,6 +288,8 @@ def _translate_via_llm_with_fallback(lines_to_translate, language, example_trans
                     translated = provider([line], prompt, 0.3)[0]
                     break
                 except Exception as exc:
+                    if isinstance(exc, TranslationQuotaError):
+                        raise
                     last_error = str(exc)
                     print(f"[-] {provider_name} {language_label} {idx}번 줄 번역 {attempt}/3회 실패: {last_error}")
             if translated is not None:
@@ -273,11 +306,7 @@ def _translate_via_llm_with_fallback(lines_to_translate, language, example_trans
 
 def translate_via_llm(lines_to_translate):
     """모든 원문 줄의 위치를 보존하면서 한국어로 번역한다."""
-    providers = []
-    if GEMINI_API_KEY:
-        providers.append(("Gemini", _call_gemini))
-    if OPENAI_API_KEY:
-        providers.append(("OpenAI", _call_openai))
+    providers = [("Azure", _call_azure)] if TRANSLATION_PROVIDER == "azure" else [("OpenAI Paid", _call_openai)]
     return _translate_via_llm_with_fallback(lines_to_translate, "Korean", "무한 체력", providers)
 
 def translate_line(line: str):
@@ -342,7 +371,7 @@ def process_translation_block(text: str, db: Client) -> str:
 
     # Second Pass: Perform batch LLM translation if keys are set
     llm_results = []
-    if lines_needing_llm and (GEMINI_API_KEY or OPENAI_API_KEY):
+    if lines_needing_llm:
         llm_results = translate_via_llm(lines_needing_llm)
 
     # Third Pass: Assemble and apply Space Padding to synchronize lengths
@@ -460,7 +489,7 @@ def _translate_via_llm_ja_legacy(lines_to_translate):
 
 def translate_via_llm_ja(lines_to_translate):
     """모든 원문 줄의 위치를 보존하면서 일본어로 번역한다."""
-    providers = [("OpenAI", _call_openai)] if OPENAI_API_KEY else []
+    providers = [("Azure", _call_azure)] if TRANSLATION_PROVIDER == "azure" else [("OpenAI Paid", _call_openai)]
     return _translate_via_llm_with_fallback(lines_to_translate, "Japanese", "無限体力", providers)
 
 def process_translation_block_ja(text: str, db: Client) -> str:
@@ -482,7 +511,7 @@ def process_translation_block_ja(text: str, db: Client) -> str:
             lines_needing_llm.append(line)
 
     llm_results = []
-    if lines_needing_llm and OPENAI_API_KEY:
+    if lines_needing_llm:
         llm_results = translate_via_llm_ja(lines_needing_llm)
 
     translated_lines = []
@@ -807,7 +836,10 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
                 if trainer_res.data:
                     trainer_id = trainer_res.data[0]['id']
                     # Check if it has any translation mappings
-                    mappings_res = db.table('translation_mappings').select('id').eq('trainer_id', trainer_id).execute()
+                    mappings_res = db.table('translation_mappings').select('id,is_approved').eq('trainer_id', trainer_id).execute()
+                    if mappings_res.data and any(mapping.get('is_approved') for mapping in mappings_res.data):
+                        print(f"    [*] Skip/Protect: Trainer ID {trainer_id} has approved translation mappings. Skipping overwrite.")
+                        continue
                     if mappings_res.data and len(mappings_res.data) > 0 and not force:
                         print(f"    [*] Skip/Protect: Trainer ID {trainer_id} has existing translation mappings. Skipping overwrite.")
                         continue
@@ -867,30 +899,21 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
                 translated_text_ko = process_translation_block(mapping_details['original_text'], db)
                 translated_text_ja = process_translation_block_ja(mapping_details['original_text'], db)
                 
-                # Write translation mappings to DB (instantly approved for automated site deployment)
+                # 자동 초안은 승인된 기존 매핑을 절대 덮어쓰지 않는 DB RPC로 저장한다.
                 clean_orig_text = mapping_details['original_text'].replace('\x00', '').replace('\u0000', '')
-                
-                db.table('translation_mappings').insert({
-                    'trainer_id': trainer_id,
-                    'offset_dec': mapping_details['offset_dec'],
-                    'encoding': mapping_details['encoding'],
-                    'original_text': clean_orig_text,
-                    'translated_text': translated_text_ko.replace('\x00', '').replace('\u0000', ''),
-                    'max_char_len': mapping_details['max_char_len'],
-                    'language_code': 'ko',
-                    'is_approved': True  # Instantly live approved
-                }).execute()
-                
-                db.table('translation_mappings').insert({
-                    'trainer_id': trainer_id,
-                    'offset_dec': mapping_details['offset_dec'],
-                    'encoding': mapping_details['encoding'],
-                    'original_text': clean_orig_text,
-                    'translated_text': translated_text_ja.replace('\x00', '').replace('\u0000', ''),
-                    'max_char_len': mapping_details['max_char_len'],
-                    'language_code': 'ja',
-                    'is_approved': True  # Instantly live approved
-                }).execute()
+                draft_mappings = []
+                for language_code, translated_text in [('ko', translated_text_ko), ('ja', translated_text_ja)]:
+                    draft_mappings.append({
+                        'trainer_id': trainer_id, 'offset_dec': mapping_details['offset_dec'],
+                        'encoding': mapping_details['encoding'], 'original_text': clean_orig_text,
+                        'translated_text': translated_text.replace('\x00', '').replace('\u0000', ''),
+                        'max_char_len': mapping_details['max_char_len'], 'language_code': language_code,
+                        'translation_provider': TRANSLATION_PROVIDER
+                    })
+                result = db.rpc('upsert_translation_drafts', {'p_mappings': draft_mappings}).execute()
+                for draft_result in (result.data or {}).get('results', []):
+                    if not draft_result.get('saved', False):
+                        print(f"[*] Offset {draft_result.get('offsetDec')} approved mapping preserved; draft was not written.")
                 
                 print(f"[+] Successfully registered new trainer ID: {trainer_id} for Game ID: {game_id}!")
                 
@@ -901,10 +924,16 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
         print(f"[-] Error processing page: {e}")
 
 def main():
+    global TRANSLATION_PROVIDER
     parser = argparse.ArgumentParser(description="FLiNG Trainer Scraper Pipeline")
     parser.add_argument("--force", action="store_true", help="Force re-processing and overwriting of existing trainers")
     parser.add_argument("--url", type=str, help="Pinpoint scrape a single target FLiNG trainer URL")
+    parser.add_argument("--provider", choices=["azure", "openai_paid"], default="azure")
+    parser.add_argument("--confirm-paid", action="store_true", help="OpenAI 유료 호출을 명시적으로 승인")
     args = parser.parse_args()
+    if args.provider == "openai_paid" and not args.confirm_paid:
+        parser.error("openai_paid 사용에는 --confirm-paid가 필요합니다")
+    TRANSLATION_PROVIDER = args.provider
     
     if not SUPABASE_URL or not SUPABASE_KEY:
         print("[-] Supabase environment credentials not configured.")

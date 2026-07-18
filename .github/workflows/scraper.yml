@@ -34,12 +34,12 @@ jobs:
         NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        AZURE_TRANSLATOR_KEY: ${{ secrets.AZURE_TRANSLATOR_KEY }}
+        AZURE_TRANSLATOR_REGION: ${{ secrets.AZURE_TRANSLATOR_REGION }}
+        AZURE_TRANSLATOR_ENDPOINT: ${{ secrets.AZURE_TRANSLATOR_ENDPOINT }}
       run: |
         if [ -n "${{ github.event.inputs.target_url }}" ]; then
-          python scripts/scraper.py --url "${{ github.event.inputs.target_url }}"
+          python scripts/scraper.py --provider azure --url "${{ github.event.inputs.target_url }}"
         else
-          python scripts/scraper.py
+          python scripts/scraper.py --provider azure
         fi
-
