@@ -101,38 +101,6 @@ export default async function LocaleLayout({
           });
         `}
       </Script>
-      {process.env.NEXT_PUBLIC_ADSENSE_ID && (
-        <>
-          <Script
-            async
-            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${process.env.NEXT_PUBLIC_ADSENSE_ID}`}
-            crossOrigin="anonymous"
-            strategy="afterInteractive"
-            data-ad-client={process.env.NEXT_PUBLIC_ADSENSE_ID}
-          />
-          {/* SPA 환경에서 페이지 이동 시 애드센스 광고 갱신 지원을 위한 클라이언트 헬퍼 */}
-          <Script id="adsense-spa-helper" strategy="afterInteractive">
-            {`
-              (function() {
-                let lastPathname = window.location.pathname;
-                const observer = new MutationObserver(() => {
-                  if (window.location.pathname !== lastPathname) {
-                    lastPathname = window.location.pathname;
-                    try {
-                      if (window.adsbygoogle) {
-                        (window.adsbygoogle = window.adsbygoogle || []).push({});
-                      }
-                    } catch (e) {
-                      console.error('AdSense SPA update failed:', e);
-                    }
-                  }
-                });
-                observer.observe(document.documentElement, { childList: true, subtree: true });
-              })();
-            `}
-          </Script>
-        </>
-      )}
       <body className="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500 selection:text-slate-950">
         <div className="relative min-h-screen flex flex-col z-0">
           {/* Background Decorative Light Gradients */}

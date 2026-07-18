@@ -1,48 +1,21 @@
 import { MetadataRoute } from 'next';
-import { supabase, mockGames } from '@/lib/supabase';
 import { SITE_URL, SUPPORTED_LOCALES } from '@/lib/site';
+import { getEligiblePatcherSlugs } from '@/lib/content-eligibility';
 
 export const revalidate = 86400;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const locales = SUPPORTED_LOCALES;
   
-  // 1. Fetch games and trainers from database to find patchable games
-  let patchableGameSlugs: string[] = [];
-  
-  if (supabase) {
-    try {
-      // Fetch games
-      const { data: gamesData } = await supabase.from('games').select('id, slug');
-      // Fetch trainers
-      const { data: trainersData } = await supabase.from('trainers').select('game_id, option_count');
-      
-      if (gamesData && trainersData) {
-        // Build set of game IDs that have at least one patchable trainer (option_count > 0)
-        const patchableGameIds = new Set(
-          trainersData
-            .filter(t => t.option_count > 0)
-            .map(t => t.game_id)
-        );
-        
-        patchableGameSlugs = gamesData
-          .filter(g => patchableGameIds.has(g.id))
-          .map(g => g.slug);
-      }
-    } catch (err) {
-      console.error('Sitemap DB query failed:', err);
-    }
-  }
-  
-  // Fallback to mock data if DB failed or is not configured
-  if (patchableGameSlugs.length === 0) {
-    patchableGameSlugs = mockGames.map(g => g.slug);
-  }
+  const eligibleSlugs = {
+    ko: await getEligiblePatcherSlugs('ko'),
+    ja: await getEligiblePatcherSlugs('ja'),
+  };
 
   const sitemapEntries: MetadataRoute.Sitemap = [];
 
   // 2. Static pages for each locale
-  const staticPaths = ['', '/terms', '/privacy', '/faq', '/guides'];
+  const staticPaths = ['', '/terms', '/privacy', '/faq', '/guides', '/about', '/editorial-policy', '/contact'];
   
   for (const locale of locales) {
     for (const path of staticPaths) {
@@ -55,8 +28,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   // 3. Dynamic game detail pages for each locale
-  for (const locale of locales) {
-    for (const slug of patchableGameSlugs) {
+  for (const locale of ['ko', 'ja'] as const) {
+    for (const slug of eligibleSlugs[locale]) {
       sitemapEntries.push({
         url: `${SITE_URL}/${locale}/patcher/${slug}`,
         changeFrequency: 'weekly',

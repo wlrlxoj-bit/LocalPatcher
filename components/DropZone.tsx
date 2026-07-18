@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import Link from 'next/link';
 import { UploadCloud, CheckCircle2, AlertTriangle, Loader2, Info, Download } from 'lucide-react';
 import { Locale, getDictionary } from '@/lib/i18n';
 import { ZipWriter, BlobWriter, BlobReader } from '@zip.js/zip.js';
@@ -43,30 +42,8 @@ class PatchFailureError extends Error {
     this.name = 'PatchFailureError';
   }
 }
-const adBlockTexts = {
-  ko: {
-    title: '💚 따뜻한 후원의 클릭 한 번 부탁드립니다!',
-    message: '안녕하세요, LocalPatcher 개발자입니다. 저희 사이트는 유저님의 <span class="text-cyan-400 font-bold">어떠한 개인정보나 파일도 서버에 전송/수집하지 않고</span>, 브라우저 로컬에서 안전하게 번역을 진행하는 착한 무료 웹 도구입니다. 730여 개 패키지 게임의 번역 사전 데이터베이스를 무료로 유지하기 위해 <span class="text-cyan-400 font-bold">다운로드 시 딱 한 번만 실행되는 광고</span> 하나만 아주 조심스레 운영하고 있습니다. 괜찮으시다면 <span class="text-cyan-400 font-bold">광고 차단(AdBlock)을 잠시 꺼주시고</span> 아래의 새로고침을 통해 기부에 동참해 주시겠어요? 유저님의 <span class="text-cyan-400 font-bold">따뜻한 클릭 한 번</span>이 서버 유지에 큰 보탬이 됩니다. 늘 진심으로 감사드립니다!',
-    primaryBtn: '광고 허용 후 새로고침하기 (감사합니다! 💚)',
-    secondaryBtn: '광고 차단을 유지한 채 그냥 다운로드받기',
-  },
-  ja: {
-    title: '💚 温かい応援のクリックをお願いいたします！',
-    message: 'こんにちは、LocalPatcherの開発者です。当サイトはユーザー様の<span class="text-cyan-400 font-bold">個人情報やファイルを一切サーバーに送信・収集せず</span>、ブラウザのローカル環境で安全に翻訳を行う無料のウェブツールです。730タイトル以上のゲーム翻訳データベースを無料で維持するため、<span class="text-cyan-400 font-bold">ダウンロード時に一度だけ表示される広告</span>のみを慎重に運営しております。もしよろしければ、<span class="text-cyan-400 font-bold">広告ブロック(AdBlock)を一時的に無効化し</span>、リロードしてご協力いただけないでしょうか？皆様の<span class="text-cyan-400 font-bold">温かいクリック</span>がサーバー維持に大きな力となります。いつも心より感謝申し上げます！',
-    primaryBtn: '広告を許可してリロードする (ありがとうございます！ 💚)',
-    secondaryBtn: '広告ブロックを維持したままダウンロード',
-  },
-  en: {
-    title: '💚 Support us with a simple click!',
-    message: 'Hello, this is the developer of LocalPatcher. Our site is a free web tool that localizes trainers completely in your local browser <span class="text-cyan-400 font-bold">without uploading any of your files or personal data to servers</span>. In order to maintain the database for over 730 games for free, we <span class="text-cyan-400 font-bold">only run a single download ad</span>. If you don\'t mind, could you please <span class="text-cyan-400 font-bold">temporarily disable your ad blocker (AdBlock)</span> and refresh the page to support us? <span class="text-cyan-400 font-bold">Your kind click</span> goes a long way in covering our hosting costs. Thank you so much for your support!',
-    primaryBtn: 'Disable AdBlock & Refresh (Thank you! 💚)',
-    secondaryBtn: 'Keep AdBlock active and download anyway',
-  }
-};
-
 export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainers, mappingsMap, onTrainerDetected }: DropZoneProps) {
   const t = getDictionary(locale);
-  const adText = adBlockTexts[locale] || adBlockTexts.en;
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isDragActive, setIsDragActive] = useState(false);
@@ -77,7 +54,6 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
   const [bypassCheck, setBypassCheck] = useState(false);
   const [patchedFileUrl, setPatchedFileUrl] = useState<string | null>(null);
   const [patchedFileName, setPatchedFileName] = useState('');
-  const [isAdBlockActive, setIsAdBlockActive] = useState(false);
   // 퍼널 비교를 위해 첫 시도만 집계합니다. 성공/실패 재시도 횟수는 별도 지표에 섞지 않습니다.
   const fileSelectionAttemptTrackedRef = useRef(false);
   const fileSelectedTrackedRef = useRef(false);
@@ -92,53 +68,6 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
     trainer_version: trainer.version_str,
     source_page: 'patcher',
   };
-
-  useEffect(() => {
-    const detectAdBlock = () => {
-      // Create a dummy bait element with common ad classes that ad blockers target
-      const bait = document.createElement('div');
-      // Common class names targeted by AdBlock lists like EasyList
-      bait.className = 'pub_300x250 pub_300x250m pub_728x90 text-ad ad-text ad-banner ad-link adsbox';
-      bait.setAttribute(
-        'style',
-        'width: 1px !important; height: 1px !important; position: absolute !important; left: -10000px !important; top: -10000px !important;'
-      );
-      
-      try {
-        document.body.appendChild(bait);
-        
-        // Wait a tiny delay (100ms) to allow the ad blocker's stylesheet hiding injection to trigger
-        setTimeout(() => {
-          const styles = window.getComputedStyle(bait);
-          const isBlocked =
-            styles.getPropertyValue('display') === 'none' ||
-            styles.getPropertyValue('visibility') === 'hidden' ||
-            bait.offsetHeight === 0 ||
-            bait.offsetWidth === 0 ||
-            bait.clientHeight === 0;
-            
-          setIsAdBlockActive(isBlocked);
-          if (isBlocked) trackAnalyticsEvent('adblock_detected', { adblock: 'detected' });
-          
-          if (document.body.contains(bait)) {
-            document.body.removeChild(bait);
-          }
-        }, 100);
-      } catch (err) {
-        console.error('AdBlock detection failed:', err);
-        // Fallback to true if appending element throws an error (usually indicates strict sandboxing/adblock)
-        setIsAdBlockActive(true);
-        trackAnalyticsEvent('adblock_detected', { adblock: 'detected' });
-      }
-    };
-
-    if (document.readyState === 'complete') {
-      detectAdBlock();
-    } else {
-      window.addEventListener('load', detectAdBlock);
-      return () => window.removeEventListener('load', detectAdBlock);
-    }
-  }, []);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -162,19 +91,6 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [status]);
-
-  useEffect(() => {
-    if (status === 'packaging') {
-      try {
-        const adsbygoogle = (window as any).adsbygoogle;
-        if (adsbygoogle) {
-          adsbygoogle.push({});
-        }
-      } catch (e) {
-        console.error('AdSense push error in packaging:', e);
-      }
-    }
   }, [status]);
 
   // Calculate SHA-256 of file buffer
@@ -476,21 +392,6 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
   const handleDownloadClick = async () => {
     trackAnalyticsEvent('download_started', analyticsContext);
     try {
-      const adUrl = process.env.NEXT_PUBLIC_AD_GATE_URL || "https://www.effectivecpmnetwork.com/idhbg4vm?key=33b748a68cf17f28c5cf24a5aabfb561";
-      try {
-        const adWindow = window.open(adUrl, '_blank');
-        if (adWindow) {
-          trackAnalyticsEvent('ad_gate_opened', { ...analyticsContext, ad_gate: 'opened' });
-          adWindow.blur();
-          window.focus();
-        } else {
-          trackAnalyticsEvent('popup_blocked', { ...analyticsContext, ad_gate: 'blocked' });
-        }
-      } catch (popupErr) {
-        trackAnalyticsEvent('popup_blocked', { ...analyticsContext, ad_gate: 'blocked', reason: 'exception' });
-        console.warn('Ad pop-up blocked or failed.', popupErr);
-      }
-
       // Increment download count in Supabase asynchronously using RPC
       if (supabase && gameId) {
         console.log(`Incrementing download count for game ID: ${gameId}`);
@@ -500,7 +401,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
         }
       }
     } catch (err) {
-      console.warn('Ad pop-up/analytics increment error.', err);
+      console.warn('Download analytics increment error.', err);
     }
   };
 
@@ -594,7 +495,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
               {locale === 'ko' ? '보안 패키징 진행 중...' : locale === 'ja' ? 'セキュリティパッケージ進行中...' : 'Securing and packaging file...'}
             </h3>
             <p className="text-xs text-slate-500 mt-1">
-              {locale === 'ko' ? '백신 오진 우회를 위한 보안 압축이 진행 중입니다.' : locale === 'ja' ? 'ワクチン誤検知回避のための暗号化圧縮を行っています。' : 'Applying security compression to bypass antivirus false-positives.'}
+              {locale === 'ko' ? '다운로드 파일을 ZIP 형식으로 준비하고 있습니다.' : locale === 'ja' ? 'ダウンロードファイルをZIP形式で準備しています。' : 'Preparing the download as a ZIP archive.'}
             </p>
             
             {/* 프로그레스 바 */}
@@ -606,21 +507,6 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
             </div>
             <span className="text-[10px] text-cyan-400 mt-1.5 font-mono font-bold">{Math.round(progress)}%</span>
             
-            {/* 광고 슬롯 (배너 노출 영역) */}
-            <div className="w-full mt-6 p-4 bg-slate-950/80 border border-slate-800 rounded-xl flex flex-col items-center justify-center min-h-[100px] relative overflow-hidden">
-              <span className="absolute top-1 right-2 text-[8px] text-slate-600 font-mono tracking-widest font-bold">ADVERTISEMENT</span>
-              
-              <ins className="adsbygoogle"
-                   style={{ display: 'block', width: '100%', height: '90px' }}
-                   data-ad-client={process.env.NEXT_PUBLIC_ADSENSE_ID || "ca-pub-XXXXXXXXXX"}
-                   data-ad-slot="XXXXXXXXXX"
-                   data-ad-format="horizontal"
-                   data-full-width-responsive="true"></ins>
-              
-              <div className="text-[9px] text-slate-500 text-center pointer-events-none z-10 mt-1">
-                {locale === 'ko' ? '추천 스폰서 광고' : locale === 'ja' ? 'おすすめのスポンサー広告' : 'Sponsored Ad'}
-              </div>
-            </div>
           </div>
         )}
 
@@ -636,35 +522,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
             <p className="text-[10px] text-slate-500 mt-1 font-mono">File: {fileName}</p>
             <p className="text-[10px] text-cyan-400 mt-1 font-semibold">감지된 버전: {trainer.version_str}</p>
             
-            {/* 광고 차단 여부와 관계없이 다운로드는 항상 제공합니다. */}
-            {isAdBlockActive ? (
-              <div className="mt-6 border-emerald-500/20 bg-slate-900/40 p-5 rounded-2xl border text-left max-w-sm w-full space-y-4">
-                <div className="text-sm font-semibold text-emerald-400 flex items-center space-x-1.5">
-                  <span>{adText.title}</span>
-                </div>
-                <p 
-                  className="text-xs text-slate-300 leading-relaxed whitespace-pre-line"
-                  dangerouslySetInnerHTML={{ __html: adText.message }}
-                />
-                <div className="flex flex-col space-y-2 pt-2">
-                  <button
-                    onClick={() => window.location.reload()}
-                    className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95 text-center"
-                  >
-                    {adText.primaryBtn}
-                  </button>
-                  <a
-                    href={patchedFileUrl || '#'}
-                    download={patchedFileName}
-                    onClick={handleDownloadClick}
-                    className="w-full px-4 py-2.5 rounded-xl border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/10 font-bold text-xs transition-all text-center"
-                  >
-                    {adText.secondaryBtn}
-                  </a>
-                </div>
-              </div>
-            ) : (
-              <a
+            <a
                 href={patchedFileUrl || '#'}
                 download={patchedFileName}
                 onClick={handleDownloadClick}
@@ -679,18 +537,6 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
                       : 'Download Localized Trainer'}
                 </span>
               </a>
-            )}
-
-            <p className="mt-3 max-w-sm text-center text-[10px] leading-relaxed text-slate-500">
-              {locale === 'ko'
-                ? '다운로드를 시작하면 서비스 운영을 위한 광고 페이지가 새 탭에서 열릴 수 있습니다. 광고 차단 여부와 관계없이 파일 다운로드는 계속됩니다. '
-                : locale === 'ja'
-                  ? 'ダウンロード開始時に、サービス運営のための広告ページが新しいタブで開く場合があります。広告ブロックの有無にかかわらず、ファイルのダウンロードは続行されます。 '
-                  : 'Starting the download may open a new tab with an advertisement that supports the service. Your file download continues whether or not an ad blocker is active. '}
-              <Link href={`/${locale}/privacy`} className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">
-                {locale === 'ko' ? '개인정보처리방침' : locale === 'ja' ? 'プライバシーポリシー' : 'Privacy Policy'}
-              </Link>
-            </p>
 
             {/* Password Notice */}
             <div className="mt-4 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-left max-w-xs w-full">
@@ -706,10 +552,10 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
               </p>
               <p className="text-[9px] text-slate-400 mt-1 leading-normal text-center">
                 {locale === 'ko'
-                  ? '백신(Windows Defender)의 실시간 다운로드 삭제 및 오진을 우회하기 위해 비밀번호가 걸려 있습니다.'
+                  ? '파일 전달을 위해 비밀번호가 설정된 ZIP 형식으로 제공됩니다. 실행 전 출처와 보안 검사 결과를 직접 확인하세요.'
                   : locale === 'ja'
-                    ? 'ワクチンの強制削除を回避するため、暗号化されています。'
-                    : 'Encrypted to prevent immediate Windows Defender delete/quarantine.'}
+                    ? 'ファイル配布のため、パスワード付きZIP形式で提供します。実行前に配布元とセキュリティ検査結果をご確認ください。'
+                    : 'Provided as a password-protected ZIP for file delivery. Verify the source and security scan results before running it.'}
               </p>
             </div>
 
@@ -753,7 +599,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
             />
             <span className="flex items-center">
               <Info className="w-3 h-3 mr-1 text-slate-500" />
-              개발자 테스트용 무결성 검증 우회 (Force Patch)
+              개발자 테스트용 파일 일치 검사 건너뛰기
             </span>
           </label>
         </div>

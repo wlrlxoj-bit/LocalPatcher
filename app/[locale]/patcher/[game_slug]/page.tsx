@@ -4,6 +4,7 @@ import PatcherClient from '@/components/PatcherClient';
 import { getGameBySlug, getTrainersForGame, getMappingsForTrainers } from '@/lib/supabase';
 import { Locale } from '@/lib/i18n';
 import { SITE_URL } from '@/lib/site';
+import { isPatcherIndexEligible } from '@/lib/content-eligibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,16 @@ export async function generateMetadata({ params }: PatcherPageProps) {
   }
 
   const trainers = await getTrainersForGame(game.id);
+  const [koEligible, jaEligible] = await Promise.all([
+    isPatcherIndexEligible(game.id, 'ko'),
+    isPatcherIndexEligible(game.id, 'ja'),
+  ]);
+  const indexEligible = currentLocale === 'ko' ? koEligible : currentLocale === 'ja' ? jaEligible : false;
+  const alternateLanguages: Record<string, string> = {};
+  if (koEligible) alternateLanguages.ko = `/ko/patcher/${game_slug}`;
+  if (jaEligible) alternateLanguages.ja = `/ja/patcher/${game_slug}`;
+  if (koEligible) alternateLanguages['x-default'] = `/ko/patcher/${game_slug}`;
+  else if (jaEligible) alternateLanguages['x-default'] = `/ja/patcher/${game_slug}`;
   const versionsStr = trainers && trainers.length > 0
     ? trainers.map(t => t.version_str).join(', ')
     : '';
@@ -56,14 +67,10 @@ export async function generateMetadata({ params }: PatcherPageProps) {
     title,
     description,
     keywords,
+    robots: indexEligible ? { index: true, follow: true } : { index: false, follow: true },
     alternates: {
       canonical: `/${currentLocale}/patcher/${game_slug}`,
-      languages: {
-        'ko': `/ko/patcher/${game_slug}`,
-        'en': `/en/patcher/${game_slug}`,
-        'ja': `/ja/patcher/${game_slug}`,
-        'x-default': `/en/patcher/${game_slug}`,
-      },
+      ...(Object.keys(alternateLanguages).length > 0 ? { languages: alternateLanguages } : {}),
     },
     openGraph: {
       type: 'website',

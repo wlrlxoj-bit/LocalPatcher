@@ -16,6 +16,11 @@ export default function Header({ locale }: HeaderProps) {
   const router = useRouter();
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const trustLinks = {
+    ko: { about: '사이트 소개', editorial: '편집 정책', contact: '오류 신고' },
+    en: { about: 'About', editorial: 'Editorial Policy', contact: 'Report an Issue' },
+    ja: { about: 'サイト紹介', editorial: '編集方針', contact: '問題を報告' },
+  }[locale];
 
   const handleLanguageChange = (newLocale: Locale) => {
     setIsLangDropdownOpen(false);
@@ -53,7 +58,7 @@ export default function Header({ locale }: HeaderProps) {
         </Link>
 
         {/* Desktop Navigation */}
-        <nav className="hidden md:flex space-x-8 text-sm font-medium">
+        <nav className="hidden lg:flex items-center gap-4 text-xs font-medium">
           <Link 
             href={`/${locale}`} 
             className={`${pathname === `/${locale}` || pathname.includes('/patcher') ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'} transition-colors duration-200`}
@@ -67,10 +72,16 @@ export default function Header({ locale }: HeaderProps) {
             {t.guideTab}
           </Link>
           <Link 
-            href={`/${locale}/#safety`} 
-            className="text-slate-400 hover:text-slate-200 transition-colors duration-200"
+            href={`/${locale}/about`}
+            className={`${pathname.includes('/about') ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'} transition-colors duration-200 whitespace-nowrap`}
           >
-            {t.aboutTab}
+            {trustLinks.about}
+          </Link>
+          <Link href={`/${locale}/editorial-policy`} className={`${pathname.includes('/editorial-policy') ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'} transition-colors duration-200 whitespace-nowrap`}>
+            {trustLinks.editorial}
+          </Link>
+          <Link href={`/${locale}/contact`} className={`${pathname.includes('/contact') ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'} transition-colors duration-200 whitespace-nowrap`}>
+            {trustLinks.contact}
           </Link>
         </nav>
 
@@ -111,7 +122,9 @@ export default function Header({ locale }: HeaderProps) {
           {/* Mobile Menu Button */}
           <button 
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="md:hidden p-1.5 rounded-lg border border-slate-800 text-slate-400 hover:text-white transition-all focus:outline-none"
+            className="lg:hidden p-1.5 rounded-lg border border-slate-800 text-slate-400 hover:text-white transition-all focus:outline-none"
+            aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={isMobileMenuOpen}
           >
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -120,7 +133,7 @@ export default function Header({ locale }: HeaderProps) {
 
       {/* Mobile Navigation Drawer */}
       {isMobileMenuOpen && (
-        <div className="md:hidden border-t border-slate-800 bg-slate-950 px-6 py-4 space-y-4">
+        <div className="lg:hidden border-t border-slate-800 bg-slate-950 px-6 py-4 space-y-4">
           <nav className="flex flex-col space-y-3 text-sm">
             <Link 
               href={`/${locale}`}
@@ -137,11 +150,17 @@ export default function Header({ locale }: HeaderProps) {
               {t.guideTab}
             </Link>
             <Link 
-              href={`/${locale}/#safety`}
+              href={`/${locale}/about`}
               onClick={() => setIsMobileMenuOpen(false)}
               className="text-slate-400 transition-colors"
             >
-              {t.aboutTab}
+              {trustLinks.about}
+            </Link>
+            <Link href={`/${locale}/editorial-policy`} onClick={() => setIsMobileMenuOpen(false)} className={`${pathname.includes('/editorial-policy') ? 'text-cyan-400 font-semibold' : 'text-slate-400'} transition-colors`}>
+              {trustLinks.editorial}
+            </Link>
+            <Link href={`/${locale}/contact`} onClick={() => setIsMobileMenuOpen(false)} className={`${pathname.includes('/contact') ? 'text-cyan-400 font-semibold' : 'text-slate-400'} transition-colors`}>
+              {trustLinks.contact}
             </Link>
           </nav>
         </div>
