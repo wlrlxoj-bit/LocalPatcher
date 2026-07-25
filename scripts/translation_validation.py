@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 import hashlib
+import json
 import re
 from typing import Optional, Tuple
 
@@ -106,6 +107,38 @@ def _same_source(source, translated):
         if len(source_label.strip()) >= 3
     ]
     return bool(comparable) and sum(comparable) / len(comparable) > 0.5
+
+
+def _safe_api_error_fields(exc):
+    """Supabase APIError에서 안전 문자로 된 짧은 code만 추출한다."""
+    if type(exc).__name__ != "APIError":
+        return {}
+    source = {}
+    for item in getattr(exc, "args", ()):
+        if isinstance(item, dict):
+            source.update(item)
+    value = getattr(exc, "code", None)
+    if value is None:
+        value = source.get("code")
+    if not isinstance(value, (str, int, float, bool)) or value == "":
+        return {}
+    code = str(value).replace("\r", "").replace("\n", "")[:100]
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", code):
+        return {}
+    return {"code": code}
+
+
+def _log_save_error(mapping, exc):
+    """비밀·요청 payload 없이 저장 자연키와 허용된 API 진단만 한 줄로 기록한다."""
+    event = {
+        "event": "translation-save-error",
+        "trainer_id": mapping.get("trainer_id"),
+        "locale": mapping.get("language_code"),
+        "offset": mapping.get("offset_dec"),
+        "exception_type": type(exc).__name__,
+    }
+    event.update(_safe_api_error_fields(exc))
+    print(json.dumps(event, ensure_ascii=False, separators=(",", ":")))
 
 
 def validate_translation(*, binary: bytes, expected_sha256: str, expected_size: int,
@@ -253,7 +286,7 @@ def save_validated_draft(db, *, mapping: dict, validation: ValidationResult) -> 
                     .eq("offset_dec", mapping["offset_dec"])
                     .execute())
     except Exception as exc:
-        print(f"[translation-save-error] type={type(exc).__name__}")
+        _log_save_error(mapping, exc)
         return SaveOutcome.DB_ERROR
 
     if len(response.data or []) != 1:

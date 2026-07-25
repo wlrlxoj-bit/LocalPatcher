@@ -1,12 +1,16 @@
 import hashlib
+import io
+import json
 import pathlib
 import sys
 import unittest
+from contextlib import redirect_stdout
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from translation_validation import (
     SaveOutcome,
     ValidationResult,
+    _log_save_error,
     is_option_candidate,
     parse_options,
     save_validated_draft,
@@ -213,6 +217,72 @@ class PersistenceTests(unittest.TestCase):
                     ),
                     SaveOutcome.DB_ERROR,
                 )
+
+    def test_api_error_log_contains_only_safe_fields(self):
+        APIError = type("APIError", (Exception,), {})
+        error = APIError({
+            "code": "23505",
+            "message": "token=DO_NOT_LOG_MESSAGE",
+            "details": "https://private.example/project",
+            "hint": "Bearer DO_NOT_LOG_BEARER",
+            "secret": "DO_NOT_LOG_THIS",
+            "url": "https://private.example/project",
+            "payload": {"token": "ALSO_SECRET"},
+        })
+        output = io.StringIO()
+        with redirect_stdout(output):
+            _log_save_error(self.mapping, error)
+        line = output.getvalue().strip()
+        event = json.loads(line)
+        self.assertEqual(event["trainer_id"], 1)
+        self.assertEqual(event["locale"], "ko")
+        self.assertEqual(event["offset"], 10)
+        self.assertEqual(event["exception_type"], "APIError")
+        self.assertEqual(event["code"], "23505")
+        self.assertNotIn("message", event)
+        self.assertNotIn("details", event)
+        self.assertNotIn("hint", event)
+        self.assertNotIn("DO_NOT_LOG_THIS", line)
+        self.assertNotIn("DO_NOT_LOG_MESSAGE", line)
+        self.assertNotIn("DO_NOT_LOG_BEARER", line)
+        self.assertNotIn("ALSO_SECRET", line)
+        self.assertNotIn("private.example", line)
+
+    def test_api_error_attributes_and_general_exception_are_supported(self):
+        APIError = type("APIError", (Exception,), {})
+        api_error = APIError("opaque-secret")
+        api_error.code = "PGRST116"
+        api_error.message = "row count mismatch"
+        api_output = io.StringIO()
+        with redirect_stdout(api_output):
+            _log_save_error(self.mapping, api_error)
+        api_event = json.loads(api_output.getvalue())
+        self.assertEqual(api_event["code"], "PGRST116")
+        self.assertNotIn("opaque-secret", api_output.getvalue())
+
+        general_output = io.StringIO()
+        with redirect_stdout(general_output):
+            _log_save_error(self.mapping, RuntimeError("DO_NOT_LOG_GENERAL"))
+        general_event = json.loads(general_output.getvalue())
+        self.assertEqual(
+            set(general_event),
+            {"event", "trainer_id", "locale", "offset", "exception_type"},
+        )
+        self.assertNotIn("DO_NOT_LOG_GENERAL", general_output.getvalue())
+
+    def test_malicious_api_error_code_is_omitted(self):
+        APIError = type("APIError", (Exception,), {})
+        error = APIError({
+            "code": "23505\r\nBearer DO_NOT_LOG_CODE",
+            "message": "DO_NOT_LOG_MESSAGE",
+        })
+        output = io.StringIO()
+        with redirect_stdout(output):
+            _log_save_error(self.mapping, error)
+        event = json.loads(output.getvalue())
+        self.assertNotIn("code", event)
+        self.assertNotIn("DO_NOT_LOG_CODE", output.getvalue())
+        self.assertNotIn("DO_NOT_LOG_MESSAGE", output.getvalue())
 
 
 if __name__ == "__main__":
