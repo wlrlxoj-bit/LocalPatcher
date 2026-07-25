@@ -32,6 +32,33 @@ interface GamesListClientProps {
   locale: Locale;
 }
 
+function normalizeText(str: string): string {
+  if (!str) return '';
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ß/g, 'ss')
+    .toLowerCase()
+    .replace(/[^a-z0-9ㄱ-ㅎㅏ-ㅣ가-힣ァ-ンぁ-ん]/g, '');
+}
+
+function getAcronym(str: string): string {
+  if (!str) return '';
+  const words = str.split(/\s+/).filter(Boolean);
+  let acronym = '';
+  for (const word of words) {
+    const cleanWord = normalizeText(word);
+    if (cleanWord.length > 0) {
+      acronym += cleanWord[0];
+    }
+  }
+  return acronym;
+}
+
+function hiraganaToKatakana(str: string): string {
+  return str.replace(/[\u3041-\u3096]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) + 0x60));
+}
+
 function getChosung(str: string): string {
   const cho = [
     'ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'
@@ -77,22 +104,33 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
     .filter(game => game.is_popular === true)
     .sort((a, b) => (a.popularity_index ?? 999) - (b.popularity_index ?? 999));
 
-  // Filter games based on search query (checks both English and Korean titles with Chosung search)
+  // Filter games based on search query across all languages (Chosung, Acronym, Diacritics, Hiragana/Katakana)
   const filteredGames = gamesWithTrainers
     .filter(game => {
-      const queryClean = searchQuery.toLowerCase().replace(/\s+/g, '');
-      const queryChosung = getChosung(queryClean);
-      
-      const titleEnClean = game.title_en.toLowerCase().replace(/\s+/g, '');
-      const titleKoClean = game.title_ko.toLowerCase().replace(/\s+/g, '');
-      const titleJaClean = (game.title_ja || '').toLowerCase().replace(/\s+/g, '');
-      
+      if (!searchQuery.trim()) return true;
+
+      const normQuery = normalizeText(searchQuery);
+      const queryChosung = getChosung(normQuery);
+      const queryKatakana = hiraganaToKatakana(searchQuery.toLowerCase());
+
+      const normEn = normalizeText(game.title_en);
+      const normKo = normalizeText(game.title_ko);
+      const normJa = normalizeText(game.title_ja || '');
+
+      const acronymEn = getAcronym(game.title_en);
+      const acronymKo = getChosung(game.title_ko);
+
       return (
-        titleEnClean.includes(queryClean) ||
-        titleEnClean.includes(queryChosung) ||
-        titleKoClean.includes(queryClean) ||
-        getChosung(titleKoClean).includes(queryChosung) ||
-        titleJaClean.includes(queryClean)
+        // Exact / Substring search across all language titles
+        normEn.includes(normQuery) ||
+        normKo.includes(normQuery) ||
+        normJa.includes(normQuery) ||
+        // Acronym / First-letter shortcut search (e.g., AOW -> Age of Wonders, ER -> Elden Ring)
+        (acronymEn.length > 1 && acronymEn.includes(normQuery)) ||
+        // Korean Chosung search (e.g., ㅇㅇㅇ -> 에이지 오브 원더스)
+        (acronymKo.length > 0 && acronymKo.includes(queryChosung)) ||
+        // Japanese Hiragana ↔ Katakana fuzzy match
+        (normJa.length > 0 && hiraganaToKatakana(normJa).includes(queryKatakana))
       );
     })
     .sort((a, b) => {
