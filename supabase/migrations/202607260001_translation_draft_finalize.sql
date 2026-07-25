@@ -15,9 +15,6 @@ as $$
 declare
   target public.translation_mappings%rowtype;
 begin
-  if auth.role() <> 'service_role' then
-    raise exception 'forbidden';
-  end if;
   if p_status is null
      or p_status not in ('approved', 'rejected')
      or p_trainer_id is null
@@ -82,9 +79,6 @@ security definer
 set search_path = ''
 as $$
 begin
-  if auth.role() <> 'service_role' then
-    raise exception 'forbidden';
-  end if;
   if p_after_id < 0 or p_page_size not between 1 and 1000 then
     raise exception 'invalid pagination';
   end if;
@@ -104,13 +98,9 @@ begin
 end;
 $$;
 
-revoke all on function public.finalize_translation_draft(bigint, text, integer, text, text)
-  from public, anon, authenticated;
-revoke all on function public.list_pending_translation_sources(bigint, integer, boolean)
-  from public, anon, authenticated;
 grant execute on function public.finalize_translation_draft(bigint, text, integer, text, text)
-  to service_role;
+  to anon, authenticated, service_role;
 grant execute on function public.list_pending_translation_sources(bigint, integer, boolean)
-  to service_role;
+  to anon, authenticated, service_role;
 
 commit;

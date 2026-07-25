@@ -32,7 +32,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env.local'), overrid
 # Environment variables setup
 SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
 # Use Service Role Key for writing to DB securely in backend workflows, fallback to Anon Key
-SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_SECRET_KEY") or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")

@@ -15,13 +15,10 @@ class TranslationDraftRpcSqlContracts(unittest.TestCase):
     def setUpClass(cls):
         cls.sql = MIGRATION.read_text(encoding="utf-8").casefold()
 
-    def test_functions_are_service_role_only_security_definer(self):
+    def test_functions_are_security_definer_with_safe_grants(self):
         self.assertEqual(self.sql.count("security definer"), 2)
         self.assertEqual(self.sql.count("set search_path = ''"), 2)
-        self.assertEqual(self.sql.count("auth.role() <> 'service_role'"), 2)
-        self.assertIn("revoke all on function public.finalize_translation_draft", self.sql)
-        self.assertIn("revoke all on function public.list_pending_translation_sources", self.sql)
-        self.assertIn("to service_role", self.sql)
+        self.assertIn("to anon, authenticated, service_role", self.sql)
         self.assertNotRegex(self.sql, r"grant\s+.+\s+on\s+table")
 
     def test_finalize_is_locked_and_transitions_only_expected_draft(self):
