@@ -39,7 +39,7 @@ function normalizeText(str: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/ß/g, 'ss')
     .toLowerCase()
-    .replace(/[^a-z0-9ㄱ-ㅎㅏ-ㅣ가-힣ァ-ンぁ-ん]/g, '');
+    .replace(/[^\p{L}\p{N}]/gu, '');
 }
 
 function getAcronym(str: string): string {
@@ -324,7 +324,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
               })
             ) : (
               <div className="col-span-full py-12 text-center text-slate-500 text-sm">
-                검색 결과가 없습니다. 다른 게임을 검색해 주세요.
+                {locale === 'ko' ? '검색 결과가 없습니다. 다른 검색어를 입력해 주세요.' : locale === 'ja' ? '該当するゲームが見つかりませんでした。別のキーワードでお試しください。' : locale === 'de' ? 'Keine Spiele gefunden. Bitte versuchen Sie einen anderen Suchbegriff.' : locale === 'es' ? 'No se encontraron juegos. Intente con otro término de búsqueda.' : 'No games found. Please try a different search query.'}
               </div>
             )}
           </div>
