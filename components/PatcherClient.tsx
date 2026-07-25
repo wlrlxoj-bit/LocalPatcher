@@ -471,13 +471,29 @@ export default function PatcherClient({
           fling: 'FLiNG公式から元ファイルを入手', guide: '詳しい操作ガイドを見る', missingFling: 'このゲームのFLiNG公式リンクはまだ登録されていません。',
           zipNotice: 'ZIPのパスワードは11111111です。トレーナーの特性上、ウイルス対策ソフトが誤検知する場合があります。',
         }
-      : {
-          eyebrow: 'New here?', title: 'Get started in 3 simple steps',
-          description: 'Download the original trainer, upload it to the converter, then extract and run the converted file.',
-          steps: ['Download the original trainer (.exe) from FLiNG', 'Upload the .exe to the converter below', 'Extract the downloaded ZIP and run the trainer'],
-          fling: 'Download from FLiNG Official', guide: 'View the full guide', missingFling: 'The official FLiNG link for this game has not been registered yet.',
-          zipNotice: 'ZIP password: 11111111. Antivirus software may flag trainer files incorrectly.',
-        };
+      : locale === 'de'
+        ? {
+            eyebrow: 'Neu hier?', title: 'In 3 einfachen Schritten starten',
+            description: 'Laden Sie den Original-Trainer herunter, laden Sie ihn in den Konverter hoch und führen Sie die gepatchte Datei aus.',
+            steps: ['Original-Trainer (.exe) von FLiNG herunterladen', '.exe in den Konverter unten hochladen', 'Heruntergeladene ZIP entpacken und Trainer ausführen'],
+            fling: 'Offizieller FLiNG Download', guide: 'Vollständigen Leitfaden anzeigen', missingFling: 'Der offizielle FLiNG-Link für dieses Spiel ist noch nicht registriert.',
+            zipNotice: 'ZIP-Passwort: 11111111. Antivirensoftware kann Trainer falsch melden.',
+          }
+        : locale === 'es'
+          ? {
+              eyebrow: '¿Nuevo aquí?', title: 'Empiece en 3 sencillos pasos',
+              description: 'Descargue el trainer original, cárguelo en el convertidor y ejecute el archivo parcheado.',
+              steps: ['Descargar el trainer original (.exe) de FLiNG', 'Subir el .exe al convertidor de abajo', 'Extraer el ZIP descargado y ejecutar el trainer'],
+              fling: 'Descarga oficial de FLiNG', guide: 'Ver guía completa', missingFling: 'El enlace oficial de FLiNG aún no está registrado.',
+              zipNotice: 'Contraseña del ZIP: 11111111. Los antivirus pueden marcarlo falsamente.',
+            }
+          : {
+              eyebrow: 'New here?', title: 'Get started in 3 simple steps',
+              description: 'Download the original trainer, upload it to the converter, then extract and run the converted file.',
+              steps: ['Download the original trainer (.exe) from FLiNG', 'Upload the .exe to the converter below', 'Extract the downloaded ZIP and run the trainer'],
+              fling: 'Download from FLiNG Official', guide: 'View the full guide', missingFling: 'The official FLiNG link for this game has not been registered yet.',
+              zipNotice: 'ZIP password: 11111111. Antivirus software may flag trainer files incorrectly.',
+            };
 
   const partnerKey = process.env.NEXT_PUBLIC_HUMBLE_PARTNER_KEY;
   const purchaseUrl = partnerKey
@@ -876,14 +892,18 @@ export default function PatcherClient({
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 id="trainer-preview-heading" className="text-sm font-bold text-slate-200">
-                    {locale === 'ko' ? '번역 옵션 미리보기' : locale === 'ja' ? '翻訳オプションのプレビュー' : 'Translation option preview'}
+                    {locale === 'ko' ? '번역 옵션 미리보기' : locale === 'ja' ? '翻訳オプションのプレビュー' : locale === 'de' ? 'Vorschau der Übersetzungsoptionen' : locale === 'es' ? 'Vista previa de opciones' : 'Translation option preview'}
                   </h2>
                   <p className="mt-1 text-xs leading-relaxed text-slate-500">
                     {locale === 'ko'
                       ? `지원 옵션 ${selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length}개를 변환 전에 확인할 수 있습니다.`
                       : locale === 'ja'
                         ? `対応する${selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length}個のオプションを変換前に確認できます。`
-                        : `Review ${selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length} supported options before converting.`}
+                        : locale === 'de'
+                          ? `Überprüfen Sie ${selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length} Optionen vor der Konvertierung.`
+                          : locale === 'es'
+                            ? `Revise ${selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length} opciones antes de convertir.`
+                            : `Review ${selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length} supported options before converting.`}
                   </p>
                 </div>
                 <button
@@ -894,8 +914,8 @@ export default function PatcherClient({
                   className="min-h-10 shrink-0 rounded-lg border border-slate-700 bg-slate-950/40 px-4 py-2 text-xs font-semibold text-slate-300 transition-colors hover:border-cyan-500/40 hover:text-cyan-300"
                 >
                   {isPreviewOpen
-                    ? (locale === 'ko' ? '미리보기 접기' : locale === 'ja' ? 'プレビューを閉じる' : 'Hide preview')
-                    : (locale === 'ko' ? '전체 미리보기 펼치기' : locale === 'ja' ? '全体プレビューを開く' : 'Show full preview')}
+                    ? (locale === 'ko' ? '미리보기 접기' : locale === 'ja' ? 'プレビューを閉じる' : locale === 'de' ? 'Vorschau ausblenden' : locale === 'es' ? 'Ocultar vista previa' : 'Hide preview')
+                    : (locale === 'ko' ? '전체 미리보기 펼치기' : locale === 'ja' ? '全体プレビューを開く' : locale === 'de' ? 'Vollständige Vorschau anzeigen' : locale === 'es' ? 'Mostrar vista previa completa' : 'Show full preview')}
                 </button>
               </div>
               {isPreviewOpen && (
@@ -929,6 +949,8 @@ export default function PatcherClient({
 function SafetyAndUsageGuideSection({ game, locale }: { game: Game; locale: Locale }) {
   const isKo = locale === 'ko';
   const isJa = locale === 'ja';
+  const isDe = locale === 'de';
+  const isEs = locale === 'es';
 
   return (
     <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900/40 p-6 md:p-8 backdrop-blur-md relative overflow-hidden shadow-xl" aria-labelledby="safety-guide-heading">
@@ -936,65 +958,81 @@ function SafetyAndUsageGuideSection({ game, locale }: { game: Game; locale: Loca
       
       <h3 id="safety-guide-heading" className="text-base md:text-lg font-bold text-white font-outfit mb-4 flex items-center gap-2">
         <span className="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
-        {isKo ? `${game.title_ko || game.title_en} 트레이너 한글화 및 안전 사용 가이드` : isJa ? `${game.title_ja || game.title_en} トレーナー日本語化・ me安全使用ガイド` : `${game.title_en} Trainer Localization & Safety Guide`}
+        {isKo ? `${game.title_ko || game.title_en} 트레이너 한글화 및 안전 사용 가이드` : isJa ? `${game.title_ja || game.title_en} トレーナー日本語化・ me安全使用ガイド` : isDe ? `${game.title_en} Trainer Lokalisierungs- & Sicherheitsleitfaden` : isEs ? `Guía de seguridad y localización de trainer para ${game.title_en}` : `${game.title_en} Trainer Localization & Safety Guide`}
       </h3>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-300 leading-relaxed mb-6">
         <div className="p-4 rounded-xl border border-slate-800/80 bg-slate-950/40">
           <h4 className="font-bold text-cyan-300 text-sm mb-2">
-            {isKo ? '🔒 로컬 인메모리 바이너리 패치 원리' : isJa ? '🔒 ローカルバイナリパッチの仕組み' : '🔒 Local In-Memory Binary Patching'}
+            {isKo ? '🔒 로컬 인메모리 바이너리 패치 원리' : isJa ? '🔒 ローカルバイナリパッチの仕組み' : isDe ? '🔒 Lokales In-Memory-Binary-Patching' : isEs ? '🔒 Parche de binarios local en memoria' : '🔒 Local In-Memory Binary Patching'}
           </h4>
           <p className="text-slate-400">
             {isKo 
               ? 'LocalPatcher는 게임 실행 파일이나 시스템 DLL을 변조하지 않고, 업로드하신 트레이너 내부의 핫키 텍스트 오프셋(UTF-16LE/ASCII)만을 안전하게 한글로 국문화합니다. 사용자의 개인정보나 파일 데이터는 서버로 절대 전송되지 않습니다.'
               : isJa
                 ? 'LocalPatcherはゲーム実行ファイルやシステムDLLを改変せず、トレーナー内部のホットキーテキスト（UTF-16LE/ASCII）のみをローカルで日本語に変換します。個人情報やファイルデータは meサーバーへ一切送信されません。'
-                : 'LocalPatcher does not modify game executables or system DLLs. It safely patches hotkey text offsets inside your trainer locally. No personal files or data are uploaded to servers.'}
+                : isDe
+                  ? 'LocalPatcher verändert keine Spiele-Dateien oder System-DLLs. Es übersetzt lediglich Hotkey-Texte lokal im Browser. Es werden keine Daten hochgeladen.'
+                  : isEs
+                    ? 'LocalPatcher no modifica ejecutables ni DLLs del sistema. Solo parchea textos de acceso rápido en su navegador. No se sube ningún archivo.'
+                    : 'LocalPatcher does not modify game executables or system DLLs. It safely patches hotkey text offsets inside your trainer locally. No personal files or data are uploaded to servers.'}
           </p>
         </div>
 
         <div className="p-4 rounded-xl border border-slate-800/80 bg-slate-950/40">
           <h4 className="font-bold text-amber-300 text-sm mb-2">
-            {isKo ? '🛡️ 오프라인 싱글플레이 전용 권장' : isJa ? '🛡️ オフラインシングルプレイ専用推奨' : '🛡️ Offline Singleplayer Recommended'}
+            {isKo ? '🛡️ 오프라인 싱글플레이 전용 권장' : isJa ? '🛡️ オフラインシングルプレイ専用推奨' : isDe ? '🛡️ Nur für Offline-Einzelspieler empfohlen' : isEs ? '🛡️ Recomendado solo para un jugador offline' : '🛡️ Offline Singleplayer Recommended'}
           </h4>
           <p className="text-slate-400">
             {isKo
               ? '본 트레이너 한글화 도구는 오프라인 싱글플레이 환경 전용으로 설계되었습니다. 온라인 멀티플레이어가 포함된 게임의 경우 안티치트(Easy Anti-Cheat, BattlEye 등)에 의해 계정 제재가 발생할 수 있으므로 오프라인 모드에서만 사용할 것을 강력히 권장합니다.'
               : isJa
                 ? '本ツールはオフラインシングルプレイ専用に設計されています。オンラインマルチプレイが含まれるゲームの場合、アンチチートに検知される可能性があるため、必ずオフラインでご使用ください。'
-                : 'This localization tool is designed exclusively for offline singleplayer gameplay. For games with online multiplayer, use in offline mode to prevent anti-cheat detection.'}
+                : isDe
+                  ? 'Dieses Tool ist ausschließlich für Offline-Einzelspieler gedacht. Verwenden Sie Trainer niemals in Online- oder Anti-Cheat-Umgebungen.'
+                  : isEs
+                    ? 'Esta herramienta está diseñada exclusivamente para un jugador offline. No la utilice en modos online para evitar sanciones.'
+                    : 'This localization tool is designed exclusively for offline singleplayer gameplay. For games with online multiplayer, use in offline mode to prevent anti-cheat detection.'}
           </p>
         </div>
       </div>
 
       <div className="border-t border-slate-800/60 pt-6">
         <h4 className="font-bold text-slate-200 text-sm mb-4">
-          {isKo ? '❓ 자주 묻는 질문 (FAQ)' : isJa ? '❓ よくある質問 (FAQ)' : '❓ Frequently Asked Questions'}
+          {isKo ? '❓ 자주 묻는 질문 (FAQ)' : isJa ? '❓ よくある質問 (FAQ)' : isDe ? '❓ Häufig gestellte Fragen (FAQ)' : isEs ? '❓ Preguntas Frecuentes (FAQ)' : '❓ Frequently Asked Questions'}
         </h4>
         <div className="space-y-4 text-xs">
           <div className="p-3.5 rounded-lg bg-slate-950/30 border border-slate-800/50">
             <p className="font-semibold text-slate-200 mb-1">
-              {isKo ? 'Q. 백신(Windows Defender 등)에서 바이러스로 오진되면 어떻게 하나요?' : isJa ? 'Q. セキュリティソフトでウイルスと誤検知された場合は？' : 'Q. What if antivirus flags the trainer as a false positive?'}
+              {isKo ? 'Q. 백신(Windows Defender 등)에서 바이러스로 오진되면 어떻게 하나요?' : isJa ? 'Q. セキュリティソフトでウイルスと誤検知された場合は？' : isDe ? 'Q. Was tun, wenn Antivirensoftware den Trainer blockiert?' : isEs ? 'Q. ¿Qué hacer si el antivirus marca el trainer como falso positivo?' : 'Q. What if antivirus flags the trainer as a false positive?'}
             </p>
             <p className="text-slate-400">
               {isKo
                 ? '트레이너 바이너리의 특성상 메모리 주소 참조 기능으로 인해 백신에서 탐지(False Positive)할 수 있습니다. 이는 한글 패치 때문이 아닌 원본 트레이너의 특성이며, 백신 예외 처리 후 안전하게 사용 가능합니다.'
                 : isJa
                   ? 'トレーナーの性質上、メモリ参照機能によりセキュリティソフトで誤検知される場合があります。例外設定を追加してご使用ください。'
-                  : 'Trainers naturally reference memory addresses, which may trigger false-positive warnings. Add an exception in your antivirus to run smoothly.'}
+                  : isDe
+                    ? 'Trainer greifen auf Speicheradressen zu, was Fehlalarme auslösen kann. Fügung Sie eine Ausnahme in Ihrem Antivirenprogramm hinzu.'
+                    : isEs
+                      ? 'Los trainers acceden a direcciones de memoria, lo que puede causar falsos positivos. Añada una excepción en su antivirus.'
+                      : 'Trainers naturally reference memory addresses, which may trigger false-positive warnings. Add an exception in your antivirus to run smoothly.'}
             </p>
           </div>
 
           <div className="p-3.5 rounded-lg bg-slate-950/30 border border-slate-800/50">
             <p className="font-semibold text-slate-200 mb-1">
-              {isKo ? 'Q. 게임 업데이트 후 트레이너 한글 패치가 작동하지 않을 때는?' : isJa ? 'Q. ゲームアップデート後にパッチが機能しない場合は？' : 'Q. What if the trainer stops working after a game update?'}
+              {isKo ? 'Q. 게임 업데이트 후 트레이너 한글 패치가 작동하지 않을 때는?' : isJa ? 'Q. ゲームアップデート後にパッチが機能しない場合は？' : isDe ? 'Q. Was tun, wenn der Trainer nach einem Spiel-Update nicht mehr funktioniert?' : isEs ? 'Q. ¿Qué hacer si el trainer deja de funcionar tras una actualización?' : 'Q. What if the trainer stops working after a game update?'}
             </p>
             <p className="text-slate-400">
               {isKo
                 ? '게임 패치 업데이트 시 FLiNG에서 새 버전의 트레이너가 배포됩니다. 최신 트레이너를 다운로드한 후 LocalPatcher에서 새로 선택하시면 해당 버전의 한글 패치가 자동 반영됩니다.'
                 : isJa
                   ? 'ゲーム更新時はFLiNG公式から新バージョンが配布されます。最新版をダウンロード後、LocalPatcherで再パッチを行ってください。'
-                  : 'When the game updates, get the latest trainer version from FLiNG and re-apply the patch via LocalPatcher.'}
+                  : isDe
+                    ? 'Bei Spiel-Updates veröffentlicht FLiNG neue Trainer-Versionen. Laden Sie die neueste Version von FLiNG herunter und wenden Sie den Patch erneut an.'
+                    : isEs
+                      ? 'Cuando el juego se actualice, obtenga la versión más reciente de FLiNG y aplique el parche nuevamente.'
+                      : 'When the game updates, get the latest trainer version from FLiNG and re-apply the patch via LocalPatcher.'}
             </p>
           </div>
         </div>
@@ -1127,7 +1165,7 @@ function TrainerUIPreview({ game, trainer, mappings, locale }: TrainerUIPreviewP
       
       <h5 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
-        {locale === 'ko' ? '한글 번역 치트 옵션 목록 미리보기' : locale === 'ja' ? '翻訳チートオプション一覧プレビュー' : 'Translated Cheat Options Preview'}
+        {locale === 'ko' ? '한글 번역 치트 옵션 목록 미리보기' : locale === 'ja' ? '翻訳チートオプション一覧プレビュー' : locale === 'de' ? 'Vorschau der übersetzten Cheat-Optionen' : locale === 'es' ? 'Vista previa de opciones de trucos traducidas' : 'Translated Cheat Options Preview'}
       </h5>
       
       <p className="text-xs text-slate-400 mb-6 leading-relaxed">
@@ -1135,7 +1173,11 @@ function TrainerUIPreview({ game, trainer, mappings, locale }: TrainerUIPreviewP
           ? '아래는 한글화 패치 적용 시 트레이너에 표시되는 번역된 치트 옵션 명칭과 단축키 목록입니다. 실제 게임에는 영향을 주지 않으며, 패치 전에 어떤 한글 번역 항목들이 포함되어 있는지 미리 확인하는 용도입니다.'
           : locale === 'ja'
             ? '以下は韓国語パッチ適用時にトレーナーに表示される翻訳されたチートオプション名とホットキーの一覧です。実際のゲームには影響を与えません。'
-            : 'Below is a list of translated cheat option names and hotkeys that will appear in the trainer after applying the localization patch. This does not affect the actual game.'
+            : locale === 'de'
+              ? 'Unten finden Sie die Liste der übersetzten Cheat-Optionen und Hotkeys, die nach dem Patchen angezeigt werden.'
+              : locale === 'es'
+                ? 'A continuación se muestra la lista de opciones de trucos y atajos traducidos que aparecerán en el trainer.'
+                : 'Below is a list of translated cheat option names and hotkeys that will appear in the trainer after applying the localization patch. This does not affect the actual game.'
         }
       </p>
 
@@ -1173,7 +1215,7 @@ function TrainerUIPreview({ game, trainer, mappings, locale }: TrainerUIPreviewP
             <p className="text-slate-400 text-xs mt-1 font-mono">{trainer.version_str}</p>
             <div className="flex gap-2 mt-2">
               <span className="text-[10px] bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded font-semibold">
-                KOREAN EDITION
+                {locale === 'ko' ? 'KOREAN EDITION' : locale === 'ja' ? 'JAPANESE EDITION' : locale === 'de' ? 'GERMAN EDITION' : locale === 'es' ? 'SPANISH EDITION' : 'LOCALIZED EDITION'}
               </span>
             </div>
           </div>

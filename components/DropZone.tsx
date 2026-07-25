@@ -520,7 +520,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
               {t.patcherSuccess}
             </p>
             <p className="text-[10px] text-slate-500 mt-1 font-mono">File: {fileName}</p>
-            <p className="text-[10px] text-cyan-400 mt-1 font-semibold">감지된 버전: {trainer.version_str}</p>
+            <p className="text-[10px] text-cyan-400 mt-1 font-semibold">{locale === 'ko' ? '감지된 버전' : locale === 'ja' ? '検出されたバージョン' : locale === 'de' ? 'Erkannte Version' : locale === 'es' ? 'Versión detectada' : 'Detected Version'}: {trainer.version_str}</p>
             
             <a
                 href={patchedFileUrl || '#'}
@@ -534,7 +534,11 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
                     ? '한글화 패치 파일 다운로드'
                     : locale === 'ja'
                       ? '日本語化パッチのダウンロード'
-                      : 'Download Localized Trainer'}
+                      : locale === 'de'
+                        ? 'Lokalisierte Trainer-Datei herunterladen'
+                        : locale === 'es'
+                          ? 'Descargar trainer localizado'
+                          : 'Download Localized Trainer'}
                 </span>
               </a>
 
@@ -547,7 +551,11 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
                     ? '압축 해제 비밀번호: 11111111'
                     : locale === 'ja'
                       ? '解凍パスワード: 11111111'
-                      : 'Extraction Password: 11111111'}
+                      : locale === 'de'
+                        ? 'Entpack-Passwort: 11111111'
+                        : locale === 'es'
+                          ? 'Contraseña de extracción: 11111111'
+                          : 'Extraction Password: 11111111'}
                 </span>
               </p>
               <p className="text-[9px] text-slate-400 mt-1 leading-normal text-center">
@@ -555,7 +563,11 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
                   ? '파일 전달을 위해 비밀번호가 설정된 ZIP 형식으로 제공됩니다. 실행 전 출처와 보안 검사 결과를 직접 확인하세요.'
                   : locale === 'ja'
                     ? 'ファイル配布のため、パスワード付きZIP形式で提供します。実行前に配布元とセキュリティ検査結果をご確認ください。'
-                    : 'Provided as a password-protected ZIP for file delivery. Verify the source and security scan results before running it.'}
+                    : locale === 'de'
+                      ? 'Als passwortgeschützte ZIP-Datei bereitgestellt. Überprüfen Sie Quelle und Sicherheitsergebnisse vor der Ausführung.'
+                      : locale === 'es'
+                        ? 'Proporcionado como ZIP protegido por contraseña. Verifique la fuente y la seguridad antes de ejecutarlo.'
+                        : 'Provided as a password-protected ZIP for file delivery. Verify the source and security scan results before running it.'}
               </p>
             </div>
 
@@ -563,7 +575,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
               onClick={handleReset}
               className="mt-4 text-[11px] text-slate-500 hover:text-slate-300 underline transition-colors"
             >
-              다른 파일 패치하기
+              {locale === 'ko' ? '다른 파일 패치하기' : locale === 'ja' ? '別のファイルをパッチ' : locale === 'de' ? 'Weitere Datei patchen' : locale === 'es' ? 'Parchear otro archivo' : 'Patch another file'}
             </button>
           </div>
         )}
