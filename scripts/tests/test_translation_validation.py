@@ -127,41 +127,21 @@ class ValidationTests(unittest.TestCase):
         self.assertIn("OFFSET_OUT_OF_RANGE", self.check(offset=1000).codes)
 
 
-class FakeQuery:
-    def __init__(self, store, row_count=1):
-        self.store, self.row_count = store, row_count
-    def update(self, values):
-        self.store["update"] = values
-        return self
-    def eq(self, key, value):
-        self.store.setdefault("filters", []).append((key, value))
-        return self
-    def select(self, columns):
-        self.store["select"] = columns
-        return self
-    def execute(self):
-        status = self.store.get("update", {}).get("translation_status", "approved")
-        approved = self.store.get("update", {}).get("is_approved", True)
-        rows = [
-            {"id": index + 1, "is_approved": approved, "translation_status": status}
-            for index in range(self.row_count)
-        ]
-        return type("R", (), {"data": rows})()
-
-
 class FakeDb:
-    def __init__(self, saved=True, row_count=1):
-        self.saved, self.row_count, self.store = saved, row_count, {}
-    def rpc(self, _name, _payload):
+    def __init__(self, saved=True, outcome="approved"):
+        self.saved, self.outcome, self.calls = saved, outcome, []
+    def rpc(self, name, payload):
+        self.calls.append((name, payload))
+        data = (
+            {"results": [{"saved": self.saved}]}
+            if name == "upsert_translation_drafts"
+            else {"outcome": self.outcome}
+        )
         return type(
             "Q", (), {
-                "execute": lambda _: type(
-                    "R", (), {"data": {"results": [{"saved": self.saved}]}}
-                )()
+                "execute": lambda _: type("R", (), {"data": data})()
             }
         )()
-    def table(self, _name):
-        return FakeQuery(self.store, self.row_count)
 
 
 class FailingDb(FakeDb):
@@ -170,7 +150,12 @@ class FailingDb(FakeDb):
 
 
 class PersistenceTests(unittest.TestCase):
-    mapping = {"trainer_id": 1, "language_code": "ko", "offset_dec": 10}
+    mapping = {
+        "trainer_id": 1,
+        "language_code": "ko",
+        "offset_dec": 10,
+        "translated_text": "Num 1 - 무한 체력",
+    }
 
     def test_approved_preservation(self):
         db = FakeDb(False)
@@ -178,10 +163,10 @@ class PersistenceTests(unittest.TestCase):
             db, mapping=self.mapping, validation=ValidationResult(True)
         )
         self.assertEqual(outcome, SaveOutcome.PRESERVED)
-        self.assertNotIn("update", db.store)
+        self.assertEqual([name for name, _ in db.calls], ["upsert_translation_drafts"])
 
     def test_locale_independence_and_pending_promotion(self):
-        ko, ja = FakeDb(), FakeDb()
+        ko, ja = FakeDb(outcome="approved"), FakeDb(outcome="rejected")
         self.assertEqual(
             save_validated_draft(ko, mapping=self.mapping, validation=ValidationResult(True)),
             SaveOutcome.APPROVED,
@@ -194,9 +179,9 @@ class PersistenceTests(unittest.TestCase):
             ),
             SaveOutcome.REJECTED,
         )
-        self.assertEqual(ko.store["update"]["translation_status"], "approved")
-        self.assertEqual(ja.store["update"]["translation_status"], "rejected")
-        self.assertIn(("is_approved", False), ko.store["filters"])
+        self.assertEqual(ko.calls[-1][0], "finalize_translation_draft")
+        self.assertEqual(ko.calls[-1][1]["p_expected_translated_text"], self.mapping["translated_text"])
+        self.assertEqual(ja.calls[-1][1]["p_status"], "rejected")
 
     def test_db_error_is_distinct(self):
         self.assertEqual(
@@ -206,17 +191,31 @@ class PersistenceTests(unittest.TestCase):
             SaveOutcome.DB_ERROR,
         )
 
-    def test_zero_or_multiple_selected_rows_are_db_errors(self):
-        for row_count in (0, 2):
-            with self.subTest(row_count=row_count):
+    def test_finalize_rpc_response_is_mapped_strictly(self):
+        for payload_outcome, expected in (
+            ("preserved", SaveOutcome.PRESERVED),
+            ("db_error", SaveOutcome.DB_ERROR),
+            ("unexpected", SaveOutcome.DB_ERROR),
+        ):
+            with self.subTest(outcome=payload_outcome):
                 self.assertEqual(
                     save_validated_draft(
-                        FakeDb(row_count=row_count),
+                        FakeDb(outcome=payload_outcome),
                         mapping=self.mapping,
                         validation=ValidationResult(True),
                     ),
-                    SaveOutcome.DB_ERROR,
+                    expected,
                 )
+
+    def test_finalize_rpc_mismatched_success_is_db_error(self):
+        self.assertEqual(
+            save_validated_draft(
+                FakeDb(outcome="rejected"),
+                mapping=self.mapping,
+                validation=ValidationResult(True),
+            ),
+            SaveOutcome.DB_ERROR,
+        )
 
     def test_api_error_log_contains_only_safe_fields(self):
         APIError = type("APIError", (Exception,), {})

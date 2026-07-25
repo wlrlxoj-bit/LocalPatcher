@@ -4,6 +4,7 @@ import argparse
 import os
 import subprocess
 import sys
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from supabase import create_client
@@ -22,24 +23,26 @@ def discover_pending_urls(db, statuses, limit=None, page_size=1000):
     missing_sources = 0
     last_id = 0
     while limit is None or len(discovered) < limit:
-        rows = (db.table("translation_mappings")
-                .select("id,translation_status,trainers!inner(games!inner(fling_url))")
-                .in_("translation_status", statuses)
-                .gt("id", last_id)
-                .order("id")
-                .limit(page_size)
-                .execute().data or [])
+        rows = (db.rpc("list_pending_translation_sources", {
+            "p_after_id": last_id,
+            "p_page_size": page_size,
+            "p_retry_rejected": "rejected" in statuses,
+        }).execute().data or [])
         if not rows:
             break
         for row in rows:
-            last_id = max(last_id, int(row["id"]))
-            target = ((row.get("trainers") or {}).get("games") or {}).get("fling_url")
-            if target and target not in seen:
+            last_id = max(last_id, int(row["mapping_id"]))
+            target = row.get("fling_url")
+            parsed = urlparse(target) if isinstance(target, str) else None
+            valid_target = bool(
+                parsed and parsed.scheme in {"http", "https"} and parsed.netloc
+            )
+            if valid_target and target not in seen:
                 seen.add(target)
                 discovered.append(target)
                 if limit is not None and len(discovered) >= limit:
                     break
-            elif not target:
+            elif not valid_target:
                 missing_sources += 1
         if len(rows) < page_size:
             break

@@ -105,38 +105,57 @@ class TranslationChunkTests(unittest.TestCase):
         self.assertEqual(scope["translate_line"]("Trainer Options"), "Trainer Options")
 
 
-class FakeQuery:
-    def __init__(self, pages):
-        self.pages = pages
-        self.cursor = 0
-    def select(self, _): return self
-    def in_(self, *_): return self
-    def gt(self, _, value): self.cursor = value; return self
-    def order(self, _): return self
-    def limit(self, _): return self
-    def execute(self):
-        rows = [row for row in self.pages if row["id"] > self.cursor][:20]
-        return type("R", (), {"data": rows})()
-
-
 class FakeDb:
-    def __init__(self, rows): self.query = FakeQuery(rows)
-    def table(self, _): return self.query
+    def __init__(self, rows):
+        self.rows, self.calls = rows, []
+    def rpc(self, name, payload):
+        self.calls.append((name, payload))
+        cursor = payload["p_after_id"]
+        page_size = payload["p_page_size"]
+        rows = [row for row in self.rows if row["mapping_id"] > cursor][:page_size]
+        return type(
+            "Q", (), {"execute": lambda _: type("R", (), {"data": rows})()}
+        )()
 
 
 class PendingPaginationTests(unittest.TestCase):
     def test_more_than_30_rows_are_paginated_and_deduplicated(self):
-        discover, = load_functions("reprocess_pending_translations.py", ["discover_pending_urls"])
+        from urllib.parse import urlparse
+        discover, = load_functions(
+            "reprocess_pending_translations.py",
+            ["discover_pending_urls"],
+            {"urlparse": urlparse},
+        )
         rows = [
             {
-                "id": index,
-                "trainers": {"games": {"fling_url": f"https://example/{index % 31}"}},
+                "mapping_id": index,
+                "trainer_id": 1000 + index,
+                "fling_url": f"https://example/{index % 31}",
             }
             for index in range(1, 46)
         ]
         urls, missing = discover(FakeDb(rows), ["pending"], page_size=20)
         self.assertEqual(len(urls), 31)
         self.assertEqual(missing, 0)
+
+    def test_rpc_cursor_and_missing_url_are_fail_closed(self):
+        from urllib.parse import urlparse
+        discover, = load_functions(
+            "reprocess_pending_translations.py",
+            ["discover_pending_urls"],
+            {"urlparse": urlparse},
+        )
+        db = FakeDb([
+            {"mapping_id": 1, "trainer_id": 10, "fling_url": None},
+            {"mapping_id": 2, "trainer_id": 11, "fling_url": "invalid-relative"},
+            {"mapping_id": 3, "trainer_id": 12, "fling_url": "https://example/ok"},
+        ])
+        urls, missing = discover(db, ["pending", "rejected"], page_size=2)
+        self.assertEqual(urls, ["https://example/ok"])
+        self.assertEqual(missing, 2)
+        self.assertEqual(db.calls[0][0], "list_pending_translation_sources")
+        self.assertTrue(db.calls[0][1]["p_retry_rejected"])
+        self.assertEqual(db.calls[1][1]["p_after_id"], 2)
 
 
 class WorkflowContractTests(unittest.TestCase):

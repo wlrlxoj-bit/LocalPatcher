@@ -272,27 +272,24 @@ def save_validated_draft(db, *, mapping: dict, validation: ValidationResult) -> 
         if not saved:
             return SaveOutcome.PRESERVED
         next_status = "approved" if validation.ok else "rejected"
-        (db.table("translation_mappings")
-         .update({"is_approved": validation.ok, "translation_status": next_status})
-         .eq("trainer_id", mapping["trainer_id"])
-         .eq("language_code", mapping["language_code"])
-         .eq("offset_dec", mapping["offset_dec"])
-         .eq("is_approved", False)
-         .execute())
-        response = (db.table("translation_mappings")
-                    .select("id,is_approved,translation_status")
-                    .eq("trainer_id", mapping["trainer_id"])
-                    .eq("language_code", mapping["language_code"])
-                    .eq("offset_dec", mapping["offset_dec"])
-                    .execute())
+        response = db.rpc("finalize_translation_draft", {
+            "p_trainer_id": mapping["trainer_id"],
+            "p_language_code": mapping["language_code"],
+            "p_offset_dec": mapping["offset_dec"],
+            "p_expected_translated_text": mapping["translated_text"],
+            "p_status": next_status,
+        }).execute()
     except Exception as exc:
         _log_save_error(mapping, exc)
         return SaveOutcome.DB_ERROR
 
-    if len(response.data or []) != 1:
+    payload = response.data
+    if not isinstance(payload, dict) or set(payload) - {"outcome", "reason"}:
         return SaveOutcome.DB_ERROR
-    saved_row = response.data[0]
-    if (saved_row.get("is_approved") is not validation.ok
-            or saved_row.get("translation_status") != next_status):
-        return SaveOutcome.DB_ERROR
-    return SaveOutcome.APPROVED if validation.ok else SaveOutcome.REJECTED
+    outcome = payload.get("outcome")
+    expected = "approved" if validation.ok else "rejected"
+    if outcome == expected:
+        return SaveOutcome.APPROVED if validation.ok else SaveOutcome.REJECTED
+    if outcome == "preserved":
+        return SaveOutcome.PRESERVED
+    return SaveOutcome.DB_ERROR
