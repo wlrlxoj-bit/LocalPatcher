@@ -107,6 +107,30 @@ function kanaToRomaji(str: string): string {
   return res;
 }
 
+const MULTI_LANG_SYNONYMS: Record<string, string[]> = {
+  'fantasia': ['fantasy'],
+  'fantasía': ['fantasy'],
+  'monstruo': ['monster'],
+  'monstruos': ['monster'],
+  'cazador': ['hunter'],
+  'almas': ['souls'],
+  'guerra': ['war'],
+  'krieg': ['war'],
+  'leyenda': ['legend'],
+  'legende': ['legend'],
+  'anillo': ['ring'],
+  'coche': ['auto', 'car'],
+  'auto': ['gta', 'car'],
+  'jager': ['hunter'],
+  'jäger': ['hunter']
+};
+
+function getSynonyms(query: string): string[] {
+  const norm = normalizeText(query);
+  const synonyms = MULTI_LANG_SYNONYMS[norm] || [];
+  return Array.from(new Set([norm, ...synonyms.map(s => normalizeText(s))]));
+}
+
 function getChosung(str: string): string {
   const cho = [
     'ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'
@@ -158,6 +182,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
       if (!searchQuery.trim()) return true;
 
       const normQuery = normalizeText(searchQuery);
+      const querySynonyms = getSynonyms(searchQuery);
       const queryChosung = getChosung(normQuery);
       const queryKatakana = hiraganaToKatakana(searchQuery.toLowerCase());
       const queryHiragana = katakanaToHiragana(searchQuery.toLowerCase());
@@ -173,12 +198,10 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
       const acronymKo = getChosung(game.title_ko);
 
       return (
-        // Exact / Substring search across all language titles
-        normEn.includes(normQuery) ||
-        normKo.includes(normQuery) ||
-        (normJa.length > 0 && normJa.includes(normQuery)) ||
+        // Exact / Substring search across all language titles and synonyms (e.g. fantasia -> fantasy)
+        querySynonyms.some(q => normEn.includes(q) || normKo.includes(q) || (normJa.length > 0 && normJa.includes(q))) ||
         // Acronym / First-letter shortcut search (e.g., AOW -> Age of Wonders, ER -> Elden Ring)
-        (acronymEn.length > 1 && acronymEn.includes(normQuery)) ||
+        (acronymEn.length > 1 && querySynonyms.some(q => acronymEn.includes(q))) ||
         // Korean Chosung search (e.g., ㅇㅇㅇ -> 에이지 오브 원더스)
         (acronymKo.length > 0 && acronymKo.includes(queryChosung)) ||
         // Japanese Hiragana ↔ Katakana cross match
