@@ -889,7 +889,7 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                         mapping.get('language_code') for mapping in (mappings_res.data or [])
                         if mapping.get('is_approved')
                     }
-                    if {'ko', 'ja'}.issubset(approved_locales):
+                    if {'ko', 'ja'}.issubset(approved_locales) and not force:
                         print(f"    [*] Skip/Protect: Trainer ID {trainer_id} has approved translation mappings. Skipping overwrite.")
                         approved_skips += 1
                         continue
