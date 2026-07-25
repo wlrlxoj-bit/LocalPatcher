@@ -59,6 +59,54 @@ function hiraganaToKatakana(str: string): string {
   return str.replace(/[\u3041-\u3096]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) + 0x60));
 }
 
+function katakanaToHiragana(str: string): string {
+  return str.replace(/[\u30a1-\u30f6]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60));
+}
+
+function kanaToRomaji(str: string): string {
+  const kanaMap: Record<string, string> = {
+    'あ':'a','い':'i','う':'u','え':'e','お':'o',
+    'か':'ka','き':'ki','く':'ku','け':'ke','こ':'ko',
+    'さ':'sa','し':'shi','す':'su','せ':'se','そ':'so',
+    'た':'ta','ち':'chi','つ':'tsu','て':'te','と':'to',
+    '나':'na','に':'ni','ぬ':'nu','ね':'ne','の':'no',
+    'は':'ha','ひ':'hi','ふ':'fu','へ':'he','ほ':'ho',
+    'ま':'ma','み':'mi','む':'mu','め':'me','も':'mo',
+    'や':'ya','ゆ':'yu','よ':'yo',
+    'ら':'ra','り':'ri','る':'ru','れ':'re','ろ':'ro',
+    'わ':'wa','を':'wo','ん':'n',
+    'が':'ga','ぎ':'gi','ぐ':'gu','げ':'ge','ご':'go',
+    'ざ':'za','じ':'ji','ず':'zu','ぜ':'ze','ぞ':'zo',
+    'だ':'da','ぢ':'ji','づ':'zu','で':'de','ど':'do',
+    'ば':'ba','び':'bi','ぶ':'bu','べ':'be','ぼ':'bo',
+    'ぱ':'pa','ぴ':'pi','ぷ':'pu','ぺ':'pe','ぽ':'po',
+    'きゃ':'kya','きゅ':'kyu','きょ':'kyo',
+    'しゃ':'sha','しゅ':'shu','しょ':'sho',
+    'ちゃ':'cha','ちゅ':'chu','ちょ':'cho',
+    'にゃ':'nya','にゅ':'nyu','にょ':'nyo',
+    'ひゃ':'hya','ひゅ':'hyu','ひょ':'hyo',
+    'みゃ':'mya','みゅ':'myu','みょ':'myo',
+    'りゃ':'rya','りゅ':'ryu','りょ':'ryo',
+    'ぎゃ':'gya','ぎゅ':'gyu','ぎょ':'gyo',
+    'じゃ':'ja','じゅ':'ju','じょ':'jo',
+    'びゃ':'bya','びゅ':'byu','びょ':'byo',
+    'ぴゃ':'pya','ぴゅ':'pyu','ぴょ':'pyo',
+    'ー':'', '・':''
+  };
+  const hira = katakanaToHiragana(str);
+  let res = '';
+  for (let i = 0; i < hira.length; i++) {
+    const two = hira.substring(i, i + 2);
+    if (kanaMap[two]) {
+      res += kanaMap[two];
+      i++;
+    } else {
+      res += kanaMap[hira[i]] || hira[i];
+    }
+  }
+  return res;
+}
+
 function getChosung(str: string): string {
   const cho = [
     'ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'
@@ -112,10 +160,14 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
       const normQuery = normalizeText(searchQuery);
       const queryChosung = getChosung(normQuery);
       const queryKatakana = hiraganaToKatakana(searchQuery.toLowerCase());
+      const queryHiragana = katakanaToHiragana(searchQuery.toLowerCase());
+      const queryRomaji = kanaToRomaji(searchQuery.toLowerCase());
 
       const normEn = normalizeText(game.title_en);
       const normKo = normalizeText(game.title_ko);
       const normJa = normalizeText(game.title_ja || '');
+      const normJaHiragana = katakanaToHiragana(normJa);
+      const normJaKatakana = hiraganaToKatakana(normJa);
 
       const acronymEn = getAcronym(game.title_en);
       const acronymKo = getChosung(game.title_ko);
@@ -124,13 +176,16 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
         // Exact / Substring search across all language titles
         normEn.includes(normQuery) ||
         normKo.includes(normQuery) ||
-        normJa.includes(normQuery) ||
+        (normJa.length > 0 && normJa.includes(normQuery)) ||
         // Acronym / First-letter shortcut search (e.g., AOW -> Age of Wonders, ER -> Elden Ring)
         (acronymEn.length > 1 && acronymEn.includes(normQuery)) ||
         // Korean Chosung search (e.g., ㅇㅇㅇ -> 에이지 오브 원더스)
         (acronymKo.length > 0 && acronymKo.includes(queryChosung)) ||
-        // Japanese Hiragana ↔ Katakana fuzzy match
-        (normJa.length > 0 && hiraganaToKatakana(normJa).includes(queryKatakana))
+        // Japanese Hiragana ↔ Katakana cross match
+        (normJaKatakana.length > 0 && normJaKatakana.includes(queryKatakana)) ||
+        (normJaHiragana.length > 0 && normJaHiragana.includes(queryHiragana)) ||
+        // Romaji <-> English title match (e.g., "eiji" / "えいじ" matching "age")
+        (queryRomaji.length > 1 && (normEn.includes(queryRomaji) || normKo.includes(queryRomaji)))
       );
     })
     .sort((a, b) => {
