@@ -11,7 +11,7 @@ export default async function LocalePage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko') ? locale : 'ko';
+  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? (locale as Locale) : 'ko';
 
   // Fetch all games with their trainers in a single query
   const gamesData = (await getGamesWithTrainers()) as any[];

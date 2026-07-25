@@ -410,9 +410,7 @@ def translate_line(line: str):
     
     # Check dynamic database dictionary first, then fallback to local static dict
     translated_label = None
-    if label_lower in db_dictionary_ko:
-        translated_label = db_dictionary_ko[label_lower]
-    elif label_lower in COMMON_TRANSLATIONS:
+    if label_lower in COMMON_TRANSLATIONS:
         translated_label = COMMON_TRANSLATIONS[label_lower]
         
     if translated_label is not None:

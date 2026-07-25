@@ -343,7 +343,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
       // 5. Package the patched executable into a password-protected ZIP archive to bypass Defender quarantine
       const zipWriter = new ZipWriter(new BlobWriter("application/zip"));
       
-      const suffix = locale === 'ko' ? '_KOR' : locale === 'ja' ? '_JPN' : '_patched';
+      const suffix = locale === 'ko' ? '_KOR' : locale === 'ja' ? '_JPN' : locale === 'de' ? '_DEU' : locale === 'es' ? '_ESP' : '_patched';
       const exeName = file.name.replace(/\.exe$/i, `${suffix}.exe`);
       const exeBlob = new Blob([bytes], { type: 'application/octet-stream' });
       

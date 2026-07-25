@@ -4,31 +4,41 @@ import Footer from '@/layouts/Footer';
 import '@/app/globals.css';
 import Script from 'next/script';
 import { SITE_URL } from '@/lib/site';
+import type { Locale } from '@/lib/i18n';
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko') ? locale : 'ko';
+  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? locale : 'ko';
   
-  const isKo = currentLocale === 'ko';
-  const isJa = currentLocale === 'ja';
-  
-  const title = isKo 
+  const title = currentLocale === 'ko' 
     ? '게임 트레이너 한글 패치 & 다운로드 플랫폼 | LocalPatcher' 
-    : isJa 
+    : currentLocale === 'ja' 
       ? 'ゲームトレーナー日本語化パッチ＆ダウンロード | LocalPatcher' 
-      : 'LocalPatcher - Trainer Localization Portal';
+      : currentLocale === 'de'
+        ? 'LocalPatcher - Spiele-Trainer Lokalisierungs-Tool'
+        : currentLocale === 'es'
+          ? 'LocalPatcher - Herramienta de Localización de Trainers'
+          : 'LocalPatcher - Trainer Localization Portal';
       
-  const description = isKo 
+  const description = currentLocale === 'ko' 
     ? '스팀 게임 트레이너 및 플링(FLiNG) 치트 키 한글화 패치 플랫폼. 서버 업로드 없이 브라우저에서 로컬로 한글 패치를 적용하고 다운로드하세요.'
-    : isJa
+    : currentLocale === 'ja'
       ? 'SteamゲームトレーナーおよびFLiNGチートツールの日本語化パッチプラットフォーム。ファイルをサーバーにアップロードせず、ブラウザ上でローカルに日本語訳パッチを適用・ダウンロードできます。'
-      : 'A client-side trainer patch utility that replaces supported text in game trainers with localized strings without uploading files to our server.';
+      : currentLocale === 'de'
+        ? 'Ein Browser-Tool zum lokalen Übersetzen von Spiele-Trainern ohne Datei-Upload.'
+        : currentLocale === 'es'
+          ? 'Una herramienta de navegador para parchear trainers de juegos localmente sin subir archivos.'
+          : 'A client-side trainer patch utility that replaces supported text in game trainers with localized strings without uploading files to our server.';
 
-  const keywords = isKo
+  const keywords = currentLocale === 'ko'
     ? ['게임', '한글', '패치', '트레이너', '치트', '스팀', '플링', '번역', '다운로드', '무료', '로컬패처', 'LocalPatcher']
-    : isJa
+    : currentLocale === 'ja'
       ? ['ゲーム', '日本語化', '日本語訳', 'パッチ', 'トレーナー', 'チート', '無料', 'ダウンロード', '日本', 'ローカルパッチャー', 'LocalPatcher']
-      : ['game', 'trainer', 'cheats', 'translation', 'patch', 'download', 'free', 'localized', 'localpatcher'];
+      : currentLocale === 'de'
+        ? ['spiele', 'trainer', 'cheats', 'übersetzung', 'patch', 'download', 'deutsch', 'localpatcher']
+        : currentLocale === 'es'
+          ? ['juegos', 'trainer', 'trucos', 'traducción', 'parche', 'descargar', 'español', 'localpatcher']
+          : ['game', 'trainer', 'cheats', 'translation', 'patch', 'download', 'free', 'localized', 'localpatcher'];
 
   return {
     metadataBase: new URL(SITE_URL),
@@ -46,6 +56,8 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
         'ko': '/ko',
         'en': '/en',
         'ja': '/ja',
+        'de': '/de',
+        'es': '/es',
         'x-default': '/en',
       },
     },
@@ -55,7 +67,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
       title,
       description,
       url: `${SITE_URL}/${currentLocale}`,
-      locale: currentLocale === 'ko' ? 'ko_KR' : currentLocale === 'ja' ? 'ja_JP' : 'en_US',
+      locale: currentLocale === 'ko' ? 'ko_KR' : currentLocale === 'ja' ? 'ja_JP' : currentLocale === 'de' ? 'de_DE' : currentLocale === 'es' ? 'es_ES' : 'en_US',
     },
     twitter: {
       card: 'summary_large_image',
@@ -76,61 +88,48 @@ export default async function LocaleLayout({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko') ? locale : 'ko';
+  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? locale as Locale : 'ko';
   const gaId = process.env.NEXT_PUBLIC_GA_ID || 'G-DDZ96EFNR3';
   const adsenseId = process.env.NEXT_PUBLIC_ADSENSE_ID;
   const hasValidAdsenseId = /^ca-pub-\d+$/.test(adsenseId || '');
   const hasValidAdSlot = [
     process.env.NEXT_PUBLIC_ADSENSE_PATCHER_MID_SLOT,
     process.env.NEXT_PUBLIC_ADSENSE_PATCHER_BOTTOM_SLOT,
+    process.env.NEXT_PUBLIC_ADSENSE_HOME_MID_SLOT,
   ].some((slot) => /^\d+$/.test(slot || ''));
-  const isAdsenseConsentReady = process.env.NEXT_PUBLIC_ADSENSE_CONSENT_READY === 'true';
-  const shouldLoadAdsense = isAdsenseConsentReady && hasValidAdsenseId && hasValidAdSlot;
 
   return (
-    <html lang={currentLocale}>
+    <html lang={currentLocale} className="dark">
       <head>
-        {/* Impact.com 소유권 인증 */}
-        <meta name="impact-site-verification" content="78fe6405-d192-45b2-9632-5604beb6e721" />
+        {hasValidAdsenseId && hasValidAdSlot && (
+          <Script
+            async
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseId}`}
+            crossOrigin="anonymous"
+            strategy="lazyOnload"
+          />
+        )}
       </head>
-
-      {/* 구글 애널리틱스(GA4) 추적 스크립트 */}
-      <Script
-        src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
-        strategy="afterInteractive"
-      />
-      <Script id="google-analytics" strategy="afterInteractive">
-        {`
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          gtag('js', new Date());
-          gtag('config', '${gaId}', {
-            page_path: window.location.pathname,
-          });
-        `}
-      </Script>
-      {shouldLoadAdsense && (
+      <body className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-cyan-500 selection:text-slate-950 flex flex-col justify-between">
+        {/* Google Analytics 4 */}
         <Script
-          id="google-adsense"
-          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseId}`}
+          src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
           strategy="afterInteractive"
-          crossOrigin="anonymous"
         />
-      )}
-      <body className="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500 selection:text-slate-950">
-        <div className="relative min-h-screen flex flex-col z-0">
-          {/* Background Decorative Light Gradients */}
-          <div className="absolute top-0 left-1/4 w-[400px] md:w-[600px] h-[400px] md:h-[600px] bg-cyan-500/5 rounded-full blur-[100px] md:blur-[150px] pointer-events-none z-0"></div>
-          <div className="absolute bottom-1/4 right-1/4 w-[500px] md:w-[700px] h-[500px] md:h-[700px] bg-indigo-500/5 rounded-full blur-[120px] md:blur-[180px] pointer-events-none z-0"></div>
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', '${gaId}');
+          `}
+        </Script>
 
+        <div>
           <Header locale={currentLocale} />
-          
-          <main className="flex-grow z-10 relative">
-            {children}
-          </main>
-
-          <Footer locale={currentLocale} />
+          {children}
         </div>
+        <Footer locale={currentLocale} />
       </body>
     </html>
   );
