@@ -520,7 +520,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
               {t.patcherSuccess}
             </p>
             <p className="text-[10px] text-slate-500 mt-1 font-mono">File: {fileName}</p>
-            <p className="text-[10px] text-cyan-400 mt-1 font-semibold">{locale === 'ko' ? '감지된 버전' : locale === 'ja' ? '検出されたバージョン' : locale === 'de' ? 'Erkannte Version' : locale === 'es' ? 'Versión detectada' : 'Detected Version'}: {trainer.version_str}</p>
+            <p className="text-[10px] text-cyan-400 mt-1 font-semibold">{t.detectedVersionLabel}: {trainer.version_str}</p>
             
             <a
                 href={patchedFileUrl || '#'}
@@ -529,45 +529,17 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
                 className="mt-6 w-full max-w-xs px-6 py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-bold text-sm shadow-xl shadow-cyan-500/25 flex items-center justify-center space-x-2 transform hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-200"
               >
                 <Download className="w-4 h-4 text-slate-950" />
-                <span>
-                  {locale === 'ko'
-                    ? '한글화 패치 파일 다운로드'
-                    : locale === 'ja'
-                      ? '日本語化パッチのダウンロード'
-                      : locale === 'de'
-                        ? 'Lokalisierte Trainer-Datei herunterladen'
-                        : locale === 'es'
-                          ? 'Descargar trainer localizado'
-                          : 'Download Localized Trainer'}
-                </span>
+                <span>{t.downloadPatchedFile}</span>
               </a>
 
             {/* Password Notice */}
             <div className="mt-4 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-left max-w-xs w-full">
               <p className="text-[11px] font-semibold text-amber-400 flex items-center justify-center space-x-1">
                 <Info className="w-3.5 h-3.5 mr-1 flex-shrink-0" />
-                <span>
-                  {locale === 'ko'
-                    ? '압축 해제 비밀번호: 11111111'
-                    : locale === 'ja'
-                      ? '解凍パスワード: 11111111'
-                      : locale === 'de'
-                        ? 'Entpack-Passwort: 11111111'
-                        : locale === 'es'
-                          ? 'Contraseña de extracción: 11111111'
-                          : 'Extraction Password: 11111111'}
-                </span>
+                <span>{t.extractionPasswordNotice}</span>
               </p>
               <p className="text-[9px] text-slate-400 mt-1 leading-normal text-center">
-                {locale === 'ko'
-                  ? '파일 전달을 위해 비밀번호가 설정된 ZIP 형식으로 제공됩니다. 실행 전 출처와 보안 검사 결과를 직접 확인하세요.'
-                  : locale === 'ja'
-                    ? 'ファイル配布のため、パスワード付きZIP形式で提供します。実行前に配布元とセキュリティ検査結果をご確認ください。'
-                    : locale === 'de'
-                      ? 'Als passwortgeschützte ZIP-Datei bereitgestellt. Überprüfen Sie Quelle und Sicherheitsergebnisse vor der Ausführung.'
-                      : locale === 'es'
-                        ? 'Proporcionado como ZIP protegido por contraseña. Verifique la fuente y la seguridad antes de ejecutarlo.'
-                        : 'Provided as a password-protected ZIP for file delivery. Verify the source and security scan results before running it.'}
+                {t.extractionSecurityNotice}
               </p>
             </div>
 
@@ -575,7 +547,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
               onClick={handleReset}
               className="mt-4 text-[11px] text-slate-500 hover:text-slate-300 underline transition-colors"
             >
-              {locale === 'ko' ? '다른 파일 패치하기' : locale === 'ja' ? '別のファイルをパッチ' : locale === 'de' ? 'Weitere Datei patchen' : locale === 'es' ? 'Parchear otro archivo' : 'Patch another file'}
+              {t.patchAnotherFileBtn}
             </button>
           </div>
         )}
@@ -585,7 +557,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
             <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/20">
               <AlertTriangle className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-rose-400 mt-4">PATCH FAILED</h3>
+            <h3 className="text-base font-bold text-rose-400 mt-4">{t.patchFailedHeading}</h3>
             <p className="text-xs text-slate-300 mt-2 max-w-md bg-slate-950/80 p-3 rounded-lg border border-slate-800/80 text-left leading-relaxed">
               {errorMsg}
             </p>
@@ -593,7 +565,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
               onClick={() => setStatus('idle')}
               className="mt-6 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 transition-colors"
             >
-              재시도하기
+              {t.retryBtnText}
             </button>
           </div>
         )}
