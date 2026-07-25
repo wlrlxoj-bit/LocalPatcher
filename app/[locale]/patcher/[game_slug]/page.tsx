@@ -4,6 +4,7 @@ import PatcherClient from '@/components/PatcherClient';
 import {
   getGameBySlug,
   getTrainersForGame,
+  getLatestUnapprovedStatusesForTrainers,
   getMappingsForTrainers,
   resolveGameSlugAlias,
   sortTrainersLatestFirst,
@@ -98,13 +99,13 @@ export async function generateMetadata({ params }: PatcherPageProps) {
     title = `${game.title_ko} 트레이너 한글 패치 - 무설치 브라우저 로컬 변환 | LocalPatcher`;
     description = hasApprovedTranslation
       ? `${game.title_ko} (${game.title_en}) 트레이너 한글 번역 패치(${versionsStr})를 제공합니다. 파일을 서버에 올리지 않고 웹브라우저에서 로컬로 변환할 수 있습니다.`
-      : `${game.title_ko} (${game.title_en}) 트레이너(${versionsStr})의 변환 지원 정보와 번역 검수 상태를 확인하세요. 파일은 서버에 업로드되지 않습니다.`;
+      : `${game.title_ko} (${game.title_en}) 트레이너(${versionsStr})의 변환 지원 정보와 자동 번역 처리 상태를 확인하세요. 파일은 서버에 업로드되지 않습니다.`;
   } else if (currentLocale === 'ja') {
     const titleJa = game.title_ja || game.title_en;
     title = `${titleJa} トレーナー日本語化パッチ - ブラウザでのローカル変換 | LocalPatcher`;
     description = hasApprovedTranslation
       ? `${titleJa}の最新トレーナー用日本語化翻訳パッチ(${versionsStr})です。サーバーにファイルを一切アップロードせず、Webブラウザ内で完全にローカルで日本語化できます。`
-      : `${titleJa}のトレーナー(${versionsStr})に関する変換対応情報と翻訳レビュー状況を確認できます。ファイルはサーバーにアップロードされません。`;
+      : `${titleJa}のトレーナー(${versionsStr})に関する変換対応情報と自動翻訳の処理状況を確認できます。ファイルはサーバーにアップロードされません。`;
   } else {
     title = `${game.title_en} Original Trainer Information & Compatibility | LocalPatcher`;
     description = `Check original English trainer versions, supported option counts, compatibility, and the official download source for ${game.title_en} (${versionsStr}).`;
@@ -180,6 +181,9 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
 
   // 3. Pre-fetch mappings for all trainers of this game in a single batch query
   const mappingsMap = await getMappingsForTrainers(trainers.map(t => t.id), currentLocale);
+  const unapprovedStatusMap = currentLocale === 'ko' || currentLocale === 'ja'
+    ? await getLatestUnapprovedStatusesForTrainers(trainers.map(t => t.id), currentLocale)
+    : {};
 
   // 4. Build JSON-LD structured data for SoftwareApplication
   const jsonLd = {
@@ -221,6 +225,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
           option_count: t.option_count
         }))}
         mappingsMap={mappingsMap}
+        unapprovedStatusMap={unapprovedStatusMap}
         locale={currentLocale as Locale}
       />
     </>

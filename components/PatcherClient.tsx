@@ -7,6 +7,7 @@ import { Locale, getDictionary } from '@/lib/i18n';
 import DropZone from '@/components/DropZone';
 import AdSenseUnit from '@/components/AdSenseUnit';
 import { trackAnalyticsEvent } from '@/lib/analytics';
+import type { UnapprovedTranslationStatus } from '@/lib/supabase';
 
 interface Game {
   id: number;
@@ -40,6 +41,7 @@ interface PatcherClientProps {
   trainers: Trainer[];
   // Map of trainerId -> mapping data
   mappingsMap: Record<number, Mapping[]>;
+  unapprovedStatusMap: Record<number, UnapprovedTranslationStatus | null>;
   locale: Locale;
 }
 
@@ -395,7 +397,13 @@ function PartnerStoreWidget({ game, locale, t, trainerId }: PartnerStoreWidgetPr
   );
 }
 
-export default function PatcherClient({ game, trainers, mappingsMap, locale }: PatcherClientProps) {
+export default function PatcherClient({
+  game,
+  trainers,
+  mappingsMap,
+  unapprovedStatusMap,
+  locale,
+}: PatcherClientProps) {
   // 서버가 version_str 기준으로 정렬한 순서를 metadata/JSON-LD와 동일하게 유지합니다.
   const sortedTrainers = trainers;
   const t = getDictionary(locale);
@@ -705,6 +713,8 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
         const isTranslationPending =
           (selectedTrainer.option_count ?? 0) > 0 &&
           (mappingsMap[selectedTrainer.id] || []).length === 0;
+        const unapprovedStatus = unapprovedStatusMap[selectedTrainer.id];
+        const isTranslationRejected = isTranslationPending && unapprovedStatus === 'rejected';
         return (
           <div className="space-y-6">
             {isUnpatchable ? (
@@ -741,14 +751,30 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                 <AlertTriangle className="w-8 h-8 shrink-0 text-amber-400 mt-0.5" />
                 <div>
                   <h3 className="font-bold text-lg text-white mb-2 font-outfit">
-                    {locale === 'ko' ? '번역 검수 대기 중' : locale === 'ja' ? '翻訳レビュー待ち' : 'Translation Review Pending'}
+                    {isTranslationRejected
+                      ? locale === 'ko'
+                        ? '자동 검증 실패'
+                        : locale === 'ja'
+                          ? '自動検証に失敗'
+                          : 'Automated Validation Failed'
+                      : locale === 'ko'
+                        ? '자동 번역 검증 및 재시도 중'
+                        : locale === 'ja'
+                          ? '自動翻訳の検証・再試行中'
+                          : 'Automated Translation Validation in Progress'}
                   </h3>
                   <p className="text-sm leading-relaxed text-amber-100/80">
-                    {locale === 'ko'
-                      ? '이 트레이너는 변환 가능한 옵션이 확인되었지만, 현재 언어의 승인된 번역 매핑이 아직 준비되지 않았습니다. 번역 검수가 완료되면 패치 기능이 제공됩니다.'
-                      : locale === 'ja'
-                        ? 'このトレーナーには変換可能なオプションがありますが、現在の言語で承認済みの翻訳マッピングはまだ準備中です。レビュー完了後にパッチ機能を提供します。'
-                        : 'This trainer has convertible options, but an approved translation mapping for this language is still under review. Patching will become available after review.'}
+                    {isTranslationRejected
+                      ? locale === 'ko'
+                        ? '자동 검증을 통과하지 못했습니다. 다음 파일 업데이트 또는 자동 재처리를 기다리고 있습니다.'
+                        : locale === 'ja'
+                          ? '自動検証を通過できませんでした。次のファイル更新または自動再処理を待っています。'
+                          : 'Automated validation did not pass. This version is waiting for the next file update or automated reprocessing.'
+                      : locale === 'ko'
+                        ? '변환 가능한 옵션은 확인되었습니다. 자동 번역 검증과 실패 항목 재시도가 진행 중이며, 통과하면 패치 기능이 자동으로 활성화됩니다.'
+                        : locale === 'ja'
+                          ? '変換可能なオプションは確認済みです。自動翻訳の検証と失敗項目の再試行が進行中で、通過するとパッチ機能が自動的に有効になります。'
+                          : 'Convertible options were found. Automated translation validation and retries are in progress; patching will activate automatically after they pass.'}
                   </p>
                 </div>
               </div>

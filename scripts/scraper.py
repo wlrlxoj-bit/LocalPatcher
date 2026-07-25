@@ -17,6 +17,7 @@ from fling_utils import (
     normalize_fling_slug,
     parse_trainer_version,
 )
+from translation_validation import save_validated_draft, validate_translation
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -699,7 +700,7 @@ def fetch_steam_meta(game_title: str):
         print(f"[-] Steam search failed: {e}")
     return default_meta
 
-def scrape_and_patch_trainer(post, db: Client, force=False):
+def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_failures=False):
     """Scrapes specific trainer page, downloads binaries for ALL versions, extracts offsets, and inserts to Supabase."""
     print(f"[*] Processing: {post['title']} ({post['link']})")
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -707,7 +708,7 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
     try:
         response = requests.get(post['link'], headers=headers, timeout=10)
         if response.status_code != 200:
-            return
+            return False
             
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -715,7 +716,7 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
         download_anchors = soup.select('a[href*="/downloads/"]')
         if not download_anchors:
             print("[-] No download links found on page.")
-            return
+            return False
             
         # Deduplicate URLs preserving order
         seen_urls = set()
@@ -733,6 +734,7 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
                 
         if game_row:
             game_id = game_row['id']
+            db.table('games').update({'fling_url': post['link']}).eq('id', game_id).execute()
         else:
             # Create new game meta row
             steam_meta = fetch_steam_meta(game_title_en)
@@ -748,20 +750,26 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
             }).execute()
             if not insert_game.data:
                 print("[-] Failed to create game meta.")
-                return
+                return False
             game_id = insert_game.data[0]['id']
             
+        any_registered = False
+        approved_skips = 0
+        had_eligible_failure = False
         # Now process each version download link
         for download_a in unique_downloads:
             download_url = download_a['href']
             download_text = download_a.text.strip()
             print(f"[*] Version download link found: {download_url} ({download_text})")
+            target_eligible = False
             
             try:
                 # Download binary bytes
                 dl_response = requests.get(download_url, headers=headers, timeout=30)
                 if dl_response.status_code != 200:
                     print(f"[-] Failed to download binary from {download_url}")
+                    if strict_download_failures:
+                        had_eligible_failure = True
                     continue
                     
                 file_bytes = dl_response.content
@@ -785,6 +793,8 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
                     
                     if not unrar_path:
                         print("[-] Warning: UnRAR.exe not found. Skipping trainer.")
+                        if strict_download_failures:
+                            had_eligible_failure = True
                         continue
                     
                     try:
@@ -819,6 +829,8 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
                     
                 if not exe_bytes or exe_bytes[:2] != b'MZ':
                     print("[-] Valid executable binary not found.")
+                    if strict_download_failures:
+                        had_eligible_failure = True
                     continue
                     
                 # Calculate file specs
@@ -831,32 +843,41 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
                 if trainer_res.data:
                     trainer_id = trainer_res.data[0]['id']
                     # Check if it has any translation mappings
-                    mappings_res = db.table('translation_mappings').select('id,is_approved').eq('trainer_id', trainer_id).execute()
-                    if mappings_res.data and any(mapping.get('is_approved') for mapping in mappings_res.data):
+                    mappings_res = db.table('translation_mappings').select('id,is_approved,language_code').eq('trainer_id', trainer_id).execute()
+                    approved_locales = {
+                        mapping.get('language_code') for mapping in (mappings_res.data or [])
+                        if mapping.get('is_approved')
+                    }
+                    if {'ko', 'ja'}.issubset(approved_locales):
                         print(f"    [*] Skip/Protect: Trainer ID {trainer_id} has approved translation mappings. Skipping overwrite.")
+                        approved_skips += 1
                         continue
-                    if mappings_res.data and len(mappings_res.data) > 0 and not force:
-                        print(f"    [*] Skip/Protect: Trainer ID {trainer_id} has existing translation mappings. Skipping overwrite.")
-                        continue
-
-                    if not force:
-                        print(f"[*] Trainer version {original_file_hash} already exists in database. Skipping.")
-                        continue
-                    else:
+                    target_eligible = True
+                    if force:
                         print(f"    [*] Force mode: deleting existing mappings and trainer ID {trainer_id} to overwrite...")
                         db.table('translation_mappings').delete().eq('trainer_id', trainer_id).execute()
                         db.table('trainers').delete().eq('id', trainer_id).execute()
+                        trainer_id = None
+                    else:
+                        print(f"[*] Trainer {trainer_id}의 pending/rejected 번역을 동일 바이너리로 재검증합니다.")
+                else:
+                    trainer_id = None
+                    target_eligible = True
                     
                 # Parse PE header for security boundaries
                 text_section = parse_pe_binary(exe_bytes)
                 if not text_section:
                     print("[-] Executable parsing failed. Section boundaries mismatch.")
+                    if strict_download_failures:
+                        had_eligible_failure = True
                     continue
                     
                 # Scan cheat options string offset
                 mapping_details = scan_cheat_string_offset(exe_bytes)
                 if not mapping_details:
                     print("[-] Option labels buffer not found inside binary.")
+                    if strict_download_failures:
+                        had_eligible_failure = True
                     continue
                     
                 # Prevent Shellcode write block: verify mapping falls outside .text segment
@@ -864,53 +885,84 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
                 text_end = text_start + text_section.SizeOfRawData
                 if text_start <= mapping_details['offset_dec'] < text_end:
                     print("[-] Security Warning: Mapping offset falls inside .text section. Operation blocked.")
+                    if strict_download_failures:
+                        had_eligible_failure = True
                     continue
                     
                 # Parse version and option count from download link text for accuracy
                 final_version_str, option_count = parse_trainer_version(download_text)
                 
-                # Insert Trainer specs
-                insert_trainer = db.table('trainers').insert({
-                    'game_id': game_id,
-                    'version_str': final_version_str,
-                    'option_count': option_count,
-                    'original_file_hash': original_file_hash,
-                    'original_file_size': original_file_size,
-                    'is_packed': False
-                }).execute()
-                
-                if not insert_trainer.data:
-                    print("[-] Failed to insert trainer metadata.")
-                    continue
-                trainer_id = insert_trainer.data[0]['id']
+                if trainer_id is None:
+                    insert_trainer = db.table('trainers').insert({
+                        'game_id': game_id, 'version_str': final_version_str,
+                        'option_count': option_count, 'original_file_hash': original_file_hash,
+                        'original_file_size': original_file_size, 'is_packed': False
+                    }).execute()
+                    if not insert_trainer.data:
+                        print("[-] Failed to insert trainer metadata.")
+                        had_eligible_failure = True
+                        continue
+                    trainer_id = insert_trainer.data[0]['id']
                 
                 # Run translation engine
-                translated_text_ko = process_translation_block(mapping_details['original_text'], db)
-                translated_text_ja = process_translation_block_ja(mapping_details['original_text'], db)
-                
                 # 자동 초안은 승인된 기존 매핑을 절대 덮어쓰지 않는 DB RPC로 저장한다.
                 clean_orig_text = mapping_details['original_text'].replace('\x00', '').replace('\u0000', '')
-                draft_mappings = []
-                for language_code, translated_text in [('ko', translated_text_ko), ('ja', translated_text_ja)]:
-                    draft_mappings.append({
-                        'trainer_id': trainer_id, 'offset_dec': mapping_details['offset_dec'],
-                        'encoding': mapping_details['encoding'], 'original_text': clean_orig_text,
-                        'translated_text': translated_text.replace('\x00', '').replace('\u0000', ''),
-                        'max_char_len': mapping_details['max_char_len'], 'language_code': language_code,
-                        'translation_provider': TRANSLATION_PROVIDER
-                    })
-                result = db.rpc('upsert_translation_drafts', {'p_mappings': draft_mappings}).execute()
-                for draft_result in (result.data or {}).get('results', []):
-                    if not draft_result.get('saved', False):
-                        print(f"[*] Offset {draft_result.get('offsetDec')} approved mapping preserved; draft was not written.")
+                trainer_ok = True
+                for language_code, translator in {
+                    'ko': process_translation_block, 'ja': process_translation_block_ja
+                }.items():
+                    validation = None
+                    for attempt in range(1, 4):
+                        try:
+                            translated_text = translator(mapping_details['original_text'], db)
+                        except Exception as locale_error:
+                            print(f"[locale-failed] trainer={trainer_id} locale={language_code} error={type(locale_error).__name__}")
+                            validation = None
+                            break
+                        mapping = {
+                            'trainer_id': trainer_id, 'offset_dec': mapping_details['offset_dec'],
+                            'encoding': mapping_details['encoding'], 'original_text': clean_orig_text,
+                            'translated_text': translated_text.replace('\x00', '').replace('\u0000', ''),
+                            'max_char_len': mapping_details['max_char_len'], 'language_code': language_code,
+                            'translation_provider': TRANSLATION_PROVIDER
+                        }
+                        validation = validate_translation(
+                            binary=exe_bytes, expected_sha256=original_file_hash,
+                            expected_size=original_file_size, text_section=(text_start, text_end),
+                            offset=mapping_details['offset_dec'], max_char_len=mapping_details['max_char_len'],
+                            encoding=mapping_details['encoding'], original_text=clean_orig_text,
+                            translated_text=mapping['translated_text'], option_count=option_count,
+                            language_code=language_code,
+                        )
+                        if validation.ok or any(issue.structural for issue in validation.issues):
+                            break
+                        print(f"[validation-retry] trainer={trainer_id} locale={language_code} attempt={attempt} codes={','.join(validation.codes)}")
+                    if validation is None:
+                        trainer_ok = False
+                        continue
+                    outcome = save_validated_draft(db, mapping=mapping, validation=validation)
+                    print(f"[save-outcome] trainer={trainer_id} locale={language_code} status={outcome.value}")
+                    if outcome.value in {"rejected", "db_error"}:
+                        trainer_ok = False
                 
                 print(f"[+] Successfully registered new trainer ID: {trainer_id} for Game ID: {game_id}!")
+                any_registered = any_registered or trainer_ok
+                if not trainer_ok:
+                    had_eligible_failure = True
                 
             except Exception as e:
                 print(f"[-] Error processing download {download_url}: {e}")
+                if target_eligible or strict_download_failures:
+                    had_eligible_failure = True
                 
+        return page_result(any_registered, approved_skips, had_eligible_failure)
     except Exception as e:
         print(f"[-] Error processing page: {e}")
+        return False
+
+def page_result(any_registered: bool, approved_skips: int, had_eligible_failure: bool) -> bool:
+    """여러 다운로드 중 하나라도 처리 대상 실패가 있으면 페이지 전체를 실패로 반환한다."""
+    return (any_registered or approved_skips > 0) and not had_eligible_failure
 
 def main():
     global TRANSLATION_PROVIDER
@@ -965,19 +1017,30 @@ def main():
             'link': args.url,
             'slug': game_slug
         }
-        scrape_and_patch_trainer(post, db, force=True)
-        return
+        succeeded = scrape_and_patch_trainer(
+            post,
+            db,
+            force=args.force,
+            strict_download_failures=True,
+        )
+        return 0 if succeeded else 1
 
 
     posts = fetch_recent_trainers()
     if not posts:
         print("[-] No new updates found.")
-        return
+        return 1
         
     # 최근 20개의 신작/업데이트 피드를 수집하도록 범위를 대폭 확장 (4위 이하 누락 방지)
+    failed_pages = 0
     for post in posts[:20]:
-        scrape_and_patch_trainer(post, db, force=args.force)
+        if not scrape_and_patch_trainer(post, db, force=args.force):
+            failed_pages += 1
+    if failed_pages:
+        print(f"[-] Batch completed with partial failures: {failed_pages}/{min(len(posts), 20)} pages")
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

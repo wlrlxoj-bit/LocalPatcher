@@ -493,3 +493,46 @@ export async function getMappingsForTrainers(trainerIds: number[], lang: string 
     return result;
   }
 }
+
+export type UnapprovedTranslationStatus = 'pending' | 'rejected';
+
+/**
+ * 트레이너와 언어별로 가장 최근의 미승인 번역 처리 상태를 조회합니다.
+ * 승인된 매핑 자체는 기존 조회 함수가 담당하며, 이 함수는 UI 상태 안내에만 사용합니다.
+ */
+export async function getLatestUnapprovedStatusesForTrainers(
+  trainerIds: number[],
+  lang: string = 'ko'
+): Promise<Record<number, UnapprovedTranslationStatus | null>> {
+  const result: Record<number, UnapprovedTranslationStatus | null> = {};
+  for (const trainerId of trainerIds) {
+    result[trainerId] = null;
+  }
+  if (trainerIds.length === 0 || !supabase) return result;
+
+  try {
+    const { data, error } = await supabase
+      .from('translation_mappings')
+      .select('id,trainer_id,translation_status')
+      .in('trainer_id', trainerIds)
+      .eq('language_code', lang)
+      .eq('is_approved', false)
+      .in('translation_status', ['pending', 'rejected'])
+      .order('id', { ascending: false });
+    if (error || !data) throw error || new Error('No data');
+
+    for (const mapping of data) {
+      const trainerId = mapping.trainer_id as number;
+      if (
+        result[trainerId] === null &&
+        (mapping.translation_status === 'pending' || mapping.translation_status === 'rejected')
+      ) {
+        result[trainerId] = mapping.translation_status;
+      }
+    }
+    return result;
+  } catch (err) {
+    console.error('운영 번역 처리 상태 일괄 조회에 실패했습니다:', err);
+    return result;
+  }
+}

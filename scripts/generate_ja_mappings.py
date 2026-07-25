@@ -7,6 +7,7 @@ import sys
 import re
 import json
 import requests
+from urllib.parse import urlparse
 sys.stdout.reconfigure(encoding='utf-8')
 
 from dotenv import load_dotenv
@@ -39,6 +40,14 @@ def has_english_leak(text: str) -> bool:
         if word not in ALLOWED_WORDS:
             return True
     return False
+
+def is_valid_source_url(value: str) -> bool:
+    """현재 게임 원본 URL이 재처리 가능한 HTTP(S) 주소인지 확인한다."""
+    try:
+        parsed = urlparse((value or "").strip())
+        return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+    except (TypeError, ValueError):
+        return False
 
 POPULAR_SLUGS = [
     'elden-ring',
@@ -184,11 +193,12 @@ def translate_block_to_ja(text: str, ja_dict: dict) -> str:
     return "\n".join(translated_lines)
 
 def main():
+    failures = 0
     ja_dict = load_ja_dictionary()
     
     print("[*] 13개 인기 게임 목록을 조회하는 중...")
     # popular slugs 게임 id 가져오기
-    game_res = db.table('games').select('id, slug, title_en').in_('slug', POPULAR_SLUGS).execute()
+    game_res = db.table('games').select('id, slug, title_en, fling_url').in_('slug', POPULAR_SLUGS).execute()
     popular_games = game_res.data or []
     
     print(f"[+] 조회된 인기 게임 수: {len(popular_games)}개")
@@ -196,6 +206,7 @@ def main():
     for game in popular_games:
         game_id = game['id']
         game_slug = game['slug']
+        source_url = game.get('fling_url')
         print(f"\n[*] 게임 처리 중: {game['title_en']} ({game_slug})")
         
         # 해당 게임의 트레이너들 조회
@@ -210,7 +221,15 @@ def main():
             # 이미 ja 번역이 등록되어 있는지 확인
             ja_check = db.table('translation_mappings').select('id').eq('trainer_id', trainer_id).eq('language_code', 'ja').execute()
             if ja_check.data:
+                if not is_valid_source_url(source_url):
+                    failures += 1
+                    print(f"[SOURCE_URL_MISSING] game={game_slug} trainer={trainer_id} 기존 일본어 매핑을 재검증할 원본 URL이 없습니다.")
                 print(f"  [-] 트레이너 ID {trainer_id} ({version}): 이미 일본어 번역이 존재합니다. 스킵.")
+                continue
+
+            if not is_valid_source_url(source_url):
+                failures += 1
+                print(f"[SOURCE_URL_MISSING] game={game_slug} trainer={trainer_id} 신규 pending 매핑을 생성하지 않습니다.")
                 continue
                 
             # 기존 한국어(ko) 번역 또는 원본을 활용하기 위해 기존 매핑 정보 조회
@@ -240,13 +259,17 @@ def main():
                     'translated_text': translated_ja,
                     'max_char_len': max_char_len,
                     'language_code': 'ja',
-                    'is_approved': True
+                    'is_approved': False,
+                    'translation_status': 'pending'
                 }).execute()
                 print(f"  [+] 일본어 매핑 등록 완료.")
             except Exception as e:
+                failures += 1
                 print(f"  [-] 일본어 매핑 등록 중 에러 발생: {e}")
 
     print("\n[*] 모든 일본어 번역 확장 작업이 완료되었습니다.")
 
+    return 1 if failures else 0
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

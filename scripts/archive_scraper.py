@@ -530,6 +530,7 @@ def process_archive_trainer(game_url, db: Client, delay_sec=1.0, force=False):
 
         if game_row:
             game_id = game_row['id']
+            db.table('games').update({'fling_url': game_url}).eq('id', game_id).execute()
         else:
             # Create new game meta
             steam_meta = fetch_steam_meta(title_raw)
@@ -685,7 +686,8 @@ def process_archive_trainer(game_url, db: Client, delay_sec=1.0, force=False):
                     'translated_text': translated_text_ko.replace('\x00', '').replace('\u0000', ''),
                     'max_char_len': mapping_details['max_char_len'],
                     'language_code': 'ko',
-                    'is_approved': True
+                    'is_approved': False,
+                    'translation_status': 'pending'
                 }).execute()
                 
                 db.table('translation_mappings').insert({
@@ -696,7 +698,8 @@ def process_archive_trainer(game_url, db: Client, delay_sec=1.0, force=False):
                     'translated_text': translated_text_ja.replace('\x00', '').replace('\u0000', ''),
                     'max_char_len': mapping_details['max_char_len'],
                     'language_code': 'ja',
-                    'is_approved': True
+                    'is_approved': False,
+                    'translation_status': 'pending'
                 }).execute()
                 
                 print(f"    [+] Successfully registered: {final_version_str} (Trainer ID: {trainer_id})")

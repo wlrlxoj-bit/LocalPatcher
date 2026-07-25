@@ -222,7 +222,8 @@ def main():
                         'translated_text': translated_ko.replace('\x00', '').replace('\u0000', ''),
                         'max_char_len': mapping_details['max_char_len'],
                         'language_code': 'ko',
-                        'is_approved': True
+                        'is_approved': False,
+                        'translation_status': 'pending'
                     }).execute()
                     
                     # 5. 일본어(ja) 번역본 생성 및 주입
@@ -235,7 +236,8 @@ def main():
                         'translated_text': translated_ja.replace('\x00', '').replace('\u0000', ''),
                         'max_char_len': mapping_details['max_char_len'],
                         'language_code': 'ja',
-                        'is_approved': True
+                        'is_approved': False,
+                        'translation_status': 'pending'
                     }).execute()
                     
                     print(f"    [+] 한글 및 일어 번역 매핑(ko/ja) 주입 완료!")
