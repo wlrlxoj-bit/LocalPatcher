@@ -12,7 +12,7 @@ on:
         default: ''
 
 jobs:
-  scrape-and-update:
+  crawl:
     runs-on: ubuntu-latest
 
     steps:
@@ -43,6 +43,25 @@ jobs:
         else
           python scripts/scraper.py --provider azure
         fi
+
+  reprocess-pending:
+    needs: crawl
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository code
+      uses: actions/checkout@v4
+
+    - name: Set up Python environment
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install scraper dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests beautifulsoup4 pefile supabase python-dotenv
 
     - name: Reprocess pending translations safely
       env:

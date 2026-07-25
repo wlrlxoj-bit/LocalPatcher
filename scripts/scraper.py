@@ -17,7 +17,12 @@ from fling_utils import (
     normalize_fling_slug,
     parse_trainer_version,
 )
-from translation_validation import save_validated_draft, validate_translation
+from translation_validation import (
+    is_option_candidate,
+    parse_option_line,
+    save_validated_draft,
+    validate_translation,
+)
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -253,8 +258,30 @@ def _call_azure(lines_to_translate, _prompt, _temperature):
             continue
         if res.status_code != 200:
             raise RuntimeError(f"Azure Translator HTTP {res.status_code}")
-        return [row["translations"][0]["text"] for row in res.json()]
+        rows = res.json()
+        if not isinstance(rows, list) or len(rows) != len(lines_to_translate):
+            actual = len(rows) if isinstance(rows, list) else "invalid"
+            raise RuntimeError(
+                f"Azure Translator 응답 수 불일치: expected={len(lines_to_translate)} actual={actual}"
+            )
+        return [row["translations"][0]["text"] for row in rows]
     raise RuntimeError("Azure Translator 요청 실패")
+
+
+def _chunk_translation_items(items, max_items=25, max_chars=5000):
+    """항목 수와 총 문자 수 제한을 모두 지키는 번역 청크를 만든다."""
+    chunks, current, current_chars = [], [], 0
+    for item in items:
+        if len(item) > max_chars:
+            raise RuntimeError(f"번역 항목 문자 제한 초과: chars={len(item)}")
+        if current and (len(current) >= max_items or current_chars + len(item) > max_chars):
+            chunks.append(current)
+            current, current_chars = [], 0
+        current.append(item)
+        current_chars += len(item)
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 def _translate_via_llm_with_fallback(lines_to_translate, language, example_translation, providers):
@@ -263,6 +290,16 @@ def _translate_via_llm_with_fallback(lines_to_translate, language, example_trans
         return []
     if not providers:
         return list(lines_to_translate)
+    chunks = _chunk_translation_items(lines_to_translate)
+    if len(chunks) > 1:
+        translated = []
+        for chunk in chunks:
+            translated.extend(
+                _translate_via_llm_with_fallback(
+                    chunk, language, example_translation, providers
+                )
+            )
+        return translated
 
     language_label = "한국어" if language == "Korean" else "일본어"
     last_error = "번역 제공자가 성공적으로 응답하지 않았습니다"
@@ -283,31 +320,16 @@ def _translate_via_llm_with_fallback(lines_to_translate, language, example_trans
         if attempt < 4:
             time.sleep(1)
 
-    print(f"[!] {language_label} 일괄 번역에 실패해 줄 단위 폴백을 실행합니다.")
-    translated_lines = []
-    for idx, line in enumerate(lines_to_translate):
-        translated = None
-        for attempt in range(1, 4):
-            prompt = _build_llm_prompt([line], language, example_translation)
-            for provider_name, provider in providers:
-                try:
-                    translated = provider([line], prompt, 0.3)[0]
-                    break
-                except Exception as exc:
-                    if isinstance(exc, TranslationQuotaError):
-                        raise
-                    last_error = str(exc)
-                    print(f"[-] {provider_name} {language_label} {idx}번 줄 번역 {attempt}/3회 실패: {last_error}")
-            if translated is not None:
-                break
-            if attempt < 3:
-                time.sleep(1)
-        if translated is None:
-            print(f"[!] {language_label} {idx}번 줄을 번역하지 못해 원문을 유지합니다.")
-            translated = line
-        translated_lines.append(translated)
-        time.sleep(0.2)
-    return translated_lines
+    raise RuntimeError(f"{language_label} 일괄 번역 실패: {last_error}")
+
+
+def _split_option_for_translation(line):
+    """옵션 줄을 원본 단축키·구분자와 번역 대상 label로 분리한다."""
+    parts = parse_option_line(line)
+    if not parts:
+        return None
+    prefix, delimiter, label = parts
+    return prefix + delimiter, label
 
 
 def translate_via_llm(lines_to_translate):
@@ -317,14 +339,13 @@ def translate_via_llm(lines_to_translate):
 
 def translate_line(line: str):
     """Attempts dictionary translation for a single line. Returns None if it needs LLM translation."""
-    pattern = r"^([a-zA-Z0-9\+\s\.\-\*\/↑↓←→]+)\s*-\s*([^\*]+)(.*)$"
-    match = re.match(pattern, line.strip())
-    if not match:
-        return line  # Keep headers or notes as-is
-    
-    hotkey = match.group(1).strip()
-    label = match.group(2).strip()
-    notes = match.group(3).strip()
+    parts = parse_option_line(line)
+    if not parts:
+        if is_option_candidate(line):
+            raise RuntimeError("지원하지 않는 옵션 줄 형식")
+        return line
+    hotkey, delimiter, label = parts
+    notes = ""
     
     label_lower = label.lower().replace("'", "").strip()
     
@@ -351,7 +372,7 @@ def translate_line(line: str):
             else:
                 translated_notes = notes
                 
-        return f"{hotkey} - {translated_label}{translated_notes}"
+        return f"{hotkey}{delimiter}{translated_label}{translated_notes}"
     
     # Return None to indicate it requires LLM translation
     return None
@@ -373,7 +394,10 @@ def process_translation_block(text: str, db: Client) -> str:
             dict_results.append(trans_line)
         else:
             dict_results.append(None) # Marker for LLM translate
-            lines_needing_llm.append(line)
+            parts = _split_option_for_translation(line)
+            if parts is None:
+                raise RuntimeError("지원하지 않는 옵션 줄 형식")
+            lines_needing_llm.append(parts[1])
 
     # Second Pass: Perform batch LLM translation if keys are set
     llm_results = []
@@ -394,7 +418,10 @@ def process_translation_block(text: str, db: Client) -> str:
         trans_line = dict_results[idx]
         if trans_line is None:
             # 인덱스 기반 결과이므로 같은 영문 줄도 서로 다른 위치로 보존한다.
-            trans_line = llm_results[llm_index] if llm_index < len(llm_results) else line
+            parts = _split_option_for_translation(line)
+            if parts is None or llm_index >= len(llm_results):
+                raise RuntimeError("번역 결과와 옵션 줄의 대응 관계가 손상됨")
+            trans_line = parts[0] + llm_results[llm_index]
             llm_index += 1
             # Save newly translated term to dynamic dictionary table for self-learning caching
             if trans_line != line:
@@ -413,14 +440,13 @@ def process_translation_block(text: str, db: Client) -> str:
 
 def translate_line_ja(line: str):
     """Attempts Japanese dictionary translation for a single line. Returns None if it needs LLM translation."""
-    pattern = r"^([a-zA-Z0-9\+\s\.\-\*\/↑↓←→]+)\s*-\s*([^\*]+)(.*)$"
-    match = re.match(pattern, line.strip())
-    if not match:
+    parts = parse_option_line(line)
+    if not parts:
+        if is_option_candidate(line):
+            raise RuntimeError("지원하지 않는 옵션 줄 형식")
         return line
-    
-    hotkey = match.group(1).strip()
-    label = match.group(2).strip()
-    notes = match.group(3).strip()
+    hotkey, delimiter, label = parts
+    notes = ""
     
     label_lower = label.lower().replace("'", "").strip()
     
@@ -443,7 +469,7 @@ def translate_line_ja(line: str):
             else:
                 translated_notes = notes
                 
-        return f"{hotkey} - {translated_label}{translated_notes}"
+        return f"{hotkey}{delimiter}{translated_label}{translated_notes}"
     
     return None
 
@@ -514,7 +540,10 @@ def process_translation_block_ja(text: str, db: Client) -> str:
             dict_results.append(trans_line)
         else:
             dict_results.append(None)
-            lines_needing_llm.append(line)
+            parts = _split_option_for_translation(line)
+            if parts is None:
+                raise RuntimeError("지원하지 않는 옵션 줄 형식")
+            lines_needing_llm.append(parts[1])
 
     llm_results = []
     if lines_needing_llm:
@@ -531,7 +560,10 @@ def process_translation_block_ja(text: str, db: Client) -> str:
         
         trans_line = dict_results[idx]
         if trans_line is None:
-            trans_line = llm_results[llm_index] if llm_index < len(llm_results) else line
+            parts = _split_option_for_translation(line)
+            if parts is None or llm_index >= len(llm_results):
+                raise RuntimeError("번역 결과와 옵션 줄의 대응 관계가 손상됨")
+            trans_line = parts[0] + llm_results[llm_index]
             llm_index += 1
 
         if len(trans_line) < orig_len:
