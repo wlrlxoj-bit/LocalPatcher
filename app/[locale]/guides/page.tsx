@@ -46,6 +46,32 @@ const content = {
     note: 'ファイル利用とアカウント制裁の最終責任は利用者にあります。LocalPatcherのローカル処理やハッシュ確認は、元ファイルまたは出力ファイルの安全性を保証しません。',
     terms: '利用規約', privacy: 'プライバシーポリシー', badge: 'SAFETY FIRST',
   },
+  de: {
+    title: 'Sicherheitsleitfaden für Trainer', description: 'Wichtige Sicherheitsregeln für die Nutzung von Spiele-Trainern.',
+    warningTitle: 'Niemals in Online-Modi verwenden',
+    warning: 'Die Verwendung in Multiplayer-, Wettbewerbs- oder Anti-Cheat-Umgebungen kann zu Kontosperren führen.',
+    sections: [
+      ['Nutzung offizieller Offline-Funktionen', 'Nutzen Sie ausschließlich offizielle Singleplayer-Optionen.'],
+      ['Keine Bypass-Verfahren', 'LocalPatcher bietet keine Anleitungen zum Umgehen von Anti-Cheat-Systemen.'],
+      ['Dateiprüfung vor Ausführung', 'Vergleichen Sie Spiel- und Trainerversionen und sichern Sie Speicherstände.'],
+      ['Antiviren-Warnungen ernst nehmen', 'Virenscanner-Meldungen müssen sorgfältig geprüft werden.'],
+    ],
+    note: 'Die Verantwortung liegt beim Nutzer. LocalPatcher garantiert keine Virenfreiheit fremder Dateien.',
+    terms: 'Nutzungsbedingungen', privacy: 'Datenschutz', badge: 'SICHERHEIT',
+  },
+  es: {
+    title: 'Guía de uso seguro de Trainers', description: 'Reglas básicas de seguridad para el uso de trainers.',
+    warningTitle: 'No usar en modos multijugador',
+    warning: 'El uso en entornos online o con anti-cheat puede resultar en el bloqueo de su cuenta.',
+    sections: [
+      ['Uso de funciones offline oficiales', 'Consulte únicamente las opciones oficiales para un solo jugador.'],
+      ['Sin métodos de elusión', 'LocalPatcher no proporciona métodos para eludir sistemas anti-cheat.'],
+      ['Verificar archivos antes de ejecutar', 'Verifique versiones y realice copias de seguridad de sus partidas.'],
+      ['Evaluar alertas de antivirus', 'No ignore las advertencias de seguridad sin verificar el origen del archivo.'],
+    ],
+    note: 'La responsabilidad recae exclusivamente en el usuario. LocalPatcher no garantiza la seguridad de archivos externos.',
+    terms: 'Términos de servicio', privacy: 'Política de privacidad', badge: 'SEGURIDAD',
+  },
 } as const;
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {

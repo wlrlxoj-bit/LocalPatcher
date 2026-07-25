@@ -49,6 +49,30 @@ const content: Partial<Record<Locale, Content>> = {
       { icon: Cpu, title: '4. ダウンロードと外部リンク', text: 'ファイルのダウンロードに外部広告ページ、広告ゲート、広告ブロック検出は必要ありません。ゲームストアや配布元への外部リンクまたはアフィリエイトリンクを提供する場合があり、サイト移動後はリンク先運営者のプライバシーおよびCookieポリシーが適用されます。' },
     ],
   },
+  de: {
+    title: 'Datenschutzbestimmungen',
+    subtitle: 'Hinweise zur lokalen Dateiverarbeitung und Datennutzung',
+    updated: 'Zuletzt aktualisiert: 25. Juli 2026',
+    notice: 'Diese Seite beschreibt die aktuelle Funktionsweise des Dienstes.',
+    sections: [
+      { icon: UserRoundX, title: '1. Konten und direkte Identifikatoren', text: 'LocalPatcher erfordert keine Registrierung. Es werden keine persönlichen Daten in eigenen Datenbanken gespeichert.' },
+      { icon: EyeOff, title: '2. Lokale Dateiverarbeitung', text: 'Ausgewählte Dateien werden lokal in Ihrem Browser verarbeitet und nicht auf Server hochgeladen.' },
+      { icon: Cookie, title: '3. Analysen, Werbung und Cookies', text: 'Wir nutzen Google Analytics 4 und Google AdSense zur Analyse und Werbeanzeige.' },
+      { icon: Cpu, title: '4. Downloads und externe Links', text: 'Downloads erfordern keine Werbenotifikationen. Es gelten die Datenschutzrichtlinien der verlinkten Zielseiten.' },
+    ],
+  },
+  es: {
+    title: 'Política de Privacidad',
+    subtitle: 'Información sobre el procesamiento local de archivos y el uso de datos',
+    updated: 'Última actualización: 25 de julio de 2026',
+    notice: 'Esta página describe el funcionamiento actual del servicio.',
+    sections: [
+      { icon: UserRoundX, title: '1. Cuentas e identificadores directos', text: 'LocalPatcher no requiere registro ni almacena datos personales en sus bases de datos.' },
+      { icon: EyeOff, title: '2. Procesamiento local de archivos', text: 'Los archivos seleccionados se procesan localmente en su navegador y no se suben a servidores.' },
+      { icon: Cookie, title: '3. Analítica, publicidad y cookies', text: 'Utilizamos Google Analytics 4 y Google AdSense para análisis y anuncios.' },
+      { icon: Cpu, title: '4. Descargas y enlaces externos', text: 'Las descargas no requieren bloqueos publicitarios. Se aplican las políticas del sitio de destino.' },
+    ],
+  },
 };
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {

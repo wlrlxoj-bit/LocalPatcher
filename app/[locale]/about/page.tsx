@@ -23,6 +23,18 @@ const content = {
     ['独立したサービス', 'LocalPatcherはゲーム開発会社、販売会社、トレーナー作者と提携せず、これらの承認を受けたサービスでもありません。商標とゲーム名は識別目的でのみ使用します。'],
     ['回避ツールではありません', 'DRM、ライセンス確認、オンラインサービス、アンチチートを回避する機能や方法は提供しません。オンライン、競争、アンチチート環境では使用しないでください。'],
   ]},
+  de: { title: 'Über LocalPatcher', description: 'Erfahren Sie mehr über Zweck, Umfang und Unabhängigkeit von LocalPatcher.', back: 'Zurück zur Spiele-Liste', intro: 'LocalPatcher ist ein browserbasiertes Tool, das englische Optionstext in unterstützten Spiele-Trainern lokal übersetzt.', sections: [
+    ['Im Browser verarbeitet', 'Dateiprüfungen und Text-Ersetzungen finden lokal in Ihrem Browser statt. Es werden keine Dateien auf Server hochgeladen.'],
+    ['Umfang des Dienstes', 'LocalPatcher verteilt keine Original-Trainer-Exekutivdateien. Sie müssen die unterstützte Version selbst besitzen.'],
+    ['Unabhängiger Dienst', 'LocalPatcher steht in keiner Verbindung zu Spiele-Entwicklern oder Trainer-Erstellern.'],
+    ['Kein Bypass-Tool', 'Der Dienst umgeht keine Anti-Cheat- oder DRM-Systeme. Verwenden Sie Trainer niemals in Online-Modi.'],
+  ]},
+  es: { title: 'Acerca de LocalPatcher', description: 'Conozca el propósito, alcance y la independencia de LocalPatcher.', back: 'Volver a la lista de juegos', intro: 'LocalPatcher es una herramienta de navegador que reemplaza textos de opciones de trainers con traducciones locales.', sections: [
+    ['Procesado en su navegador', 'La verificación y sustitución de texto ocurren en su navegador. No se suben archivos a nuestros servidores.'],
+    ['Alcance del servicio', 'LocalPatcher no distribuye ejecutables originales de trainers. Debe obtener legalmente la versión compatible.'],
+    ['Servicio independiente', 'LocalPatcher no está afiliado ni respaldado por desarrolladores de juegos ni creadores de trainers.'],
+    ['No es una herramienta de bypass', 'El servicio no elude sistemas anti-cheat ni DRM. No use trainers en modos online.'],
+  ]},
 } satisfies Partial<Record<Locale, { title: string; description: string; back: string; intro: string; sections: [string, string][] }>>;
 
 const localeOf = (value: string): Locale => (value === 'en' || value === 'ja' || value === 'ko' || value === 'de' || value === 'es') ? value as Locale : 'ko';

@@ -77,6 +77,32 @@ const content: Partial<Record<Locale, Content>> = {
       { icon: ShieldCheck, title: '14. 規約変更、準拠法、管轄および言語', text: '運営者は必要に応じて本規約を変更し、施行日とともにサイトへ掲載します。利用者に重大な影響を与える変更は合理的な事前期間を設けて掲載し、法令上別途の同意が必要な場合はその同意を得ます。適用法令で認められる範囲で、変更後も利用を継続した場合は変更規約に同意したものとみなします。本規約および利用関係には大韓民国法を適用しますが、利用者の居住国で排除できない消費者保護の強行規定を制限しません。紛争は大韓民国民事訴訟法上の管轄裁判所で解決します。翻訳版と韓国語版が矛盾する場合、法令で認められる範囲で韓国語版を優先します。' },
     ],
   },
+  de: {
+    title: 'Nutzungsbedingungen',
+    subtitle: 'Nutzungsregeln, Haftungsausschlüsse und Dienstvereinbarung',
+    updated: 'Gültig ab: 25. Juli 2026',
+    warning: 'Verwenden Sie Trainer niemals in Online- oder Anti-Cheat-Umgebungen.',
+    privacy: 'Weitere Informationen finden Sie in unseren Datenschutzbestimmungen.',
+    sections: [
+      { icon: FileText, title: '1. Zweck des Dienstes', text: 'LocalPatcher ist ein browserbasiertes Werkzeug zur lokalen Übersetzung von Optionstexten in unterstützten Spiele-Trainern.' },
+      { icon: FileText, title: '2. Lokale Verarbeitung', text: 'Alle Dateiprüfungen und Übersetzungsschritte finden lokal in Ihrem Browser statt. Dateien werden nicht auf Server hochgeladen.' },
+      { icon: ShieldCheck, title: '3. Zulässige Nutzung', text: 'Sie dürfen den Dienst nur für rechtmäßig erworbene Dateien nutzen. Eine Nutzung in Online- oder Anti-Cheat-Umgebungen ist untersagt.' },
+      { icon: ShieldAlert, title: '4. Haftungsausschluss', text: 'Der Dienst wird ohne Mängelgewähr bereitgestellt. Wir übernehmen keine Haftung für die Virenfreiheit oder Funktion fremder Dateien.' },
+    ],
+  },
+  es: {
+    title: 'Términos de Servicio',
+    subtitle: 'Reglas de uso, exenciones de responsabilidad y acuerdo del servicio',
+    updated: 'Vigente desde: 25 de julio de 2026',
+    warning: 'No utilice trainers en entornos multijugador o con sistemas anti-cheat.',
+    privacy: 'Para obtener más información, consulte nuestra Política de Privacidad.',
+    sections: [
+      { icon: FileText, title: '1. Propósito del servicio', text: 'LocalPatcher es una herramienta de navegador para la traducción local de textos de opciones en trainers compatibles.' },
+      { icon: FileText, title: '2. Procesamiento local', text: 'Todas las comprobaciones de archivos y sustituciones ocurren localmente en su navegador sin subir archivos a servidores.' },
+      { icon: ShieldCheck, title: '3. Uso permitido', text: 'Solo debe usar el servicio con archivos adquiridos legalmente. Se prohíbe el uso en entornos online o con anti-cheat.' },
+      { icon: ShieldAlert, title: '4. Exención de responsabilidad', text: 'El servicio se proporciona "tal cual". No garantizamos la seguridad ni el correcto funcionamiento de archivos de terceros.' },
+    ],
+  },
 };
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {

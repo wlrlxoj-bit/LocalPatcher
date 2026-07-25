@@ -25,6 +25,18 @@ const copy = {
     [Ban, 'オンラインで使用しても安全ですか？', 'いいえ。オンライン、マルチプレイ、競争、アンチチート環境では使用しないでください。通信切断やオフラインモードだけで、安全や制裁回避が保証されることはありません。LocalPatcherはアンチチート回避方法を案内しません。'],
     [Lock, '選択したファイルはサーバーに保存されますか？', '対象ファイルはブラウザ内でローカル処理され、LocalPatcher独自のデータベースへアップロード・保存されません。GA4がアクセス・端末・利用情報を処理する場合があり、必要な設定と同意準備が整っている場合はGoogle AdSense広告が表示されることがあります。詳細はプライバシーポリシーをご覧ください。'],
   ]},
+  de: { title: 'Häufig gestellte Fragen', sub: 'Dateiverarbeitung, Antiviren-Warnungen und sichere Nutzung', guide: 'Vollständigen Sicherheitsleitfaden lesen', items: [
+    [AlertOctagon, 'Was tun, wenn der Virenscanner die Datei meldet?', 'Trainer-Methoden können Warnungen auslösen. Prüfen Sie digitale Signaturen und vermeiden Sie Verdächtiges.'],
+    [HelpCircle, 'Das Spiel schließt sich nach dem Patchen.', 'Spiel- und Trainer-Versionen stimmen möglicherweise nicht überein.'],
+    [Ban, 'Ist die Nutzung online sicher?', 'Nein. Verwenden Sie Trainer niemals in Online- oder Anti-Cheat-Umgebungen.'],
+    [Lock, 'Wird meine Trainer-Datei auf einen Server hochgeladen?', 'Nein. Die Verarbeitung erfolgt lokal im Browser.'],
+  ]},
+  es: { title: 'Preguntas Frecuentes', sub: 'Procesamiento de archivos, alertas de antivirus y uso seguro', guide: 'Leer la guía completa de seguridad', items: [
+    [AlertOctagon, '¿Qué hacer si el antivirus marca el archivo?', 'El comportamiento del trainer puede causar alertas. Verifique la fuente oficial.'],
+    [HelpCircle, 'El juego se cierra tras aplicar el parche.', 'Las versiones del juego y del trainer pueden ser incompatibles.'],
+    [Ban, '¿Es seguro usarlo en línea?', 'No. No utilice trainers en entornos multijugador o con anti-cheat.'],
+    [Lock, '¿Se guarda mi archivo en un servidor?', 'No. Los archivos se procesan localmente en su navegador.'],
+  ]},
 } as const;
 
 export default function FAQPage({ params }: { params: Promise<{ locale: string }> }) {
