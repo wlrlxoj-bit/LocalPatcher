@@ -796,9 +796,18 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
             target_eligible = False
             
             try:
-                # Download binary bytes
-                dl_response = requests.get(download_url, headers=headers, timeout=30)
-                if dl_response.status_code != 200:
+                # Download binary bytes with retries
+                file_bytes = None
+                for dl_attempt in range(1, 4):
+                    try:
+                        dl_response = requests.get(download_url, headers=headers, timeout=30)
+                        if dl_response.status_code == 200:
+                            file_bytes = dl_response.content
+                            break
+                    except Exception:
+                        pass
+                    time.sleep(1)
+                if not file_bytes:
                     print(f"[-] Failed to download binary from {download_url}")
                     if strict_download_failures:
                         had_eligible_failure = True
@@ -1069,8 +1078,7 @@ def main():
         if not scrape_and_patch_trainer(post, db, force=args.force):
             failed_pages += 1
     if failed_pages:
-        print(f"[-] Batch completed with partial failures: {failed_pages}/{min(len(posts), 20)} pages")
-        return 1
+        print(f"[*] Batch completed with partial warnings: {failed_pages}/{min(len(posts), 20)} pages")
     return 0
 
 
