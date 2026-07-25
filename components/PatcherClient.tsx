@@ -911,6 +911,7 @@ export default function PatcherClient({
             </section>
 
             <PartnerStoreWidget game={game} locale={locale} t={t} trainerId={selectedTrainerId} />
+            <SafetyAndUsageGuideSection game={game} locale={locale} />
             <AdSenseUnit locale={locale} slot={bottomAdSlot} />
 
           </div>
@@ -922,6 +923,83 @@ export default function PatcherClient({
       )}
 
     </div>
+  );
+}
+
+function SafetyAndUsageGuideSection({ game, locale }: { game: Game; locale: Locale }) {
+  const isKo = locale === 'ko';
+  const isJa = locale === 'ja';
+
+  return (
+    <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900/40 p-6 md:p-8 backdrop-blur-md relative overflow-hidden shadow-xl" aria-labelledby="safety-guide-heading">
+      <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
+      
+      <h3 id="safety-guide-heading" className="text-base md:text-lg font-bold text-white font-outfit mb-4 flex items-center gap-2">
+        <span className="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+        {isKo ? `${game.title_ko || game.title_en} 트레이너 한글화 및 안전 사용 가이드` : isJa ? `${game.title_ja || game.title_en} トレーナー日本語化・ me安全使用ガイド` : `${game.title_en} Trainer Localization & Safety Guide`}
+      </h3>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-300 leading-relaxed mb-6">
+        <div className="p-4 rounded-xl border border-slate-800/80 bg-slate-950/40">
+          <h4 className="font-bold text-cyan-300 text-sm mb-2">
+            {isKo ? '🔒 로컬 인메모리 바이너리 패치 원리' : isJa ? '🔒 ローカルバイナリパッチの仕組み' : '🔒 Local In-Memory Binary Patching'}
+          </h4>
+          <p className="text-slate-400">
+            {isKo 
+              ? 'LocalPatcher는 게임 실행 파일이나 시스템 DLL을 변조하지 않고, 업로드하신 트레이너 내부의 핫키 텍스트 오프셋(UTF-16LE/ASCII)만을 안전하게 한글로 국문화합니다. 사용자의 개인정보나 파일 데이터는 서버로 절대 전송되지 않습니다.'
+              : isJa
+                ? 'LocalPatcherはゲーム実行ファイルやシステムDLLを改変せず、トレーナー内部のホットキーテキスト（UTF-16LE/ASCII）のみをローカルで日本語に変換します。個人情報やファイルデータは meサーバーへ一切送信されません。'
+                : 'LocalPatcher does not modify game executables or system DLLs. It safely patches hotkey text offsets inside your trainer locally. No personal files or data are uploaded to servers.'}
+          </p>
+        </div>
+
+        <div className="p-4 rounded-xl border border-slate-800/80 bg-slate-950/40">
+          <h4 className="font-bold text-amber-300 text-sm mb-2">
+            {isKo ? '🛡️ 오프라인 싱글플레이 전용 권장' : isJa ? '🛡️ オフラインシングルプレイ専用推奨' : '🛡️ Offline Singleplayer Recommended'}
+          </h4>
+          <p className="text-slate-400">
+            {isKo
+              ? '본 트레이너 한글화 도구는 오프라인 싱글플레이 환경 전용으로 설계되었습니다. 온라인 멀티플레이어가 포함된 게임의 경우 안티치트(Easy Anti-Cheat, BattlEye 등)에 의해 계정 제재가 발생할 수 있으므로 오프라인 모드에서만 사용할 것을 강력히 권장합니다.'
+              : isJa
+                ? '本ツールはオフラインシングルプレイ専用に設計されています。オンラインマルチプレイが含まれるゲームの場合、アンチチートに検知される可能性があるため、必ずオフラインでご使用ください。'
+                : 'This localization tool is designed exclusively for offline singleplayer gameplay. For games with online multiplayer, use in offline mode to prevent anti-cheat detection.'}
+          </p>
+        </div>
+      </div>
+
+      <div className="border-t border-slate-800/60 pt-6">
+        <h4 className="font-bold text-slate-200 text-sm mb-4">
+          {isKo ? '❓ 자주 묻는 질문 (FAQ)' : isJa ? '❓ よくある質問 (FAQ)' : '❓ Frequently Asked Questions'}
+        </h4>
+        <div className="space-y-4 text-xs">
+          <div className="p-3.5 rounded-lg bg-slate-950/30 border border-slate-800/50">
+            <p className="font-semibold text-slate-200 mb-1">
+              {isKo ? 'Q. 백신(Windows Defender 등)에서 바이러스로 오진되면 어떻게 하나요?' : isJa ? 'Q. セキュリティソフトでウイルスと誤検知された場合は？' : 'Q. What if antivirus flags the trainer as a false positive?'}
+            </p>
+            <p className="text-slate-400">
+              {isKo
+                ? '트레이너 바이너리의 특성상 메모리 주소 참조 기능으로 인해 백신에서 탐지(False Positive)할 수 있습니다. 이는 한글 패치 때문이 아닌 원본 트레이너의 특성이며, 백신 예외 처리 후 안전하게 사용 가능합니다.'
+                : isJa
+                  ? 'トレーナーの性質上、メモリ参照機能によりセキュリティソフトで誤検知される場合があります。例外設定を追加してご使用ください。'
+                  : 'Trainers naturally reference memory addresses, which may trigger false-positive warnings. Add an exception in your antivirus to run smoothly.'}
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-lg bg-slate-950/30 border border-slate-800/50">
+            <p className="font-semibold text-slate-200 mb-1">
+              {isKo ? 'Q. 게임 업데이트 후 트레이너 한글 패치가 작동하지 않을 때는?' : isJa ? 'Q. ゲームアップデート後にパッチが機能しない場合は？' : 'Q. What if the trainer stops working after a game update?'}
+            </p>
+            <p className="text-slate-400">
+              {isKo
+                ? '게임 패치 업데이트 시 FLiNG에서 새 버전의 트레이너가 배포됩니다. 최신 트레이너를 다운로드한 후 LocalPatcher에서 새로 선택하시면 해당 버전의 한글 패치가 자동 반영됩니다.'
+                : isJa
+                  ? 'ゲーム更新時はFLiNG公式から新バージョンが配布されます。最新版をダウンロード後、LocalPatcherで再パッチを行ってください。'
+                  : 'When the game updates, get the latest trainer version from FLiNG and re-apply the patch via LocalPatcher.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
