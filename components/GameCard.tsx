@@ -11,6 +11,8 @@ interface GameCardProps {
     title_en: string;
     title_ko: string;
     title_ja?: string;
+    title_de?: string;
+    title_es?: string;
     slug: string;
     cover_image_url: string;
     anti_cheat: string;
@@ -23,7 +25,15 @@ interface GameCardProps {
 }
 
 export default function GameCard({ game, trainerVersion, optionCount, locale, optionsLabel }: GameCardProps) {
-  const displayTitle = locale === 'ko' ? game.title_ko : locale === 'ja' ? (game.title_ja || game.title_en) : game.title_en;
+  const displayTitle = locale === 'ko' 
+    ? game.title_ko 
+    : locale === 'ja' 
+      ? (game.title_ja || game.title_en) 
+      : locale === 'de' 
+        ? (game.title_de || game.title_en) 
+        : locale === 'es' 
+          ? (game.title_es || game.title_en) 
+          : game.title_en;
   
   return (
     <Link 

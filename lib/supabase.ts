@@ -27,6 +27,8 @@ export interface Game {
   title_en: string;
   title_ko: string;
   title_ja?: string;
+  title_de?: string;
+  title_es?: string;
   slug: string;
   cover_image_url: string;
   anti_cheat: string;

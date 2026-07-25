@@ -11,6 +11,8 @@ interface Game {
   title_en: string;
   title_ko: string;
   title_ja?: string;
+  title_de?: string;
+  title_es?: string;
   slug: string;
   cover_image_url: string;
   anti_cheat: string;
@@ -191,6 +193,8 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
       const normEn = normalizeText(game.title_en);
       const normKo = normalizeText(game.title_ko);
       const normJa = normalizeText(game.title_ja || '');
+      const normDe = normalizeText(game.title_de || '');
+      const normEs = normalizeText(game.title_es || '');
       const normJaHiragana = katakanaToHiragana(normJa);
       const normJaKatakana = hiraganaToKatakana(normJa);
 
@@ -199,7 +203,13 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
 
       return (
         // Exact / Substring search across all language titles and synonyms (e.g. fantasia -> fantasy)
-        querySynonyms.some(q => normEn.includes(q) || normKo.includes(q) || (normJa.length > 0 && normJa.includes(q))) ||
+        querySynonyms.some(q => 
+          normEn.includes(q) || 
+          normKo.includes(q) || 
+          (normJa.length > 0 && normJa.includes(q)) ||
+          (normDe.length > 0 && normDe.includes(q)) ||
+          (normEs.length > 0 && normEs.includes(q))
+        ) ||
         // Acronym / First-letter shortcut search (e.g., AOW -> Age of Wonders, ER -> Elden Ring)
         (acronymEn.length > 1 && querySynonyms.some(q => acronymEn.includes(q))) ||
         // Korean Chosung search (e.g., ㅇㅇㅇ -> 에이지 오브 원더스)
