@@ -4,7 +4,8 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { AlertOctagon, Ban, ChevronDown, HelpCircle, Lock } from 'lucide-react';
 
-type Locale = 'ko' | 'en' | 'ja';
+import { Locale } from '@/lib/i18n';
+
 const copy = {
   ko: { title: '자주 묻는 질문', sub: '파일 처리, 백신 경고 및 안전 이용 안내', guide: '전체 안전 가이드 보기', items: [
     [AlertOctagon, '백신이 파일을 위험하다고 표시하면 어떻게 하나요?', '트레이너의 메모리 조작 방식 때문에 탐지될 수 있지만 모든 경고가 오진인 것은 아닙니다. 공식 배포처, 디지털 서명, 게시된 해시와 복수의 최신 검사 결과를 확인하고, 의심스러우면 실행하지 마세요. 백신 예외 등록을 무조건 권장하지 않습니다.'],
@@ -28,8 +29,8 @@ const copy = {
 
 export default function FAQPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = React.use(params);
-  const currentLocale: Locale = locale === 'en' || locale === 'ja' ? locale : 'ko';
-  const t = copy[currentLocale];
+  const currentLocale: Locale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? (locale as Locale) : 'ko';
+  const t = (copy as Record<string, any>)[currentLocale] || copy.en;
   const [open, setOpen] = useState<number | null>(null);
 
   return (
@@ -41,7 +42,7 @@ export default function FAQPage({ params }: { params: Promise<{ locale: string }
       </header>
 
       <div className="space-y-4">
-        {t.items.map(([Icon, q, a], i) => {
+        {t.items.map(([Icon, q, a]: [any, string, string], i: number) => {
           const buttonId = `faq-button-${i}`;
           const panelId = `faq-panel-${i}`;
           const isOpen = open === i;

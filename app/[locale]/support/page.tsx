@@ -1,75 +1,71 @@
 import React from 'react';
 import Link from 'next/link';
-import { Heart, Database, Server, Cpu, ExternalLink, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Database, Heart, Server, Cpu } from 'lucide-react';
 import { getDictionary, Locale } from '@/lib/i18n';
 
-export default async function SupportPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function SupportPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko') ? locale : 'ko';
+  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? locale : 'ko';
   const t = getDictionary(currentLocale);
 
   const content = {
     ko: {
-      title: 'Patreon 후원',
-      subtitle: 'LocalPatcher의 지속 가능한 운영과 서비스 개선을 지원해 주세요.',
-      cardTitle: 'LocalPatcher 후원자(Sponsor) 되기',
-      cardIntro: 'LocalPatcher는 무료로 이용할 수 있습니다. 필요한 환경 설정과 동의 준비가 완료된 경우 Google AdSense 광고가 표시될 수 있으며, 자발적인 후원은 다음과 같은 정기적인 인프라 유지 비용을 지원하는 데 사용됩니다.',
+      title: 'LocalPatcher 운영 후원 안내',
+      subtitle: '서버 업로드 없는 로컬 패치 플랫폼의 지속 가능한 가동을 응원해 주세요.',
+      cardTitle: 'Patreon 정기 후원 (준비 중)',
+      cardIntro: 'LocalPatcher는 회원가입이나 유료 결제 없이 무료로 이용할 수 있는 유틸리티 서비스입니다. 안정적인 서버 운영과 지속적인 신규 트레이너 데이터 업데이트를 지원하고자 하신다면 후원에 참여하실 수 있습니다.',
       costs: [
         {
           icon: Database,
           label: '실시간 데이터베이스 유지',
-          desc: '전 세계 최신 게임 트레이너의 고유 해시값(SHA-256) 및 한글 문자열 오프셋 매핑 테이블의 실시간 스캔 쿼리를 처리합니다.',
+          desc: '게임 트레이너의 고유 해시값(SHA-256) 및 번역용 텍스트의 오프셋 위치 정보의 관리와 쿼리 처리.',
         },
         {
           icon: Cpu,
-          label: '자동화 스크래퍼 운영',
-          desc: '스팀 및 글로벌 트레이너 제작사들의 신규 릴리스와 업데이트 데이터를 실시간 탐색 및 동기화하는 백서버 크론 잡을 가동합니다.',
+          label: '자동 스크래퍼 가동',
+          desc: '최신 게임 출시 및 트레이너 버전 업데이트 정보를 상시 감지하고 시스템에 등록하는 엔진의 가동 비용.',
         },
         {
           icon: Server,
-          label: '고성능 서버리스 CDN 호스팅',
-          desc: '글로벌 유저들이 대기 시간 없이 즉석에서 15MB 이하의 실행 파일을 로컬 브라우저 단에서 즉시 가공해갈 수 있도록 서버리스 에지 네트워크망을 확보합니다.',
+          label: '글로벌 CDN 호스팅',
+          desc: '전 세계 이용자가 업로드 대기시간 없이 브라우저에서 즉시 변환 처리를 마칠 수 있는 초고속 에지 네트워크 인프라 구축.',
         },
       ],
-      pledgeText: '매달 커피 한 잔 가격의 후원만으로도 당사의 DB 용량 증설과 안정적인 서버 환경 유지, 그리고 신작 게임 리스트 번역 속도를 극대화하는 데 막대한 도움이 됩니다.',
-      cta: 'Patreon에서 정기 후원하기',
-      footerNote: '후원금은 오직 서버 인프라 유지 보수 및 스크래핑 엔진 고도화 목적에만 전액 투명하게 활용됩니다.',
+      pledgeText: '매월 커피 한 잔 분량의 작은 후원이 서버 인프라 유지와 최신 게임 대응 데이터베이스의 신속한 업데이트를 지속하는 가장 큰 원동력이 됩니다.',
+      cta: 'Patreon 정기 후원하기',
+      footerNote: '모든 후원금은 서버 유지비, 데이터베이스 용량 증설 및 스크래핑 효율화 개발에 투명하게 사용됩니다.',
     },
     en: {
-      title: 'Sponsor on Patreon',
-      subtitle: 'Help keep LocalPatcher available, fast, and sustainable for players worldwide.',
-      cardTitle: 'Become a Sponsor',
-      cardIntro: 'LocalPatcher is free to use. Google AdSense ads may be displayed when the required configuration and consent readiness are in place. Voluntary sponsorship helps cover the following recurring infrastructure costs:',
+      title: 'Support LocalPatcher',
+      subtitle: 'Help keep our client-side trainer patch utility free and continuously updated.',
+      cardTitle: 'Patreon Monthly Sponsorship (Coming Soon)',
+      cardIntro: 'LocalPatcher is a free tool available without accounts or paid paywalls. If you would like to support server operations and continuous database updates for new games, you can contribute on Patreon.',
       costs: [
         {
           icon: Database,
-          label: 'Real-time Database Queries',
-          desc: 'Maintaining the database of clean trainer SHA-256 hashes and localized offset translation parameters.',
+          label: 'Database Infrastructure',
+          desc: 'Managing SHA-256 binary signatures and text translation offset mappings for fast client query processing.',
         },
         {
           icon: Cpu,
-          label: 'Automated Scraping & Sync',
-          desc: 'Running cloud scrapers to dynamically fetch and register official trainer updates as soon as they launch.',
+          label: 'Automated Scraping Pipeline',
+          desc: 'Operational costs for automated background engines detecting new game trainer build releases daily.',
         },
         {
           icon: Server,
-          label: 'Serverless CDN & Bandwidth',
-          desc: 'Providing high-speed edge distribution to handle FileReader requests and UI loading across the globe instantly.',
+          label: 'Global Edge CDN Hosting',
+          desc: 'Fast edge infrastructure ensuring instant browser-based processing without queues or uploads.',
         },
       ],
-      pledgeText: 'Sponsoring just a cup of coffee a month helps offset database, scraper, and serverless hosting costs, allowing us to keep this service alive and up-to-date!',
-      cta: 'Support on Patreon',
-      footerNote: 'All proceeds go directly toward hosting bills, database resources, and scraping pipeline development.',
+      pledgeText: 'A monthly pledge equal to a cup of coffee helps cover server infrastructure costs and enables rapid updates for new game titles.',
+      cta: 'Sponsor on Patreon',
+      footerNote: 'All contributions directly fund server costs, database capacity expansion, and scraping efficiency improvements.',
     },
     ja: {
-      title: 'Patreonで支援する',
-      subtitle: 'LocalPatcher の無償サービスを安定して継続できるよう、ご支援ください。',
-      cardTitle: 'パトロン（支援者）になる',
-      cardIntro: 'LocalPatcherは無料で利用できます。必要な設定と同意準備が整っている場合、Google AdSense広告が表示されることがあります。任意のご支援は、以下の継続的なインフラ維持費に充てられます。',
+      title: 'LocalPatcher 運営支援のご案内',
+      subtitle: 'ファイルをアップロードしないローカルパッチツールの継続的な運営を応援してください。',
+      cardTitle: 'Patreon 定期支援 (準備中)',
+      cardIntro: 'LocalPatcherは会員登録や有料決済を必要とせず、無料で利用できるツールです。安定したサーバー運営と継続的な最新データ更新を支援していただける場合は、Patreonからご支援いただけます。',
       costs: [
         {
           icon: Database,
@@ -124,10 +120,8 @@ export default async function SupportPage({
 
       {/* Patreon Premium Card (Disabled / Under Preparation) */}
       <div className="relative">
-        {/* Background outline glow (subtle grey) */}
         <div className="absolute -inset-0.5 bg-slate-800 rounded-2xl blur opacity-25 pointer-events-none"></div>
         
-        {/* Core Card */}
         <div className="relative p-6 md:p-10 rounded-2xl border border-slate-800 bg-slate-950 flex flex-col items-center">
           
           <div className="w-14 h-14 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center mb-6">
@@ -178,7 +172,11 @@ export default async function SupportPage({
                 ? '후원 서비스 준비 중 (Coming Soon)' 
                 : currentLocale === 'ja' 
                   ? '支援サービス準備中 (Coming Soon)' 
-                  : 'Sponsorship Under Preparation (Coming Soon)'}
+                  : currentLocale === 'de'
+                    ? 'Unterstützungsdienst wird vorbereitet (Demnächst)'
+                    : currentLocale === 'es'
+                      ? 'Servicio de patrocinio en preparación (Próximamente)'
+                      : 'Sponsorship Under Preparation (Coming Soon)'}
             </span>
           </div>
 

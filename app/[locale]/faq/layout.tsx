@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import { SITE_URL, localizedAlternates } from '@/lib/site';
 
-type Locale = 'ko' | 'en' | 'ja';
+import { Locale } from '@/lib/i18n';
 
-const metadataCopy: Record<Locale, { title: string; description: string }> = {
+const metadataCopy: Partial<Record<Locale, { title: string; description: string }>> = {
   ko: {
     title: '자주 묻는 질문',
     description: '파일 처리, 백신 경고 및 안전한 이용 방법을 안내합니다.',
@@ -20,8 +20,8 @@ const metadataCopy: Record<Locale, { title: string; description: string }> = {
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
-  const currentLocale: Locale = locale === 'en' || locale === 'ja' ? locale : 'ko';
-  const copy = metadataCopy[currentLocale];
+  const currentLocale: Locale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? (locale as Locale) : 'ko';
+  const copy = (metadataCopy as Record<string, any>)[currentLocale] || metadataCopy.en;
 
   return {
     title: `${copy.title} | LocalPatcher`,

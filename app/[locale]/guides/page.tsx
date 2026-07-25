@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, ExternalLink, ShieldAlert } from 'lucide-react';
 import { SITE_URL, localizedAlternates } from '@/lib/site';
 
-type Locale = 'ko' | 'en' | 'ja';
+import { Locale } from '@/lib/i18n';
 
 const content = {
   ko: {
