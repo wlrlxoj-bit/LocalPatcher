@@ -2,7 +2,7 @@ import { cache } from 'react';
 import { supabase } from '@/lib/supabase';
 import { canonicalizeListedGameSlug } from '@/lib/game-slug-aliases';
 
-export type IndexableLocale = 'en' | 'ko' | 'ja';
+export type IndexableLocale = 'en' | 'ko' | 'ja' | 'de' | 'es';
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 100;
 const ID_CHUNK_SIZE = 500;
@@ -33,9 +33,9 @@ async function readAllPages<T>(fetchPage: (from: number, to: number) => Promise<
   throw new Error('색인 자격 조회가 안전 상한을 초과했습니다.');
 }
 
-/** 영어는 옵션 존재, 한국어·일본어는 승인 번역까지 있어야 색인 대상으로 판정합니다. */
+/** 영어는 옵션 존재, 다국어(한국어·일본어·독일어·스페인어)는 승인 번역까지 있어야 색인 대상으로 판정합니다. */
 export const isPatcherIndexEligible = cache(async (gameId: number, locale: string): Promise<boolean> => {
-  if (locale !== 'en' && locale !== 'ko' && locale !== 'ja') return false;
+  if (locale !== 'en' && locale !== 'ko' && locale !== 'ja' && locale !== 'de' && locale !== 'es') return false;
   const cacheKey = `${gameId}:${locale}`;
   const fresh = readFreshCache(eligibilityCache.get(cacheKey));
   if (fresh !== undefined) return fresh;

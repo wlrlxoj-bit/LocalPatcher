@@ -7,7 +7,7 @@ import { SITE_URL, localizedAlternates } from '@/lib/site';
 type Section = { title: string; text: string; icon: typeof FileText };
 type Content = { title: string; subtitle: string; updated: string; warning: string; privacy: string; sections: Section[] };
 
-const content: Record<Locale, Content> = {
+const content: Partial<Record<Locale, Content>> = {
   ko: {
     title: '이용약관',
     subtitle: 'LocalPatcher 서비스 이용에 관한 권리, 의무 및 책임',
@@ -81,8 +81,8 @@ const content: Record<Locale, Content> = {
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
-  const currentLocale: Locale = locale === 'en' || locale === 'ja' ? locale : 'ko';
-  const page = content[currentLocale];
+  const currentLocale: Locale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? locale as Locale : 'ko';
+  const page = (content as Record<string, any>)[currentLocale] || content.ko;
 
   return {
     title: `${page.title} | LocalPatcher`,
@@ -96,9 +96,9 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
 
 export default async function TermsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const currentLocale: Locale = locale === 'en' || locale === 'ja' || locale === 'ko' ? locale : 'ko';
+  const currentLocale: Locale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? locale as Locale : 'ko';
   const t = getDictionary(currentLocale);
-  const page = content[currentLocale];
+  const page = (content as Record<string, any>)[currentLocale] || content.ko;
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-14">
@@ -120,7 +120,7 @@ export default async function TermsPage({ params }: { params: Promise<{ locale: 
         </div>
       </div>
       <div className="grid gap-5 md:grid-cols-2">
-        {page.sections.map(({ icon: Icon, title, text }) => (
+        {page.sections.map(({ icon: Icon, title, text }: Section) => (
           <section key={title} className="rounded-2xl border border-slate-800 bg-slate-900/30 p-5 transition-colors hover:border-slate-700 sm:p-6">
             <Icon className="mb-3 h-5 w-5 text-cyan-400" />
             <h2 className="font-bold leading-6 text-white">{title}</h2>

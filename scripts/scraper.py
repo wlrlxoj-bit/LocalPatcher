@@ -332,10 +332,69 @@ def _split_option_for_translation(line):
     return prefix + delimiter, label
 
 
-def translate_via_llm(lines_to_translate):
-    """모든 원문 줄의 위치를 보존하면서 한국어로 번역한다."""
+def translate_via_llm_de(lines_to_translate):
     providers = [("Azure", _call_azure)] if TRANSLATION_PROVIDER == "azure" else [("OpenAI Paid", _call_openai)]
-    return _translate_via_llm_with_fallback(lines_to_translate, "Korean", "무한 체력", providers)
+    return _translate_via_llm_with_fallback(lines_to_translate, "German", "Unendliche Gesundheit", providers)
+
+def translate_via_llm_es(lines_to_translate):
+    providers = [("Azure", _call_azure)] if TRANSLATION_PROVIDER == "azure" else [("OpenAI Paid", _call_openai)]
+    return _translate_via_llm_with_fallback(lines_to_translate, "Spanish", "Salud Infinita", providers)
+
+def process_translation_block_de(text: str, db: Client) -> str:
+    lines = text.split("\n")
+    lines_needing_llm = []
+    for line in lines:
+        if not line or line.strip() == "":
+            continue
+        parts = _split_option_for_translation(line)
+        if parts is None:
+            raise RuntimeError("지원하지 않는 옵션 줄 형식")
+        lines_needing_llm.append(parts[1])
+    llm_results = translate_via_llm_de(lines_needing_llm) if lines_needing_llm else []
+    translated_lines = []
+    llm_index = 0
+    for idx, line in enumerate(lines):
+        if not line or line.strip() == "":
+            translated_lines.append(line)
+            continue
+        orig_len = len(line)
+        parts = _split_option_for_translation(line)
+        trans_line = parts[0] + llm_results[llm_index]
+        llm_index += 1
+        if len(trans_line) < orig_len:
+            trans_line += " " * (orig_len - len(trans_line))
+        elif len(trans_line) > orig_len:
+            trans_line = trans_line[:orig_len]
+        translated_lines.append(trans_line)
+    return "\n".join(translated_lines)
+
+def process_translation_block_es(text: str, db: Client) -> str:
+    lines = text.split("\n")
+    lines_needing_llm = []
+    for line in lines:
+        if not line or line.strip() == "":
+            continue
+        parts = _split_option_for_translation(line)
+        if parts is None:
+            raise RuntimeError("지원하지 않는 옵션 줄 형식")
+        lines_needing_llm.append(parts[1])
+    llm_results = translate_via_llm_es(lines_needing_llm) if lines_needing_llm else []
+    translated_lines = []
+    llm_index = 0
+    for idx, line in enumerate(lines):
+        if not line or line.strip() == "":
+            translated_lines.append(line)
+            continue
+        orig_len = len(line)
+        parts = _split_option_for_translation(line)
+        trans_line = parts[0] + llm_results[llm_index]
+        llm_index += 1
+        if len(trans_line) < orig_len:
+            trans_line += " " * (orig_len - len(trans_line))
+        elif len(trans_line) > orig_len:
+            trans_line = trans_line[:orig_len]
+        translated_lines.append(trans_line)
+    return "\n".join(translated_lines)
 
 def translate_line(line: str):
     """Attempts dictionary translation for a single line. Returns None if it needs LLM translation."""
@@ -889,7 +948,7 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                         mapping.get('language_code') for mapping in (mappings_res.data or [])
                         if mapping.get('is_approved')
                     }
-                    if {'ko', 'ja'}.issubset(approved_locales) and not force:
+                    if {'ko', 'ja', 'de', 'es'}.issubset(approved_locales) and not force:
                         print(f"    [*] Skip/Protect: Trainer ID {trainer_id} has approved translation mappings. Skipping overwrite.")
                         approved_skips += 1
                         continue
@@ -950,7 +1009,8 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                 clean_orig_text = mapping_details['original_text'].replace('\x00', '').replace('\u0000', '')
                 trainer_ok = True
                 for language_code, translator in {
-                    'ko': process_translation_block, 'ja': process_translation_block_ja
+                    'ko': process_translation_block, 'ja': process_translation_block_ja,
+                    'de': process_translation_block_de, 'es': process_translation_block_es
                 }.items():
                     validation = None
                     for attempt in range(1, 4):

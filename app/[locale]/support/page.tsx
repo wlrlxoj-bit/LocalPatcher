@@ -93,7 +93,7 @@ export default async function SupportPage({
     },
   };
 
-  const localizedContent = content[currentLocale as Locale] || content.ko;
+  const localizedContent = (content as Record<string, any>)[currentLocale] || content.ko;
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-12">
@@ -144,7 +144,7 @@ export default async function SupportPage({
 
           {/* Cost Items Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mb-8">
-            {localizedContent.costs.map((cost, idx) => {
+            {localizedContent.costs.map((cost: { icon: React.ElementType; label: string; desc: string }, idx: number) => {
               const Icon = cost.icon;
               return (
                 <div key={idx} className="p-5 rounded-xl border border-slate-900 bg-slate-900/30 flex flex-col items-center text-center">

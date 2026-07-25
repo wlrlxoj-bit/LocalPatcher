@@ -15,7 +15,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       eligibleSlugs[locale] = await getEligiblePatcherSlugs(locale);
     } catch (error) {
       console.warn(`${locale} 동적 sitemap 조회에 실패하여 운영 last-known-good snapshot을 사용합니다:`, error);
-      const snapshotSlugs = patchableSnapshot.locales[locale];
+      const snapshotSlugs = patchableSnapshot.locales[locale as keyof typeof patchableSnapshot.locales] || patchableSnapshot.locales.en;
       const existingSlugs = new Set(snapshotSlugs);
       eligibleSlugs[locale] = [...new Set(
         snapshotSlugs.map((slug) => canonicalizeListedGameSlug(slug, existingSlugs))

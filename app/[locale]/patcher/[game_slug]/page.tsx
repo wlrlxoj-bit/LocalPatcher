@@ -46,7 +46,7 @@ async function getCanonicalPatcherData(requestedSlug: string) {
 
 export async function generateMetadata({ params }: PatcherPageProps) {
   const { locale, game_slug } = await params;
-  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko') ? locale : 'ko';
+  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? locale : 'ko';
 
   const patcherData = await getCanonicalPatcherData(game_slug);
   if (!patcherData) {
@@ -58,22 +58,30 @@ export async function generateMetadata({ params }: PatcherPageProps) {
     .filter((trainer) => trainer.option_count > 0)
     .map((trainer) => trainer.id);
   const getLocaleMappings = (
-    targetLocale: 'ko' | 'ja'
+    targetLocale: 'ko' | 'ja' | 'de' | 'es'
   ): Promise<Record<number, Array<unknown>>> =>
     eligibleTrainerIds.length > 0
       ? getMappingsForTrainers(eligibleTrainerIds, targetLocale)
       : Promise.resolve({} as Record<number, Array<unknown>>);
-  const [koMappings, jaMappings] = await Promise.all([
+  const [koMappings, jaMappings, deMappings, esMappings] = await Promise.all([
     getLocaleMappings('ko'),
     getLocaleMappings('ja'),
+    getLocaleMappings('de'),
+    getLocaleMappings('es'),
   ]);
   const koEligible = Object.values(koMappings).some((mappings) => mappings.length > 0);
   const jaEligible = Object.values(jaMappings).some((mappings) => mappings.length > 0);
+  const deEligible = Object.values(deMappings).some((mappings) => mappings.length > 0);
+  const esEligible = Object.values(esMappings).some((mappings) => mappings.length > 0);
   const indexEligible = currentLocale === 'en'
     ? enEligible
     : currentLocale === 'ko'
       ? koEligible
-      : jaEligible;
+      : currentLocale === 'ja'
+        ? jaEligible
+        : currentLocale === 'de'
+          ? deEligible
+          : esEligible;
   const latestTrainer = trainers[0];
   const metadataMappings = latestTrainer
     ? await getMappingsForTrainers([latestTrainer.id], currentLocale)

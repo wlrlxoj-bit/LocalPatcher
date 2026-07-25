@@ -21,6 +21,8 @@ const labels: Record<Locale, string> = {
   ko: '광고',
   en: 'Advertisement',
   ja: '広告',
+  de: 'Anzeige',
+  es: 'Publicidad',
 };
 
 /**

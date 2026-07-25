@@ -12,7 +12,9 @@ export default function Footer({ locale }: FooterProps) {
     ko: { about: '사이트 소개', editorial: '편집 정책', contact: '오류 신고' },
     en: { about: 'About', editorial: 'Editorial Policy', contact: 'Report an Issue' },
     ja: { about: 'サイト紹介', editorial: '編集方針', contact: '問題を報告' },
-  }[locale];
+    de: { about: 'Über uns', editorial: 'Redaktionsrichtlinien', contact: 'Problem melden' },
+    es: { about: 'Acerca de', editorial: 'Política Editorial', contact: 'Reportar Problema' },
+  }[locale] || { about: 'About', editorial: 'Editorial Policy', contact: 'Report an Issue' };
 
   return (
     <footer className="border-t border-slate-800/60 bg-slate-950/40 py-8 mt-16">

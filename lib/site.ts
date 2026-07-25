@@ -2,7 +2,7 @@ const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
 
 export const SITE_URL = (configuredSiteUrl || 'https://localpatcher.com').replace(/\/+$/, '');
 
-export const SUPPORTED_LOCALES = ['ko', 'en', 'ja'] as const;
+export const SUPPORTED_LOCALES = ['ko', 'en', 'ja', 'de', 'es'] as const;
 
 export function localizedAlternates(path: string) {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
@@ -11,6 +11,8 @@ export function localizedAlternates(path: string) {
     ko: `${SITE_URL}/ko${normalizedPath}`,
     en: `${SITE_URL}/en${normalizedPath}`,
     ja: `${SITE_URL}/ja${normalizedPath}`,
+    de: `${SITE_URL}/de${normalizedPath}`,
+    es: `${SITE_URL}/es${normalizedPath}`,
     'x-default': `${SITE_URL}/en${normalizedPath}`,
   };
 }

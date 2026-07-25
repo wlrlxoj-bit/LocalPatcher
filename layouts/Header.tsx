@@ -20,7 +20,9 @@ export default function Header({ locale }: HeaderProps) {
     ko: { about: '사이트 소개', editorial: '편집 정책', contact: '오류 신고' },
     en: { about: 'About', editorial: 'Editorial Policy', contact: 'Report an Issue' },
     ja: { about: 'サイト紹介', editorial: '編集方針', contact: '問題を報告' },
-  }[locale];
+    de: { about: 'Über uns', editorial: 'Redaktionsrichtlinien', contact: 'Problem melden' },
+    es: { about: 'Acerca de', editorial: 'Política Editorial', contact: 'Reportar Problema' },
+  }[locale] || { about: 'About', editorial: 'Editorial Policy', contact: 'Report an Issue' };
 
   const handleLanguageChange = (newLocale: Locale) => {
     setIsLangDropdownOpen(false);
@@ -39,7 +41,9 @@ export default function Header({ locale }: HeaderProps) {
       case 'ko': return '한국어 (KO)';
       case 'en': return 'English (EN)';
       case 'ja': return '日本語 (JA)';
-      default: return '한국어 (KO)';
+      case 'de': return 'Deutsch (DE)';
+      case 'es': return 'Español (ES)';
+      default: return 'English (EN)';
     }
   };
 

@@ -12,7 +12,7 @@ type Content = {
   sections: Array<{ title: string; text: string; icon: typeof EyeOff }>;
 };
 
-const content: Record<Locale, Content> = {
+const content: Partial<Record<Locale, Content>> = {
   ko: {
     title: '개인정보처리방침',
     subtitle: '로컬 파일 처리와 서비스 운영을 위한 데이터 사용 안내',
@@ -53,8 +53,8 @@ const content: Record<Locale, Content> = {
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
-  const currentLocale: Locale = locale === 'en' || locale === 'ja' ? locale : 'ko';
-  const page = content[currentLocale];
+  const currentLocale: Locale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? locale as Locale : 'ko';
+  const page = (content[currentLocale] || content.en)!;
 
   return {
     title: `${page.title} | LocalPatcher`,
@@ -68,9 +68,9 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
 
 export default async function PrivacyPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const currentLocale: Locale = locale === 'en' || locale === 'ja' || locale === 'ko' ? locale : 'ko';
+  const currentLocale: Locale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? locale as Locale : 'ko';
   const t = getDictionary(currentLocale);
-  const page = content[currentLocale];
+  const page = (content[currentLocale] || content.en)!;
 
   return <main className="max-w-4xl mx-auto px-6 py-12">
     <Link href={`/${currentLocale}`} className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-cyan-400"><ArrowLeft className="w-3.5 h-3.5" />{t.backToHome}</Link>
