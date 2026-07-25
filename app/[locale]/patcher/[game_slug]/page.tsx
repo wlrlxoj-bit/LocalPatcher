@@ -1,10 +1,15 @@
 import React from 'react';
 import { notFound, permanentRedirect } from 'next/navigation';
 import PatcherClient from '@/components/PatcherClient';
-import { getGameBySlug, getTrainersForGame, getMappingsForTrainers, resolveGameSlugAlias } from '@/lib/supabase';
+import {
+  getGameBySlug,
+  getTrainersForGame,
+  getMappingsForTrainers,
+  resolveGameSlugAlias,
+  sortTrainersLatestFirst,
+} from '@/lib/supabase';
 import { Locale } from '@/lib/i18n';
 import { SITE_URL } from '@/lib/site';
-import { isPatcherIndexEligible } from '@/lib/content-eligibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,23 +20,54 @@ interface PatcherPageProps {
   }>;
 }
 
+const ELDEN_RING_SOURCE_SLUG = 'elden-ring-shadow-of-the-erdtree-trainer-1768067282';
+
+async function getCanonicalPatcherData(requestedSlug: string) {
+  const aliasSlug = await resolveGameSlugAlias(requestedSlug);
+  const canonicalSlug = aliasSlug ?? requestedSlug;
+  const game = await getGameBySlug(canonicalSlug);
+  if (!game) return null;
+
+  let trainers = await getTrainersForGame(game.id);
+  if (canonicalSlug === 'elden-ring') {
+    const sourceGame = await getGameBySlug(ELDEN_RING_SOURCE_SLUG);
+    if (sourceGame && sourceGame.id !== game.id) {
+      const sourceTrainers = await getTrainersForGame(sourceGame.id);
+      const trainersById = new Map(
+        [...trainers, ...sourceTrainers].map((trainer) => [trainer.id, trainer])
+      );
+      trainers = sortTrainersLatestFirst([...trainersById.values()]);
+    }
+  }
+
+  return { canonicalSlug, game, trainers };
+}
+
 export async function generateMetadata({ params }: PatcherPageProps) {
   const { locale, game_slug } = await params;
   const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko') ? locale : 'ko';
 
-  const game = await getGameBySlug(game_slug);
-  if (!game) {
+  const patcherData = await getCanonicalPatcherData(game_slug);
+  if (!patcherData) {
     return {};
   }
-
-  const trainers = await getTrainersForGame(game.id);
+  const { canonicalSlug, game, trainers } = patcherData;
   const enEligible = trainers.some((trainer) => trainer.option_count > 0);
-  const [koEligibility, jaEligibility] = await Promise.allSettled([
-    isPatcherIndexEligible(game.id, 'ko'),
-    isPatcherIndexEligible(game.id, 'ja'),
+  const eligibleTrainerIds = trainers
+    .filter((trainer) => trainer.option_count > 0)
+    .map((trainer) => trainer.id);
+  const getLocaleMappings = (
+    targetLocale: 'ko' | 'ja'
+  ): Promise<Record<number, Array<unknown>>> =>
+    eligibleTrainerIds.length > 0
+      ? getMappingsForTrainers(eligibleTrainerIds, targetLocale)
+      : Promise.resolve({} as Record<number, Array<unknown>>);
+  const [koMappings, jaMappings] = await Promise.all([
+    getLocaleMappings('ko'),
+    getLocaleMappings('ja'),
   ]);
-  const koEligible = koEligibility.status === 'fulfilled' && koEligibility.value;
-  const jaEligible = jaEligibility.status === 'fulfilled' && jaEligibility.value;
+  const koEligible = Object.values(koMappings).some((mappings) => mappings.length > 0);
+  const jaEligible = Object.values(jaMappings).some((mappings) => mappings.length > 0);
   const indexEligible = currentLocale === 'en'
     ? enEligible
     : currentLocale === 'ko'
@@ -46,11 +82,11 @@ export async function generateMetadata({ params }: PatcherPageProps) {
     : false;
   const alternateLanguages: Record<string, string> = {};
   if (enEligible) {
-    alternateLanguages.en = `/en/patcher/${game_slug}`;
-    alternateLanguages['x-default'] = `/en/patcher/${game_slug}`;
+    alternateLanguages.en = `/en/patcher/${canonicalSlug}`;
+    alternateLanguages['x-default'] = `/en/patcher/${canonicalSlug}`;
   }
-  if (koEligible) alternateLanguages.ko = `/ko/patcher/${game_slug}`;
-  if (jaEligible) alternateLanguages.ja = `/ja/patcher/${game_slug}`;
+  if (koEligible) alternateLanguages.ko = `/ko/patcher/${canonicalSlug}`;
+  if (jaEligible) alternateLanguages.ja = `/ja/patcher/${canonicalSlug}`;
   const versionsStr = trainers && trainers.length > 0
     ? trainers.map(t => t.version_str).join(', ')
     : '';
@@ -89,14 +125,14 @@ export async function generateMetadata({ params }: PatcherPageProps) {
     keywords,
     robots: indexEligible ? { index: true, follow: true } : { index: false, follow: true },
     alternates: {
-      canonical: `/${currentLocale}/patcher/${game_slug}`,
+      canonical: `/${currentLocale}/patcher/${canonicalSlug}`,
       ...(Object.keys(alternateLanguages).length > 0 ? { languages: alternateLanguages } : {}),
     },
     openGraph: {
       type: 'website',
       title,
       description,
-      url: `${SITE_URL}/${currentLocale}/patcher/${game_slug}`,
+      url: `${SITE_URL}/${currentLocale}/patcher/${canonicalSlug}`,
       images: [
         {
           url: game.cover_image_url,
@@ -120,11 +156,11 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
   const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko') ? locale : 'ko';
 
   // 1. Fetch game details
-  const resolvedSlug = await resolveGameSlugAlias(game_slug);
-  if (resolvedSlug && resolvedSlug !== game_slug) {
-    permanentRedirect(`/${currentLocale}/patcher/${resolvedSlug}`);
+  const patcherData = await getCanonicalPatcherData(game_slug);
+  if (patcherData && patcherData.canonicalSlug !== game_slug) {
+    permanentRedirect(`/${currentLocale}/patcher/${patcherData.canonicalSlug}`);
   }
-  let game = await getGameBySlug(game_slug);
+  let game = patcherData?.game ?? null;
   if (!game && game_slug.endsWith('-trainer')) {
     const canonicalSlug = game_slug.slice(0, -'-trainer'.length);
     game = await getGameBySlug(canonicalSlug);
@@ -137,7 +173,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
   }
 
   // 2. Fetch trainers for this game
-  const trainers = await getTrainersForGame(game.id);
+  const trainers = patcherData?.trainers ?? await getTrainersForGame(game.id);
   if (!trainers || trainers.length === 0) {
     notFound();
   }
@@ -164,7 +200,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
         : `Original English trainer version, option count, compatibility, and official source information for ${game.title_en}.`,
     'screenshot': game.cover_image_url,
     'softwareVersion': trainers[0]?.version_str || '1.0',
-    'downloadUrl': `${SITE_URL}/${currentLocale}/patcher/${game.slug}`,
+    'downloadUrl': `${SITE_URL}/${currentLocale}/patcher/${patcherData?.canonicalSlug ?? game.slug}`,
   };
 
   return (

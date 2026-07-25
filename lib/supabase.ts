@@ -1,5 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { cache } from 'react';
+import {
+  getNumericTrainerBaseSlug,
+  hasSameNormalizedGameTitle,
+  resolveStaticGameSlugAlias,
+} from '@/lib/game-slug-aliases';
 
 // Get environment variables
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -361,6 +366,22 @@ export const getGameBySlug = cache(async (slug: string) => {
 });
 
 export const resolveGameSlugAlias = cache(async (aliasSlug: string): Promise<string | null> => {
+  const staticAlias = resolveStaticGameSlugAlias(aliasSlug);
+  if (staticAlias) return staticAlias;
+
+  const numericBase = getNumericTrainerBaseSlug(aliasSlug);
+  if (numericBase) {
+    const [requestedGame, baseGame] = await Promise.all([
+      getGameBySlug(aliasSlug),
+      getGameBySlug(numericBase),
+    ]);
+    if (!requestedGame && baseGame) return numericBase;
+    if (requestedGame && baseGame && hasSameNormalizedGameTitle(requestedGame, baseGame)) {
+      return numericBase;
+    }
+    if (requestedGame) return null;
+  }
+
   if (!supabase) return null;
 
   try {

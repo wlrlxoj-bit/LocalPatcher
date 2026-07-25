@@ -2,6 +2,7 @@ import { MetadataRoute } from 'next';
 import { SITE_URL, SUPPORTED_LOCALES } from '@/lib/site';
 import { getEligiblePatcherSlugs } from '@/lib/content-eligibility';
 import patchableSnapshot from '@/data/patchable-game-slugs.json';
+import { canonicalizeListedGameSlug } from '@/lib/game-slug-aliases';
 
 export const revalidate = 86400;
 
@@ -14,7 +15,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       eligibleSlugs[locale] = await getEligiblePatcherSlugs(locale);
     } catch (error) {
       console.warn(`${locale} 동적 sitemap 조회에 실패하여 운영 last-known-good snapshot을 사용합니다:`, error);
-      eligibleSlugs[locale] = [...patchableSnapshot.locales[locale]];
+      const snapshotSlugs = patchableSnapshot.locales[locale];
+      const existingSlugs = new Set(snapshotSlugs);
+      eligibleSlugs[locale] = [...new Set(
+        snapshotSlugs.map((slug) => canonicalizeListedGameSlug(slug, existingSlugs))
+      )];
     }
   }
 

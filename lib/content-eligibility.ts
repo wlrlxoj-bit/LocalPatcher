@@ -1,5 +1,6 @@
 import { cache } from 'react';
 import { supabase } from '@/lib/supabase';
+import { canonicalizeListedGameSlug } from '@/lib/game-slug-aliases';
 
 export type IndexableLocale = 'en' | 'ko' | 'ja';
 const PAGE_SIZE = 1000;
@@ -80,7 +81,7 @@ export async function getEligiblePatcherSlugs(locale: IndexableLocale): Promise<
   }
   const client = supabase;
   try {
-    const games = await readAllPages<{ id: number; slug: string }>(async (from, to) => await client.from('games').select('id, slug').order('id').range(from, to));
+    const games = await readAllPages<{ id: number; slug: string; title_en: string }>(async (from, to) => await client.from('games').select('id, slug, title_en').order('id').range(from, to));
     if (!games.length) {
       sitemapEligibilityCache.set(locale, { value: [], cachedAt: Date.now() });
       return [];
@@ -115,7 +116,13 @@ export async function getEligiblePatcherSlugs(locale: IndexableLocale): Promise<
           .map((trainer) => trainer.game_id)
       );
     }
-    const slugs = games.filter((game) => eligibleGameIds.has(game.id)).map((game) => game.slug);
+    const existingSlugs = new Set(games.map((game) => game.slug));
+    const titleBySlug = new Map(games.map((game) => [game.slug, game.title_en]));
+    const slugs = [...new Set(
+      games
+        .filter((game) => eligibleGameIds.has(game.id))
+        .map((game) => canonicalizeListedGameSlug(game.slug, existingSlugs, titleBySlug))
+    )];
     sitemapEligibilityCache.set(locale, { value: slugs, cachedAt: Date.now() });
     return [...slugs];
   } catch (error) {
