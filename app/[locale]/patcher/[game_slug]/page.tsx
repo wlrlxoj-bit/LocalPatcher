@@ -162,7 +162,7 @@ export async function generateMetadata({ params }: PatcherPageProps) {
 
 export default async function PatcherPage({ params }: PatcherPageProps) {
   const { locale, game_slug } = await params;
-  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko') ? locale : 'ko';
+  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? locale : 'ko';
 
   // 1. Fetch game details
   const patcherData = await getCanonicalPatcherData(game_slug);
