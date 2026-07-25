@@ -1,7 +1,7 @@
 import React from 'react';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import PatcherClient from '@/components/PatcherClient';
-import { getGameBySlug, getTrainersForGame, getMappingsForTrainers } from '@/lib/supabase';
+import { getGameBySlug, getTrainersForGame, getMappingsForTrainers, resolveGameSlugAlias } from '@/lib/supabase';
 import { Locale } from '@/lib/i18n';
 import { SITE_URL } from '@/lib/site';
 import { isPatcherIndexEligible } from '@/lib/content-eligibility';
@@ -25,16 +25,32 @@ export async function generateMetadata({ params }: PatcherPageProps) {
   }
 
   const trainers = await getTrainersForGame(game.id);
-  const [koEligible, jaEligible] = await Promise.all([
+  const enEligible = trainers.some((trainer) => trainer.option_count > 0);
+  const [koEligibility, jaEligibility] = await Promise.allSettled([
     isPatcherIndexEligible(game.id, 'ko'),
     isPatcherIndexEligible(game.id, 'ja'),
   ]);
-  const indexEligible = currentLocale === 'ko' ? koEligible : currentLocale === 'ja' ? jaEligible : false;
+  const koEligible = koEligibility.status === 'fulfilled' && koEligibility.value;
+  const jaEligible = jaEligibility.status === 'fulfilled' && jaEligibility.value;
+  const indexEligible = currentLocale === 'en'
+    ? enEligible
+    : currentLocale === 'ko'
+      ? koEligible
+      : jaEligible;
+  const latestTrainer = trainers[0];
+  const metadataMappings = latestTrainer
+    ? await getMappingsForTrainers([latestTrainer.id], currentLocale)
+    : {};
+  const hasApprovedTranslation = latestTrainer
+    ? (metadataMappings[latestTrainer.id] || []).length > 0
+    : false;
   const alternateLanguages: Record<string, string> = {};
+  if (enEligible) {
+    alternateLanguages.en = `/en/patcher/${game_slug}`;
+    alternateLanguages['x-default'] = `/en/patcher/${game_slug}`;
+  }
   if (koEligible) alternateLanguages.ko = `/ko/patcher/${game_slug}`;
   if (jaEligible) alternateLanguages.ja = `/ja/patcher/${game_slug}`;
-  if (koEligible) alternateLanguages['x-default'] = `/ko/patcher/${game_slug}`;
-  else if (jaEligible) alternateLanguages['x-default'] = `/ja/patcher/${game_slug}`;
   const versionsStr = trainers && trainers.length > 0
     ? trainers.map(t => t.version_str).join(', ')
     : '';
@@ -44,14 +60,18 @@ export async function generateMetadata({ params }: PatcherPageProps) {
 
   if (currentLocale === 'ko') {
     title = `${game.title_ko} 트레이너 한글 패치 - 무설치 브라우저 로컬 변환 | LocalPatcher`;
-    description = `${game.title_ko} (${game.title_en}) 트레이너 한글 번역 패치(${versionsStr})를 제공합니다. 파일을 서버에 올리지 않고 웹브라우저에서 로컬로 변환할 수 있습니다.`;
+    description = hasApprovedTranslation
+      ? `${game.title_ko} (${game.title_en}) 트레이너 한글 번역 패치(${versionsStr})를 제공합니다. 파일을 서버에 올리지 않고 웹브라우저에서 로컬로 변환할 수 있습니다.`
+      : `${game.title_ko} (${game.title_en}) 트레이너(${versionsStr})의 변환 지원 정보와 번역 검수 상태를 확인하세요. 파일은 서버에 업로드되지 않습니다.`;
   } else if (currentLocale === 'ja') {
     const titleJa = game.title_ja || game.title_en;
     title = `${titleJa} トレーナー日本語化パッチ - ブラウザでのローカル変換 | LocalPatcher`;
-    description = `${titleJa}の最新トレーナー用日本語化翻訳パッチ(${versionsStr})です。サーバーにファイルを一切アップロードせず、Webブラウザ内で完全にローカルで日本語化できます。`;
+    description = hasApprovedTranslation
+      ? `${titleJa}の最新トレーナー用日本語化翻訳パッチ(${versionsStr})です。サーバーにファイルを一切アップロードせず、Webブラウザ内で完全にローカルで日本語化できます。`
+      : `${titleJa}のトレーナー(${versionsStr})に関する変換対応情報と翻訳レビュー状況を確認できます。ファイルはサーバーにアップロードされません。`;
   } else {
-    title = `${game.title_en} Trainer Translation & Localization Patch | LocalPatcher`;
-    description = `Apply client-side translation and localization patches for ${game.title_en} game trainers (${versionsStr}) directly in your web browser with no server uploads.`;
+    title = `${game.title_en} Original Trainer Information & Compatibility | LocalPatcher`;
+    description = `Check original English trainer versions, supported option counts, compatibility, and the official download source for ${game.title_en} (${versionsStr}).`;
   }
 
   const gameName = currentLocale === 'ko' ? game.title_ko : currentLocale === 'ja' ? (game.title_ja || game.title_en) : game.title_en;
@@ -100,7 +120,18 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
   const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko') ? locale : 'ko';
 
   // 1. Fetch game details
-  const game = await getGameBySlug(game_slug);
+  const resolvedSlug = await resolveGameSlugAlias(game_slug);
+  if (resolvedSlug && resolvedSlug !== game_slug) {
+    permanentRedirect(`/${currentLocale}/patcher/${resolvedSlug}`);
+  }
+  let game = await getGameBySlug(game_slug);
+  if (!game && game_slug.endsWith('-trainer')) {
+    const canonicalSlug = game_slug.slice(0, -'-trainer'.length);
+    game = await getGameBySlug(canonicalSlug);
+    if (game) {
+      permanentRedirect(`/${currentLocale}/patcher/${canonicalSlug}`);
+    }
+  }
   if (!game) {
     notFound();
   }
@@ -130,16 +161,11 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
       ? `${game.title_ko} (${game.title_en}) 트레이너 한글 패치를 설치 없이 브라우저에서 로컬로 적용하는 유틸리티입니다.`
       : currentLocale === 'ja'
         ? `${game.title_en}のトレーナー日本語化パッチをブラウザ上でローカルに適用するツール。`
-        : `Free browser-based patch tool to translate and localize ${game.title_en} game trainers client-side.`,
+        : `Original English trainer version, option count, compatibility, and official source information for ${game.title_en}.`,
     'screenshot': game.cover_image_url,
     'softwareVersion': trainers[0]?.version_str || '1.0',
     'downloadUrl': `${SITE_URL}/${currentLocale}/patcher/${game.slug}`,
   };
-
-  const partnerKey = process.env.NEXT_PUBLIC_HUMBLE_PARTNER_KEY;
-  const purchaseUrl = partnerKey
-    ? `https://www.humblebundle.com/store/search?search=${encodeURIComponent(game.title_en)}&partner=${partnerKey}`
-    : `https://store.steampowered.com/search/?term=${encodeURIComponent(game.title_en)}`;
 
   return (
     <>
@@ -155,7 +181,8 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
           id: t.id,
           version_str: t.version_str,
           original_file_hash: t.original_file_hash,
-          original_file_size: t.original_file_size
+          original_file_size: t.original_file_size,
+          option_count: t.option_count
         }))}
         mappingsMap={mappingsMap}
         locale={currentLocale as Locale}

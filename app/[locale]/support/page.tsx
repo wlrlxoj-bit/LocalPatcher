@@ -17,7 +17,7 @@ export default async function SupportPage({
       title: 'Patreon 후원',
       subtitle: 'LocalPatcher의 지속 가능한 운영과 서비스 개선을 지원해 주세요.',
       cardTitle: 'LocalPatcher 후원자(Sponsor) 되기',
-      cardIntro: 'LocalPatcher는 무료로 이용할 수 있으며 현재 Google 광고를 사용하지 않습니다. 자발적인 후원은 다음과 같은 정기적인 인프라 유지 비용을 지원하는 데 사용됩니다.',
+      cardIntro: 'LocalPatcher는 무료로 이용할 수 있습니다. 필요한 환경 설정과 동의 준비가 완료된 경우 Google AdSense 광고가 표시될 수 있으며, 자발적인 후원은 다음과 같은 정기적인 인프라 유지 비용을 지원하는 데 사용됩니다.',
       costs: [
         {
           icon: Database,
@@ -43,7 +43,7 @@ export default async function SupportPage({
       title: 'Sponsor on Patreon',
       subtitle: 'Help keep LocalPatcher available, fast, and sustainable for players worldwide.',
       cardTitle: 'Become a Sponsor',
-      cardIntro: 'LocalPatcher is free to use and does not currently use Google advertising. Voluntary sponsorship helps cover the following recurring infrastructure costs:',
+      cardIntro: 'LocalPatcher is free to use. Google AdSense ads may be displayed when the required configuration and consent readiness are in place. Voluntary sponsorship helps cover the following recurring infrastructure costs:',
       costs: [
         {
           icon: Database,
@@ -69,7 +69,7 @@ export default async function SupportPage({
       title: 'Patreonで支援する',
       subtitle: 'LocalPatcher の無償サービスを安定して継続できるよう、ご支援ください。',
       cardTitle: 'パトロン（支援者）になる',
-      cardIntro: 'LocalPatcherは無料で利用でき、現在Google広告を使用していません。任意のご支援は、以下の継続的なインフラ維持費に充てられます。',
+      cardIntro: 'LocalPatcherは無料で利用できます。必要な設定と同意準備が整っている場合、Google AdSense広告が表示されることがあります。任意のご支援は、以下の継続的なインフラ維持費に充てられます。',
       costs: [
         {
           icon: Database,

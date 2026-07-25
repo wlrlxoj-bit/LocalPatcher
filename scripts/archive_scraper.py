@@ -12,6 +12,11 @@ import requests
 from bs4 import BeautifulSoup
 import pefile
 from supabase import create_client, Client
+from fling_utils import (
+    find_game_by_canonical_slug,
+    normalize_fling_slug,
+    parse_trainer_version,
+)
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -491,8 +496,8 @@ def fetch_sitemap_trainer_urls():
 
 def process_archive_trainer(game_url, db: Client, delay_sec=1.0, force=False):
     """Scrapes game trainer page, extracts all download links, downloads and registers them."""
-    slug = game_url.rstrip('/').split('/')[-1]
-    title_raw = slug.replace('-trainer', '').replace('-', ' ').title()
+    slug = normalize_fling_slug(game_url)
+    title_raw = slug.replace('-', ' ').title()
     print(f"\n[*] Processing game: {title_raw} ({game_url})")
     
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -521,27 +526,10 @@ def process_archive_trainer(game_url, db: Client, delay_sec=1.0, force=False):
                 unique_downloads.append(a)
                 
         # Resolve game_id
-        game_res = db.table('games').select('id', 'slug').eq('slug', slug).execute()
-        
-        game_row = None
-        if game_res.data:
-            game_row = game_res.data[0]
-        else:
-            title_res = db.table('games').select('id', 'slug').eq('title_en', title_raw).execute()
-            if title_res.data:
-                game_row = title_res.data[0]
+        game_row = find_game_by_canonical_slug(db, slug, title_raw)
 
         if game_row:
             game_id = game_row['id']
-            if game_row['slug'] != slug:
-                print(f"[*] Updating slug for game '{title_raw}' from '{game_row['slug']}' to '{slug}'")
-                db.table('games').update({'slug': slug}).eq('id', game_id).execute()
-                
-            # Optimization: check if all versions are already registered in the DB
-            db_trainers = db.table('trainers').select('id').eq('game_id', game_id).execute()
-            if not force and len(db_trainers.data) >= len(unique_downloads):
-                print(f"[+] Skipping {slug}: all {len(unique_downloads)} versions are already registered.")
-                return True
         else:
             # Create new game meta
             steam_meta = fetch_steam_meta(title_raw)
@@ -666,13 +654,7 @@ def process_archive_trainer(game_url, db: Client, delay_sec=1.0, force=False):
                     continue
                     
                 # Parsing version and option count
-                v_match = re.search(r'v[0-9\.]+(?:-v[0-9\.]+)?', download_text)
-                version_str = v_match.group(0) if v_match else "v1.0"
-                
-                opt_match = re.search(r'Plus\.(\d+)', download_text)
-                option_count = int(opt_match.group(1)) if opt_match else 0
-                
-                final_version_str = f"{version_str} Plus {option_count}"
+                final_version_str, option_count = parse_trainer_version(download_text)
                 
                 # Insert trainer metadata
                 insert_trainer = db.table('trainers').insert({
@@ -770,7 +752,7 @@ def main():
             
         success = process_archive_trainer(game_url, db, delay_sec=args.delay, force=args.force)
         if success:
-            slug = game_url.rstrip('/').split('/')[-1]
+            slug = normalize_fling_slug(game_url)
             game_res = db.table('games').select('id').eq('slug', slug).execute()
             if game_res.data:
                 processed_count += 1

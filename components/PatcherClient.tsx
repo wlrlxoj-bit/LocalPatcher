@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ChevronLeft, ArrowRight, AlertTriangle, Share2 } from 'lucide-react';
 import { Locale, getDictionary } from '@/lib/i18n';
 import DropZone from '@/components/DropZone';
+import AdSenseUnit from '@/components/AdSenseUnit';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 
 interface Game {
@@ -395,7 +396,8 @@ function PartnerStoreWidget({ game, locale, t, trainerId }: PartnerStoreWidgetPr
 }
 
 export default function PatcherClient({ game, trainers, mappingsMap, locale }: PatcherClientProps) {
-  const sortedTrainers = [...trainers].sort((a, b) => b.id - a.id);
+  // 서버가 version_str 기준으로 정렬한 순서를 metadata/JSON-LD와 동일하게 유지합니다.
+  const sortedTrainers = trainers;
   const t = getDictionary(locale);
   const displayTitle = locale === 'ko' ? game.title_ko : locale === 'ja' ? (game.title_ja || game.title_en) : game.title_en;
   // Set default selected trainer version
@@ -407,6 +409,8 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
   const patcherSectionRef = useRef<HTMLDivElement>(null);
 
   const selectedTrainer = sortedTrainers.find(t => t.id === selectedTrainerId);
+  const midAdSlot = process.env.NEXT_PUBLIC_ADSENSE_PATCHER_MID_SLOT;
+  const bottomAdSlot = process.env.NEXT_PUBLIC_ADSENSE_PATCHER_BOTTOM_SLOT;
 
   useEffect(() => {
     const element = patcherSectionRef.current;
@@ -618,7 +622,9 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
             </table>
           </div>
         </div>
+        <AdSenseUnit locale={locale} slot={midAdSlot} />
         <PartnerStoreWidget game={game} locale={locale} t={t} trainerId={selectedTrainerId} />
+        <AdSenseUnit locale={locale} slot={bottomAdSlot} />
       </div>
     );
   }
@@ -695,7 +701,10 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
 
       {/* Main Patcher Area */}
       {selectedTrainer ? (() => {
-        const isUnpatchable = selectedTrainer.option_count === 0 || (mappingsMap[selectedTrainer.id] || []).length === 0;
+        const isUnpatchable = selectedTrainer.option_count === 0;
+        const isTranslationPending =
+          (selectedTrainer.option_count ?? 0) > 0 &&
+          (mappingsMap[selectedTrainer.id] || []).length === 0;
         return (
           <div className="space-y-6">
             {isUnpatchable ? (
@@ -703,14 +712,14 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                 <AlertTriangle className="w-8 h-8 shrink-0 text-rose-500 mt-0.5" />
                 <div className="flex-1 text-center md:text-left">
                   <h3 className="font-bold text-lg text-white mb-2 font-outfit">
-                    {locale === 'ko' ? '한글 패치 미지원 안내' : locale === 'ja' ? 'パッチ非対応のお知らせ' : 'Patch Unavailable Notice'}
+                    {locale === 'ko' ? '지원 옵션 없음' : locale === 'ja' ? '対応オプションなし' : 'No Supported Options'}
                   </h3>
                   <p className="text-sm leading-relaxed text-rose-200/80 mb-4">
                     {locale === 'ko' 
-                      ? '본 게임의 트레이너는 내부 리소스가 압축 및 암호화(난독화)되어 있어 현재 웹상에서 한글 패치를 적용할 수 없습니다. 대신 공식 영문판 트레이너를 이용해 주시기 바랍니다.' 
+                      ? '이 트레이너 버전에는 현재 변환 가능한 옵션이 등록되어 있지 않습니다. 압축 또는 암호화 여부는 확인되지 않았으므로 공식 배포 페이지에서 다른 버전을 확인해 주세요.'
                       : locale === 'ja' 
-                        ? '本ゲームのトレーナーはリソースが暗号化されているため、日本語パッチを適用できません。公式の英語版をご利用ください。' 
-                        : 'This trainer is encrypted/compressed and currently cannot be patched into Local Language. Please download and use the official English version.'}
+                        ? 'このトレーナーバージョンには、現在変換可能なオプションが登録されていません。圧縮・暗号化の有無は未確認のため、公式配布ページで別のバージョンをご確認ください。'
+                        : 'No convertible options are currently registered for this trainer version. Its compression or encryption status has not been verified; check the official source for another version.'}
                   </p>
                   <a
                     href={game.fling_url || 'https://flingtrainer.com/'}
@@ -727,21 +736,24 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
                   </a>
                 </div>
               </div>
+            ) : isTranslationPending ? (
+              <div className="w-full p-6 rounded-xl border border-amber-500/25 bg-amber-950/15 text-amber-200 flex items-start gap-4">
+                <AlertTriangle className="w-8 h-8 shrink-0 text-amber-400 mt-0.5" />
+                <div>
+                  <h3 className="font-bold text-lg text-white mb-2 font-outfit">
+                    {locale === 'ko' ? '번역 검수 대기 중' : locale === 'ja' ? '翻訳レビュー待ち' : 'Translation Review Pending'}
+                  </h3>
+                  <p className="text-sm leading-relaxed text-amber-100/80">
+                    {locale === 'ko'
+                      ? '이 트레이너는 변환 가능한 옵션이 확인되었지만, 현재 언어의 승인된 번역 매핑이 아직 준비되지 않았습니다. 번역 검수가 완료되면 패치 기능이 제공됩니다.'
+                      : locale === 'ja'
+                        ? 'このトレーナーには変換可能なオプションがありますが、現在の言語で承認済みの翻訳マッピングはまだ準備中です。レビュー完了後にパッチ機能を提供します。'
+                        : 'This trainer has convertible options, but an approved translation mapping for this language is still under review. Patching will become available after review.'}
+                  </p>
+                </div>
+              </div>
             ) : (
               <>
-                {locale !== 'ko' && locale !== 'ja' && (
-                  <div className="w-full p-4 rounded-xl border border-amber-500/20 bg-amber-950/20 text-amber-400 text-xs sm:text-sm flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-                    <div>
-                      {locale === 'ja' ? (
-                        "【翻訳対応言語に関するお知らせ】現在、パッチによる翻訳は「韓国語(ko)」のみサポートされています。本ページでパッチを適用すると、トレーナーのテキストが韓国語に翻訳されます。日本語は今後対応予定です。"
-                      ) : (
-                        "【Translation Support Notice】Currently, the translation patch only supports Korean (ko) and Japanese (ja). Applying the patch on this trainer will localize the option descriptions. English and other languages are planned for future updates."
-                      )}
-                    </div>
-                  </div>
-                )}
-
                 <section aria-labelledby="patcher-start-guide-title" className="rounded-2xl border border-cyan-500/35 bg-gradient-to-br from-cyan-950/35 via-slate-900/70 to-indigo-950/30 p-5 sm:p-6 shadow-[0_0_30px_rgba(6,182,212,0.12)]">
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-[3fr_2fr] md:items-center">
                     <div>
@@ -832,6 +844,8 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
               </div>
             </div>
 
+            <AdSenseUnit locale={locale} slot={midAdSlot} />
+
             <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-5" aria-labelledby="trainer-preview-heading">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -871,6 +885,7 @@ export default function PatcherClient({ game, trainers, mappingsMap, locale }: P
             </section>
 
             <PartnerStoreWidget game={game} locale={locale} t={t} trainerId={selectedTrainerId} />
+            <AdSenseUnit locale={locale} slot={bottomAdSlot} />
 
           </div>
         );

@@ -355,20 +355,61 @@ export const getGameBySlug = cache(async (slug: string) => {
     if (error) throw error;
     return data;
   } catch (err) {
-    console.warn('Supabase query failed, falling back to mock data:', err);
-    return mockGames.find(g => g.slug === slug) || null;
+    console.error('운영 게임 조회에 실패했습니다:', err);
+    return null;
   }
 });
 
-export const getTrainersForGame = cache(async (gameId: number) => {
-  if (!supabase) return mockTrainers.filter(t => t.game_id === gameId);
+export const resolveGameSlugAlias = cache(async (aliasSlug: string): Promise<string | null> => {
+  if (!supabase) return null;
+
   try {
-    const { data, error } = await supabase.from('trainers').select('*').eq('game_id', gameId);
-    if (error || !data) throw error || new Error('No data');
-    return data;
+    const { data, error } = await supabase.rpc('resolve_game_slug', {
+      requested_slug: aliasSlug,
+    });
+    if (error) throw error;
+    return typeof data === 'string' ? data : null;
   } catch (err) {
-    console.warn('Supabase query failed, falling back to mock data:', err);
-    return mockTrainers.filter(t => t.game_id === gameId);
+    console.warn('게임 slug 별칭 조회에 실패했습니다:', err);
+    return null;
+  }
+});
+
+function parseVersion(version: string): number[] {
+  const matches = [...version.matchAll(/v(\d+(?:\.\d+)*)/gi)];
+  const latest = matches.at(-1)?.[1] ?? '';
+  return latest.split('.').filter(Boolean).map(Number);
+}
+
+function compareVersionParts(left: number[], right: number[]): number {
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const difference = (right[index] ?? 0) - (left[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
+}
+
+/** version_str의 마지막 버전 끝점을 기준으로 최신 트레이너를 안정적으로 정렬합니다. */
+export function sortTrainersLatestFirst<T extends { id: number; version_str: string }>(trainers: T[]): T[] {
+  return [...trainers].sort((left, right) =>
+    compareVersionParts(parseVersion(left.version_str), parseVersion(right.version_str)) ||
+    right.id - left.id
+  );
+}
+
+export const getTrainersForGame = cache(async (gameId: number) => {
+  if (!supabase) return sortTrainersLatestFirst(mockTrainers.filter(t => t.game_id === gameId));
+  try {
+    const { data, error } = await supabase
+      .from('trainers')
+      .select('*')
+      .eq('game_id', gameId);
+    if (error || !data) throw error || new Error('No data');
+    return sortTrainersLatestFirst(data);
+  } catch (err) {
+    console.error('운영 트레이너 조회에 실패했습니다:', err);
+    return [];
   }
 });
 
@@ -387,9 +428,8 @@ export async function getMappingsForTrainer(trainerId: number, lang: string = 'k
     if (error || !data) throw error || new Error('No data');
     return data;
   } catch (err) {
-    console.warn('Supabase query failed, falling back to mock data:', err);
-    const mappings = mockMappings[trainerId] || [];
-    return mappings.filter(m => m.language_code === lang);
+    console.error('운영 번역 매핑 조회에 실패했습니다:', err);
+    return [];
   }
 }
 
@@ -424,11 +464,10 @@ export async function getMappingsForTrainers(trainerIds: number[], lang: string 
     }
     return result;
   } catch (err) {
-    console.warn('Supabase query failed, falling back to mock data:', err);
+    console.error('운영 번역 매핑 일괄 조회에 실패했습니다:', err);
     const result: Record<number, any[]> = {};
     for (const tid of trainerIds) {
-      const mappings = mockMappings[tid] || [];
-      result[tid] = mappings.filter(m => m.language_code === lang);
+      result[tid] = [];
     }
     return result;
   }

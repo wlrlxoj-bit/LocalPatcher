@@ -1,7 +1,7 @@
 import { cache } from 'react';
 import { supabase } from '@/lib/supabase';
 
-export type IndexableLocale = 'ko' | 'ja';
+export type IndexableLocale = 'en' | 'ko' | 'ja';
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 100;
 const ID_CHUNK_SIZE = 500;
@@ -32,9 +32,9 @@ async function readAllPages<T>(fetchPage: (from: number, to: number) => Promise<
   throw new Error('색인 자격 조회가 안전 상한을 초과했습니다.');
 }
 
-/** 승인된 번역 미리보기가 실제로 있는 상세 페이지만 색인 대상으로 판정합니다. */
+/** 영어는 옵션 존재, 한국어·일본어는 승인 번역까지 있어야 색인 대상으로 판정합니다. */
 export const isPatcherIndexEligible = cache(async (gameId: number, locale: string): Promise<boolean> => {
-  if (locale !== 'ko' && locale !== 'ja') return false;
+  if (locale !== 'en' && locale !== 'ko' && locale !== 'ja') return false;
   const cacheKey = `${gameId}:${locale}`;
   const fresh = readFreshCache(eligibilityCache.get(cacheKey));
   if (fresh !== undefined) return fresh;
@@ -50,9 +50,17 @@ export const isPatcherIndexEligible = cache(async (gameId: number, locale: strin
       eligibilityCache.set(cacheKey, { value: false, cachedAt: Date.now() });
       return false;
     }
-    const { count, error } = await supabase.from('translation_mappings').select('id', { count: 'exact', head: true }).in('trainer_id', trainers.map((trainer) => trainer.id)).eq('language_code', locale).eq('is_approved', true);
-    if (error) throw error;
-    const eligible = (count ?? 0) > 0;
+    let eligible = true;
+    if (locale !== 'en') {
+      const { count, error } = await supabase
+        .from('translation_mappings')
+        .select('id', { count: 'exact', head: true })
+        .in('trainer_id', trainers.map((trainer) => trainer.id))
+        .eq('language_code', locale)
+        .eq('is_approved', true);
+      if (error) throw error;
+      eligible = (count ?? 0) > 0;
+    }
     eligibilityCache.set(cacheKey, { value: eligible, cachedAt: Date.now() });
     return eligible;
   } catch (error) {
@@ -82,18 +90,31 @@ export async function getEligiblePatcherSlugs(locale: IndexableLocale): Promise<
       sitemapEligibilityCache.set(locale, { value: [], cachedAt: Date.now() });
       return [];
     }
-    const mappings: Array<{ trainer_id: number }> = [];
-    for (let offset = 0; offset < trainers.length; offset += ID_CHUNK_SIZE) {
-      const ids = trainers.slice(offset, offset + ID_CHUNK_SIZE).map((trainer) => trainer.id);
-      const chunk = await readAllPages<{ trainer_id: number }>(async (from, to) => await client.from('translation_mappings').select('trainer_id').in('trainer_id', ids).eq('language_code', locale).eq('is_approved', true).order('id').range(from, to));
-      mappings.push(...chunk);
+    let eligibleGameIds: Set<number>;
+    if (locale === 'en') {
+      eligibleGameIds = new Set(trainers.map((trainer) => trainer.game_id));
+    } else {
+      const mappedTrainerIds = new Set<number>();
+      for (let offset = 0; offset < trainers.length; offset += ID_CHUNK_SIZE) {
+        const trainerIds = trainers.slice(offset, offset + ID_CHUNK_SIZE).map((trainer) => trainer.id);
+        const mappings = await readAllPages<{ trainer_id: number }>(async (from, to) =>
+          await client
+            .from('translation_mappings')
+            .select('trainer_id')
+            .in('trainer_id', trainerIds)
+            .eq('language_code', locale)
+            .eq('is_approved', true)
+            .order('id')
+            .range(from, to)
+        );
+        mappings.forEach((mapping) => mappedTrainerIds.add(mapping.trainer_id));
+      }
+      eligibleGameIds = new Set(
+        trainers
+          .filter((trainer) => mappedTrainerIds.has(trainer.id))
+          .map((trainer) => trainer.game_id)
+      );
     }
-    if (!mappings.length) {
-      sitemapEligibilityCache.set(locale, { value: [], cachedAt: Date.now() });
-      return [];
-    }
-    const mappedTrainerIds = new Set(mappings.map((mapping) => mapping.trainer_id));
-    const eligibleGameIds = new Set(trainers.filter((trainer) => mappedTrainerIds.has(trainer.id)).map((trainer) => trainer.game_id));
     const slugs = games.filter((game) => eligibleGameIds.has(game.id)).map((game) => game.slug);
     sitemapEligibilityCache.set(locale, { value: slugs, cachedAt: Date.now() });
     return [...slugs];

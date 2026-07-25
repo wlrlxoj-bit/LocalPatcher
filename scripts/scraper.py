@@ -12,6 +12,11 @@ import requests
 from bs4 import BeautifulSoup
 import pefile
 from supabase import create_client, Client
+from fling_utils import (
+    find_game_by_canonical_slug,
+    normalize_fling_slug,
+    parse_trainer_version,
+)
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -631,7 +636,7 @@ def fetch_recent_trainers():
             link = a['href']
             # Match games like "Cyberpunk 2077 v2.0 Trainer"
             if "trainer" in link:
-                slug = link.split('/')[-2].replace("-trainer", "")
+                slug = normalize_fling_slug(link)
                 trainer_posts.append({
                     'title': title,
                     'link': link,
@@ -723,21 +728,11 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
                 
         # Check if game already exists in DB by slug first, or by title_en
         game_title_en = post['title'].split('Trainer')[0].strip()
-        game_res = db.table('games').select('id', 'slug').eq('slug', post['slug']).execute()
-        
-        game_row = None
-        if game_res.data:
-            game_row = game_res.data[0]
-        else:
-            title_res = db.table('games').select('id', 'slug').eq('title_en', game_title_en).execute()
-            if title_res.data:
-                game_row = title_res.data[0]
+        post['slug'] = normalize_fling_slug(post['slug'])
+        game_row = find_game_by_canonical_slug(db, post['slug'], game_title_en)
                 
         if game_row:
             game_id = game_row['id']
-            if game_row['slug'] != post['slug']:
-                print(f"[*] Updating slug for game '{game_title_en}' from '{game_row['slug']}' to '{post['slug']}'")
-                db.table('games').update({'slug': post['slug']}).eq('id', game_id).execute()
         else:
             # Create new game meta row
             steam_meta = fetch_steam_meta(game_title_en)
@@ -872,13 +867,7 @@ def scrape_and_patch_trainer(post, db: Client, force=False):
                     continue
                     
                 # Parse version and option count from download link text for accuracy
-                v_match = re.search(r'v[0-9\.]+(?:-v[0-9\.]+)?', download_text)
-                version_str = v_match.group(0) if v_match else "v1.0"
-                
-                opt_match = re.search(r'Plus\.(\d+)', download_text)
-                option_count = int(opt_match.group(1)) if opt_match else 0
-                
-                final_version_str = f"{version_str} Plus {option_count}"
+                final_version_str, option_count = parse_trainer_version(download_text)
                 
                 # Insert Trainer specs
                 insert_trainer = db.table('trainers').insert({
@@ -968,8 +957,7 @@ def main():
     if args.url:
         print(f"[*] Pinpoint scrape target URL: {args.url}")
         clean_url = args.url.strip().rstrip('/')
-        url_slug = clean_url.split('/')[-1]
-        game_slug = url_slug.replace("-trainer", "")
+        game_slug = normalize_fling_slug(clean_url)
         game_title = game_slug.replace('-', ' ').title() + " Trainer"
         
         post = {

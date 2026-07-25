@@ -78,6 +78,14 @@ export default async function LocaleLayout({
   const { locale } = await params;
   const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko') ? locale : 'ko';
   const gaId = process.env.NEXT_PUBLIC_GA_ID || 'G-DDZ96EFNR3';
+  const adsenseId = process.env.NEXT_PUBLIC_ADSENSE_ID;
+  const hasValidAdsenseId = /^ca-pub-\d+$/.test(adsenseId || '');
+  const hasValidAdSlot = [
+    process.env.NEXT_PUBLIC_ADSENSE_PATCHER_MID_SLOT,
+    process.env.NEXT_PUBLIC_ADSENSE_PATCHER_BOTTOM_SLOT,
+  ].some((slot) => /^\d+$/.test(slot || ''));
+  const isAdsenseConsentReady = process.env.NEXT_PUBLIC_ADSENSE_CONSENT_READY === 'true';
+  const shouldLoadAdsense = isAdsenseConsentReady && hasValidAdsenseId && hasValidAdSlot;
 
   return (
     <html lang={currentLocale}>
@@ -101,6 +109,14 @@ export default async function LocaleLayout({
           });
         `}
       </Script>
+      {shouldLoadAdsense && (
+        <Script
+          id="google-adsense"
+          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseId}`}
+          strategy="afterInteractive"
+          crossOrigin="anonymous"
+        />
+      )}
       <body className="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500 selection:text-slate-950">
         <div className="relative min-h-screen flex flex-col z-0">
           {/* Background Decorative Light Gradients */}
