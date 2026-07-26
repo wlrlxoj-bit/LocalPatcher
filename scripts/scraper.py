@@ -249,7 +249,14 @@ def _call_azure(lines_to_translate, _prompt, _temperature):
         raise RuntimeError("Azure Translator 배치 제한을 초과했습니다")
     headers = {"Content-Type": "application/json", "Ocp-Apim-Subscription-Key": AZURE_TRANSLATOR_KEY, "Ocp-Apim-Subscription-Region": AZURE_TRANSLATOR_REGION}
     for attempt in range(3):
-        target_language = "ja" if "Japanese" in _prompt else "ko"
+        if "German" in _prompt:
+            target_language = "de"
+        elif "Spanish" in _prompt:
+            target_language = "es"
+        elif "Japanese" in _prompt:
+            target_language = "ja"
+        else:
+            target_language = "ko"
         res = requests.post(f"{AZURE_TRANSLATOR_ENDPOINT}/translate?api-version=3.0&from=en&to={target_language}", headers=headers, json=[{"Text": line} for line in lines_to_translate], timeout=30)
         if res.status_code in (403, 429):
             raise TranslationQuotaError(f"Azure Translator 할당량 중단: HTTP {res.status_code}")
@@ -332,6 +339,10 @@ def _split_option_for_translation(line):
     return prefix + delimiter, label
 
 
+def translate_via_llm(lines_to_translate):
+    providers = [("Azure", _call_azure)] if TRANSLATION_PROVIDER == "azure" else [("OpenAI Paid", _call_openai)]
+    return _translate_via_llm_with_fallback(lines_to_translate, "Korean", "무한 체력", providers)
+
 def translate_via_llm_de(lines_to_translate):
     providers = [("Azure", _call_azure)] if TRANSLATION_PROVIDER == "azure" else [("OpenAI Paid", _call_openai)]
     return _translate_via_llm_with_fallback(lines_to_translate, "German", "Unendliche Gesundheit", providers)
@@ -342,14 +353,19 @@ def translate_via_llm_es(lines_to_translate):
 
 def process_translation_block_de(text: str, db: Client) -> str:
     lines = text.split("\n")
+    dict_results = []
     lines_needing_llm = []
     for line in lines:
         if not line or line.strip() == "":
+            dict_results.append(line)
             continue
         parts = _split_option_for_translation(line)
         if parts is None:
-            raise RuntimeError("지원하지 않는 옵션 줄 형식")
-        lines_needing_llm.append(parts[1])
+            dict_results.append(line)
+        else:
+            dict_results.append(None)
+            lines_needing_llm.append(parts[1])
+            
     llm_results = translate_via_llm_de(lines_needing_llm) if lines_needing_llm else []
     translated_lines = []
     llm_index = 0
@@ -358,9 +374,12 @@ def process_translation_block_de(text: str, db: Client) -> str:
             translated_lines.append(line)
             continue
         orig_len = len(line)
-        parts = _split_option_for_translation(line)
-        trans_line = parts[0] + llm_results[llm_index]
-        llm_index += 1
+        trans_line = dict_results[idx]
+        if trans_line is None:
+            parts = _split_option_for_translation(line)
+            trans_line = parts[0] + llm_results[llm_index]
+            llm_index += 1
+            
         if len(trans_line) < orig_len:
             trans_line += " " * (orig_len - len(trans_line))
         elif len(trans_line) > orig_len:
@@ -370,14 +389,19 @@ def process_translation_block_de(text: str, db: Client) -> str:
 
 def process_translation_block_es(text: str, db: Client) -> str:
     lines = text.split("\n")
+    dict_results = []
     lines_needing_llm = []
     for line in lines:
         if not line or line.strip() == "":
+            dict_results.append(line)
             continue
         parts = _split_option_for_translation(line)
         if parts is None:
-            raise RuntimeError("지원하지 않는 옵션 줄 형식")
-        lines_needing_llm.append(parts[1])
+            dict_results.append(line)
+        else:
+            dict_results.append(None)
+            lines_needing_llm.append(parts[1])
+            
     llm_results = translate_via_llm_es(lines_needing_llm) if lines_needing_llm else []
     translated_lines = []
     llm_index = 0
@@ -386,9 +410,12 @@ def process_translation_block_es(text: str, db: Client) -> str:
             translated_lines.append(line)
             continue
         orig_len = len(line)
-        parts = _split_option_for_translation(line)
-        trans_line = parts[0] + llm_results[llm_index]
-        llm_index += 1
+        trans_line = dict_results[idx]
+        if trans_line is None:
+            parts = _split_option_for_translation(line)
+            trans_line = parts[0] + llm_results[llm_index]
+            llm_index += 1
+            
         if len(trans_line) < orig_len:
             trans_line += " " * (orig_len - len(trans_line))
         elif len(trans_line) > orig_len:
@@ -450,11 +477,12 @@ def process_translation_block(text: str, db: Client) -> str:
         if trans_line is not None:
             dict_results.append(trans_line)
         else:
-            dict_results.append(None) # Marker for LLM translate
             parts = _split_option_for_translation(line)
             if parts is None:
-                raise RuntimeError("지원하지 않는 옵션 줄 형식")
-            lines_needing_llm.append(parts[1])
+                dict_results.append(line)
+            else:
+                dict_results.append(None) # Marker for LLM translate
+                lines_needing_llm.append(parts[1])
 
     # Second Pass: Perform batch LLM translation if keys are set
     llm_results = []
@@ -596,11 +624,12 @@ def process_translation_block_ja(text: str, db: Client) -> str:
         if trans_line is not None:
             dict_results.append(trans_line)
         else:
-            dict_results.append(None)
             parts = _split_option_for_translation(line)
             if parts is None:
-                raise RuntimeError("지원하지 않는 옵션 줄 형식")
-            lines_needing_llm.append(parts[1])
+                dict_results.append(line)
+            else:
+                dict_results.append(None)
+                lines_needing_llm.append(parts[1])
 
     llm_results = []
     if lines_needing_llm:
