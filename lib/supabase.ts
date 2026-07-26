@@ -379,7 +379,7 @@ export const getPopularGamesWithTrainers = unstable_cache(async () => {
   }
 }, ['popular-games'], { revalidate: 3600 });
 
-export const getGameBySlug = cache(async (slug: string) => {
+export const getGameBySlug = unstable_cache(async (slug: string) => {
   if (!supabase) return mockGames.find(g => g.slug === slug) || null;
   try {
     const { data, error } = await supabase.from('games').select('*').eq('slug', slug).maybeSingle();
@@ -389,9 +389,9 @@ export const getGameBySlug = cache(async (slug: string) => {
     console.error('운영 게임 조회에 실패했습니다:', err);
     return null;
   }
-});
+}, ['game-by-slug'], { revalidate: 3600 });
 
-export const resolveGameSlugAlias = cache(async (aliasSlug: string): Promise<string | null> => {
+export const resolveGameSlugAlias = unstable_cache(async (aliasSlug: string): Promise<string | null> => {
   const staticAlias = resolveStaticGameSlugAlias(aliasSlug);
   if (staticAlias) return staticAlias;
 
@@ -420,7 +420,52 @@ export const resolveGameSlugAlias = cache(async (aliasSlug: string): Promise<str
     console.warn('게임 slug 별칭 조회에 실패했습니다:', err);
     return null;
   }
-});
+}, ['resolve-game-slug'], { revalidate: 3600 });
+
+export const getRelatedGames = unstable_cache(async (gameId: number, limit = 6): Promise<Game[]> => {
+  if (!supabase) return mockGames.filter(g => g.id !== gameId).slice(0, limit);
+
+  try {
+    const { data: currentGame } = await supabase
+      .from('games')
+      .select('genres, tags')
+      .eq('id', gameId)
+      .single();
+
+    let relatedGames: Game[] = [];
+    
+    if (currentGame && (currentGame.genres?.length > 0 || currentGame.tags?.length > 0)) {
+      const genresArray = currentGame.genres || [];
+      const { data } = await supabase
+        .from('games')
+        .select('*')
+        .neq('id', gameId)
+        .overlaps('genres', genresArray)
+        .limit(limit);
+        
+      if (data) relatedGames = data;
+    }
+
+    if (relatedGames.length < limit) {
+      const { data: popularGames } = await supabase
+        .from('games')
+        .select('*')
+        .neq('id', gameId)
+        .eq('is_popular', true)
+        .order('popularity_index', { ascending: true })
+        .limit(limit - relatedGames.length);
+        
+      if (popularGames) {
+        relatedGames = [...relatedGames, ...popularGames];
+      }
+    }
+
+    return relatedGames;
+  } catch (err) {
+    console.error('연관 게임 조회에 실패했습니다:', err);
+    return [];
+  }
+}, ['related-games'], { revalidate: 3600 });
 
 function parseVersion(version: string): number[] {
   const matches = [...version.matchAll(/v(\d+(?:\.\d+)*)/gi)];
@@ -445,7 +490,7 @@ export function sortTrainersLatestFirst<T extends { id: number; version_str: str
   );
 }
 
-export const getTrainersForGame = cache(async (gameId: number) => {
+export const getTrainersForGame = unstable_cache(async (gameId: number) => {
   if (!supabase) return sortTrainersLatestFirst(mockTrainers.filter(t => t.game_id === gameId));
   try {
     const { data, error } = await supabase
@@ -458,7 +503,7 @@ export const getTrainersForGame = cache(async (gameId: number) => {
     console.error('운영 트레이너 조회에 실패했습니다:', err);
     return [];
   }
-});
+}, ['trainers-for-game'], { revalidate: 3600 });
 
 export async function getMappingsForTrainer(trainerId: number, lang: string = 'ko') {
   if (!supabase) {
@@ -480,7 +525,7 @@ export async function getMappingsForTrainer(trainerId: number, lang: string = 'k
   }
 }
 
-export async function getMappingsForTrainers(trainerIds: number[], lang: string = 'ko') {
+export const getMappingsForTrainers = unstable_cache(async (trainerIds: number[], lang: string = 'ko') => {
   if (!supabase) {
     const result: Record<number, any[]> = {};
     for (const tid of trainerIds) {
@@ -518,7 +563,7 @@ export async function getMappingsForTrainers(trainerIds: number[], lang: string 
     }
     return result;
   }
-}
+}, ['mappings-for-trainers'], { revalidate: 3600 });
 
 export type UnapprovedTranslationStatus = 'pending' | 'rejected';
 
@@ -526,10 +571,10 @@ export type UnapprovedTranslationStatus = 'pending' | 'rejected';
  * 트레이너와 언어별로 가장 최근의 미승인 번역 처리 상태를 조회합니다.
  * 승인된 매핑 자체는 기존 조회 함수가 담당하며, 이 함수는 UI 상태 안내에만 사용합니다.
  */
-export async function getLatestUnapprovedStatusesForTrainers(
+export const getLatestUnapprovedStatusesForTrainers = unstable_cache(async (
   trainerIds: number[],
   lang: string = 'ko'
-): Promise<Record<number, UnapprovedTranslationStatus | null>> {
+): Promise<Record<number, UnapprovedTranslationStatus | null>> => {
   const result: Record<number, UnapprovedTranslationStatus | null> = {};
   for (const trainerId of trainerIds) {
     result[trainerId] = null;
@@ -561,80 +606,5 @@ export async function getLatestUnapprovedStatusesForTrainers(
     console.error('운영 번역 처리 상태 일괄 조회에 실패했습니다:', err);
     return result;
   }
-}
+}, ['unapproved-statuses'], { revalidate: 3600 });
 
-/**
- * 게임과 연관된 다른 게임들(같은 장르, 태그 등)이나 인기 게임을 가져옵니다.
- */
-export const getRelatedGames = cache(async (gameId: number, limit = 6): Promise<Game[]> => {
-  if (!supabase) return mockGames.filter(g => g.id !== gameId).slice(0, limit);
-
-  try {
-    // 먼저 현재 게임의 장르를 확인
-    const { data: currentGame } = await supabase
-      .from('games')
-      .select('genres, tags')
-      .eq('id', gameId)
-      .single();
-
-    let relatedGames: Game[] = [];
-    
-    // 장르나 태그가 존재하면 해당 장르/태그와 겹치는 게임들을 먼저 조회 (자신 제외)
-    if (currentGame && (currentGame.genres?.length > 0 || currentGame.tags?.length > 0)) {
-      const genresArray = currentGame.genres || [];
-      const { data } = await supabase
-        .from('games')
-        .select('*')
-        .neq('id', gameId)
-        .overlaps('genres', genresArray)
-        .limit(limit);
-        
-      if (data) relatedGames = data;
-    }
-
-    // 만약 연관 게임이 limit보다 적으면, 인기 게임으로 채움
-    if (relatedGames.length < limit) {
-      const { data: popularGames } = await supabase
-        .from('games')
-        .select('*')
-        .neq('id', gameId)
-        .eq('is_popular', true)
-        .order('popularity_index', { ascending: true })
-        .limit(limit - relatedGames.length);
-        
-      if (popularGames) {
-        // 이미 relatedGames에 포함된 게임은 제외하고 추가 (Set 활용 등)
-        const existingIds = new Set(relatedGames.map(g => g.id));
-        for (const pg of popularGames) {
-          if (!existingIds.has(pg.id)) {
-            relatedGames.push(pg);
-          }
-        }
-      }
-    }
-    
-    // 그래도 limit보다 적으면 최신 게임으로 채움
-    if (relatedGames.length < limit) {
-      const { data: recentGames } = await supabase
-        .from('games')
-        .select('*')
-        .neq('id', gameId)
-        .order('id', { ascending: false })
-        .limit(limit - relatedGames.length);
-        
-      if (recentGames) {
-        const existingIds = new Set(relatedGames.map(g => g.id));
-        for (const rg of recentGames) {
-          if (!existingIds.has(rg.id)) {
-            relatedGames.push(rg);
-          }
-        }
-      }
-    }
-
-    return relatedGames;
-  } catch (err) {
-    console.error('연관 게임 조회에 실패했습니다:', err);
-    return [];
-  }
-});
