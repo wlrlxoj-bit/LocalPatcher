@@ -477,7 +477,7 @@ export default function PatcherClient({
 
   const startGuide = locale === 'ko'
     ? {
-        eyebrow: '처음이신가요?', title: '3단계로 바로 시작하세요',
+        eyebrow: '처음이십니까?', title: '3단계로 바로 시작하십시오',
         description: '원본 트레이너를 준비한 뒤 변환기에 넣으면 한국어 패치 파일을 받을 수 있습니다.',
         steps: ['FLiNG에서 원본 트레이너(.exe) 받기', '아래 파일 변환기에 .exe 올리기', '받은 ZIP을 압축 해제해 실행하기'],
         fling: 'FLiNG 공식 원본 다운로드', guide: '전체 작동 가이드 보기', missingFling: '이 게임의 FLiNG 공식 링크가 아직 등록되지 않았습니다.',
