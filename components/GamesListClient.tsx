@@ -170,8 +170,8 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
     };
   };
 
-  // Get games that actually have options/trainers
-  const gamesWithTrainers = games.filter(game => getTrainerInfo(game.id).count > 0);
+  // Get games (we now include games even with 0 trainers, so users can still find them and download from FLiNG)
+  const gamesWithTrainers = games;
 
   // Split into latest and popular games
   const latestGames = [...gamesWithTrainers].sort((a, b) => b.id - a.id);

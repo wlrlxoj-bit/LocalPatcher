@@ -928,8 +928,31 @@ export default function PatcherClient({
           </div>
         );
       })() : (
-        <div className="py-12 text-center text-slate-500">
-          {pt.noTrainerVersion}
+        <div className="py-16 px-6 text-center rounded-2xl border border-rose-500/20 bg-rose-500/5 my-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-rose-500/10 mb-6">
+            <AlertTriangle className="w-8 h-8 text-rose-500" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-200 mb-3">
+            {locale === 'ko' ? '한글 패치 미지원 트레이너' :
+             locale === 'ja' ? 'パッチ未対応のトレーナー' :
+             'Unsupported Trainer for Patching'}
+          </h2>
+          <p className="text-sm text-slate-400 max-w-2xl mx-auto mb-8 leading-relaxed">
+            {locale === 'ko' ? '해당 게임의 트레이너 파일은 텍스트가 암호화되거나 압축(Packed)되어 있어 브라우저 환경에서 한글 패치를 진행할 수 없습니다. 번역은 지원되지 않지만, 아래 버튼을 통해 원본 영문 트레이너를 직접 다운로드하여 사용하실 수 있습니다.' :
+             locale === 'ja' ? 'このゲームのトレーナーファイルはテキストが暗号化または圧縮されているため、ブラウザ環境でのパッチ適用ができません。翻訳はサポートされていませんが、下のボタンからオリジナルの英語版トレーナーを直接ダウンロードして使用できます。' :
+             'The trainer file for this game has encrypted or packed text, making it impossible to patch in the browser environment. While translation is not supported, you can still download and use the original English trainer directly via the button below.'}
+          </p>
+          <a
+            href={game.fling_url || 'https://flingtrainer.com/'}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => trackAnalyticsEvent('fling_download_clicked', { source: 'unsupported_game', game_id: game.id })}
+            className="inline-flex items-center justify-center px-6 py-3 rounded-xl border border-cyan-500 text-sm font-bold text-cyan-950 bg-cyan-500 hover:bg-cyan-400 transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.4)]"
+          >
+            {locale === 'ko' ? 'FLiNG 공식 다운로드 페이지로 이동 ↗' :
+             locale === 'ja' ? 'FLiNG公式ダウンロードページへ ↗' :
+             'Go to FLiNG Official Download Page ↗'}
+          </a>
         </div>
       )}
 
