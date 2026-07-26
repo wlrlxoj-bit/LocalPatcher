@@ -555,3 +555,79 @@ export async function getLatestUnapprovedStatusesForTrainers(
     return result;
   }
 }
+
+/**
+ * 게임과 연관된 다른 게임들(같은 장르, 태그 등)이나 인기 게임을 가져옵니다.
+ */
+export const getRelatedGames = cache(async (gameId: number, limit = 6): Promise<Game[]> => {
+  if (!supabase) return mockGames.filter(g => g.id !== gameId).slice(0, limit);
+
+  try {
+    // 먼저 현재 게임의 장르를 확인
+    const { data: currentGame } = await supabase
+      .from('games')
+      .select('genres, tags')
+      .eq('id', gameId)
+      .single();
+
+    let relatedGames: Game[] = [];
+    
+    // 장르나 태그가 존재하면 해당 장르/태그와 겹치는 게임들을 먼저 조회 (자신 제외)
+    if (currentGame && (currentGame.genres?.length > 0 || currentGame.tags?.length > 0)) {
+      const genresArray = currentGame.genres || [];
+      const { data } = await supabase
+        .from('games')
+        .select('*')
+        .neq('id', gameId)
+        .overlaps('genres', genresArray)
+        .limit(limit);
+        
+      if (data) relatedGames = data;
+    }
+
+    // 만약 연관 게임이 limit보다 적으면, 인기 게임으로 채움
+    if (relatedGames.length < limit) {
+      const { data: popularGames } = await supabase
+        .from('games')
+        .select('*')
+        .neq('id', gameId)
+        .eq('is_popular', true)
+        .order('popularity_index', { ascending: true })
+        .limit(limit - relatedGames.length);
+        
+      if (popularGames) {
+        // 이미 relatedGames에 포함된 게임은 제외하고 추가 (Set 활용 등)
+        const existingIds = new Set(relatedGames.map(g => g.id));
+        for (const pg of popularGames) {
+          if (!existingIds.has(pg.id)) {
+            relatedGames.push(pg);
+          }
+        }
+      }
+    }
+    
+    // 그래도 limit보다 적으면 최신 게임으로 채움
+    if (relatedGames.length < limit) {
+      const { data: recentGames } = await supabase
+        .from('games')
+        .select('*')
+        .neq('id', gameId)
+        .order('id', { ascending: false })
+        .limit(limit - relatedGames.length);
+        
+      if (recentGames) {
+        const existingIds = new Set(relatedGames.map(g => g.id));
+        for (const rg of recentGames) {
+          if (!existingIds.has(rg.id)) {
+            relatedGames.push(rg);
+          }
+        }
+      }
+    }
+
+    return relatedGames;
+  } catch (err) {
+    console.error('연관 게임 조회에 실패했습니다:', err);
+    return [];
+  }
+});

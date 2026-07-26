@@ -50,6 +50,7 @@ interface PatcherClientProps {
   unapprovedStatusMap: Record<number, UnapprovedTranslationStatus | null>;
   locale: Locale;
   popularGames?: any[];
+  relatedGames?: any[];
 }
 
 interface PartnerStoreWidgetProps {
@@ -411,6 +412,7 @@ export default function PatcherClient({
   unapprovedStatusMap,
   locale,
   popularGames = [],
+  relatedGames = [],
 }: PatcherClientProps) {
   // 서버가 version_str 기준으로 정렬한 순서를 metadata/JSON-LD와 동일하게 유지합니다.
   const sortedTrainers = trainers;
@@ -988,24 +990,24 @@ export default function PatcherClient({
               </section>
             ) : null}
 
-            {/* Popular Trainers Grid */}
-            {popularGames.length > 0 && (
-              <section className="mt-12" aria-labelledby="popular-trainers-heading">
+            {/* Related Trainers Grid */}
+            {relatedGames && relatedGames.length > 0 && (
+              <section className="mt-12" aria-labelledby="related-trainers-heading">
                 <div className="flex items-center gap-3 mb-6">
-                  <h2 id="popular-trainers-heading" className="text-xl font-bold text-slate-100">
-                    {locale === 'ko' ? '인기 트레이너' : locale === 'ja' ? '人気のトレーナー' : locale === 'de' ? 'Beliebte Trainer' : locale === 'es' ? 'Entrenadores populares' : 'Popular Trainers'}
+                  <h2 id="related-trainers-heading" className="text-xl font-bold text-slate-100">
+                    {locale === 'ko' ? '연관 트레이너' : locale === 'ja' ? '関連トレーナー' : locale === 'de' ? 'Ähnliche Trainer' : locale === 'es' ? 'Entrenadores relacionados' : 'Related Trainers'}
                   </h2>
                   <div className="h-px flex-1 bg-gradient-to-r from-slate-800 to-transparent"></div>
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {popularGames.slice(0, 6).map((pg: any) => {
-                    const trainer = pg.trainers?.[0];
+                  {relatedGames.map((rg: any) => {
+                    const trainer = rg.trainers?.[0] || { version_str: '1.0', option_count: 0 };
                     return (
                       <GameCard
-                        key={pg.id}
-                        game={pg}
-                        trainerVersion={trainer?.version_str || '1.0'}
-                        optionCount={trainer?.option_count || 0}
+                        key={rg.id}
+                        game={rg}
+                        trainerVersion={trainer.version_str}
+                        optionCount={trainer.option_count}
                         locale={locale}
                         optionsLabel={locale === 'ko' ? '옵션' : locale === 'ja' ? 'オプション' : locale === 'de' ? 'Optionen' : locale === 'es' ? 'Opciones' : 'Options'}
                       />

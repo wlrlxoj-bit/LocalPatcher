@@ -8,6 +8,7 @@ import {
   getMappingsForTrainers,
   resolveGameSlugAlias,
   getPopularGamesWithTrainers,
+  getRelatedGames,
   sortTrainersLatestFirst,
 } from '@/lib/supabase';
 import { Locale, getGameTitle, getPatcherDict } from '@/lib/i18n/index';
@@ -115,7 +116,9 @@ export async function generateMetadata({ params }: PatcherPageProps) {
     ? pt.metaDescApproved.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn).replace('{versionsStr}', versionsStr)
     : pt.metaDescUnapproved.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn).replace('{versionsStr}', versionsStr);
 
-  const keywords = pt.metaKeywords.map(k => k.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn));
+  const baseKeywords = pt.metaKeywords.map(k => k.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn));
+  const dynamicKeywords = [...(game.genres || []), ...(game.tags || [])].filter(Boolean);
+  const keywords = [...baseKeywords, ...dynamicKeywords];
 
   return {
     title,
@@ -188,6 +191,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
   const pt = getPatcherDict(currentLocale as Locale);
 
   const popularGames = await getPopularGamesWithTrainers();
+  const relatedGames = await getRelatedGames(game.id);
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -252,6 +256,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
         mappingsMap={mappingsMap}
         unapprovedStatusMap={unapprovedStatusMap}
         popularGames={popularGames}
+        relatedGames={relatedGames}
         locale={currentLocale as Locale}
       />
     </>
