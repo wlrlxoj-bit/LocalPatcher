@@ -12,6 +12,7 @@ import {
   sortTrainersLatestFirst,
 } from '@/lib/supabase';
 import { Locale, getGameTitle, getPatcherDict } from '@/lib/i18n/index';
+import { translateGenre } from '@/lib/i18n/genres';
 import { SITE_URL } from '@/lib/site';
 
 export const dynamic = 'force-dynamic';
@@ -117,7 +118,16 @@ export async function generateMetadata({ params }: PatcherPageProps) {
     : pt.metaDescUnapproved.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn).replace('{versionsStr}', versionsStr);
 
   const baseKeywords = pt.metaKeywords.map(k => k.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn));
-  const dynamicKeywords = [...(game.genres || []), ...(game.tags || [])].filter(Boolean);
+  const rawDynamic = [...(game.genres || []), ...(game.tags || [])].filter(Boolean);
+  const dynamicKeywords = rawDynamic.map(tag => {
+    // Only translate if locale is not 'en'
+    if (locale !== 'en') {
+      const translated = translateGenre(tag, locale);
+      return translated !== tag ? `${translated}, ${tag}` : tag; // Include both localized and English if translated
+    }
+    return tag;
+  });
+  
   const keywords = [...baseKeywords, ...dynamicKeywords];
 
   return {
