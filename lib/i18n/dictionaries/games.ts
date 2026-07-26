@@ -100,6 +100,7 @@ export const gamesDict = {
     "goToSteam": "Ir a Tienda Steam ↗",
     "gmgBadge": "✨ ¡Ofertas de reserva y cupones de descuento!",
     "humbleBadge": "🎁 ¡Descuentos Choice y paquetes de juegos!",
+    "steamBadge": "Precio regular y rebajas oficiales de Steam",
     "gogBadge": "🛡️ ¡Versiones sin DRM!",
     "showingGamesCount": "Mostrando {visibleCount} de {totalCount} juegos",
     "koreanChosungSearch": "Korean Chosung search"
