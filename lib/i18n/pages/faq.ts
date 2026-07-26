@@ -25,7 +25,7 @@ export const faqPageContent = {
   en: { 
     title: 'Frequently Asked Questions', 
     sub: 'File processing, antivirus alerts, and safer use',
-    keywords: ['LocalPatcher', 'FAQ', 'help', '지원', '자주묻는질문'], 
+    keywords: ['LocalPatcher', 'FAQ', 'help', 'support', 'questions'], 
     guide: 'Read the full safety guide', 
     items: [
       [AlertOctagon, 'What should I do if antivirus flags a file?', 'Trainer behavior may trigger detection, but not every alert is a false positive. Check the official source, digital signature, published hash, and multiple up-to-date scan results. Do not run suspicious files. We do not automatically recommend adding antivirus exclusions.'],
@@ -37,7 +37,7 @@ export const faqPageContent = {
   ja: { 
     title: 'よくある質問', 
     sub: 'ファイル処理、ウイルス対策の警告、安全利用について',
-    keywords: ['LocalPatcher', 'FAQ', 'help', '지원', '자주묻는질문'], 
+    keywords: ['LocalPatcher', 'FAQ', 'help', 'サポート', 'よくある質問'], 
     guide: '安全ガイドをすべて確認', 
     items: [
       [AlertOctagon, 'ウイルス対策ソフトが警告した場合は？', 'トレーナーの動作により検出される場合がありますが、すべてが誤検出とは限りません。公式配布元、デジタル署名、公開ハッシュ、複数の最新スキャン結果を確認し、疑わしい場合は実行しないでください。除外登録を無条件には推奨しません。'],
@@ -49,7 +49,7 @@ export const faqPageContent = {
   de: { 
     title: 'Häufig gestellte Fragen', 
     sub: 'Dateiverarbeitung, Antiviren-Warnungen und sichere Nutzung',
-    keywords: ['LocalPatcher', 'FAQ', 'help', '지원', '자주묻는질문'], 
+    keywords: ['LocalPatcher', 'FAQ', 'hilfe', 'unterstützung', 'fragen'], 
     guide: 'Vollständigen Sicherheitsleitfaden lesen', 
     items: [
       [AlertOctagon, 'Was tun, wenn der Virenscanner die Datei meldet?', 'Trainer-Methoden können Warnungen auslösen. Prüfen Sie digitale Signaturen und vermeiden Sie Verdächtiges.'],
@@ -61,7 +61,7 @@ export const faqPageContent = {
   es: { 
     title: 'Preguntas Frecuentes', 
     sub: 'Procesamiento de archivos, alertas de antivirus y uso seguro',
-    keywords: ['LocalPatcher', 'FAQ', 'help', '지원', '자주묻는질문'], 
+    keywords: ['LocalPatcher', 'FAQ', 'ayuda', 'soporte', 'preguntas'], 
     guide: 'Leer la guía completa de seguridad', 
     items: [
       [AlertOctagon, '¿Qué hacer si el antivirus marca el archivo?', 'El comportamiento del trainer puede causar alertas. Verifique la fuente oficial y no añada exclusiones a ciegas.'],
