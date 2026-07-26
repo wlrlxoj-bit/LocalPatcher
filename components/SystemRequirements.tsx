@@ -33,14 +33,14 @@ export default async function SystemRequirements({ steamAppId, locale }: SystemR
   };
 
   return (
-    <div className="mt-12 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.05)]">
+    <div className="rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.05)]">
       <div className="bg-slate-900 px-6 py-4 border-b border-slate-800 flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
         <h3 className="font-bold text-slate-200 uppercase tracking-wider">{pt.systemRequirements}</h3>
       </div>
       
-      <div className="p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="p-6 max-h-[500px] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-800 [&::-webkit-scrollbar-thumb]:rounded-full">
+        <div className="flex flex-col gap-6">
           {minimum && (
             <div className="flex flex-col space-y-3">
               <h4 className="text-sm font-bold text-emerald-400 font-mono border-b border-slate-800 pb-2">{pt.minimum}</h4>

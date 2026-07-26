@@ -274,9 +274,21 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
         popularGames={popularGames}
         relatedGames={relatedGames}
         locale={currentLocale as Locale}
-        steamNewsSlot={steamAppId ? <SteamNews steamAppId={steamAppId} locale={currentLocale as Locale} /> : undefined}
-        playerCountSlot={steamAppId ? <SteamPlayerCount steamAppId={steamAppId} locale={currentLocale as Locale} /> : undefined}
-        systemReqSlot={steamAppId ? <SystemRequirements steamAppId={steamAppId} locale={currentLocale as Locale} /> : undefined}
+        steamNewsSlot={steamAppId ? (
+          <React.Suspense fallback={<div className="h-64 animate-pulse bg-slate-800/50 rounded-xl border border-slate-700/50" />}>
+            <SteamNews steamAppId={steamAppId} locale={currentLocale as Locale} />
+          </React.Suspense>
+        ) : undefined}
+        playerCountSlot={steamAppId ? (
+          <React.Suspense fallback={<div className="h-12 animate-pulse bg-slate-800/50 rounded-full border border-slate-700/50" />}>
+            <SteamPlayerCount steamAppId={steamAppId} locale={currentLocale as Locale} />
+          </React.Suspense>
+        ) : undefined}
+        systemReqSlot={steamAppId ? (
+          <React.Suspense fallback={<div className="h-96 animate-pulse bg-slate-800/50 rounded-xl border border-slate-700/50" />}>
+            <SystemRequirements steamAppId={steamAppId} locale={currentLocale as Locale} />
+          </React.Suspense>
+        ) : undefined}
       />
     </>
   );

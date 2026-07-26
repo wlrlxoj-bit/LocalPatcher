@@ -600,19 +600,6 @@ export default function PatcherClient({
           </div>
         </div>
 
-        {/* SEO About This Game Section */}
-        {game.description_en ? (
-          <section className="mb-8 rounded-xl border border-slate-800 bg-slate-900/30 p-6" aria-labelledby="about-game-heading-en">
-            <h2 id="about-game-heading-en" className="text-lg font-bold text-slate-200 mb-4">
-              About This Game
-            </h2>
-            <div 
-              className="text-sm leading-relaxed text-slate-400 prose prose-invert max-w-none"
-              dangerouslySetInnerHTML={{ __html: game.description_en }}
-            />
-          </section>
-        ) : null}
-
         {/* Secondary Clean Card for original FLiNG download */}
         <div className="relative rounded-xl border border-slate-800 bg-slate-900/30 p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 mb-8 shadow-md">
           <div className="flex flex-col text-center md:text-left gap-1">
@@ -718,7 +705,7 @@ export default function PatcherClient({
         </div>
         
         {(playerCountSlot || steamNewsSlot || systemReqSlot) && (
-          <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 lg:sticky lg:top-8">
+          <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 lg:sticky lg:top-24">
             {playerCountSlot}
             {steamNewsSlot}
             {systemReqSlot}
@@ -814,19 +801,6 @@ export default function PatcherClient({
           </button>
         </div>
       </div>
-
-      {/* SEO About This Game Section */}
-      {(game.description_en || game.description_ko || game.description_ja || game.description_de || game.description_es) ? (
-        <section className="mb-8 rounded-xl border border-slate-800 bg-slate-900/30 p-6" aria-labelledby="about-game-heading">
-          <h2 id="about-game-heading" className="text-lg font-bold text-slate-200 mb-4">
-            {locale === 'ko' ? '게임 소개' : locale === 'ja' ? 'ゲーム紹介' : locale === 'de' ? 'Über dieses Spiel' : locale === 'es' ? 'Acerca de este juego' : 'About This Game'}
-          </h2>
-          <div 
-            className="text-sm leading-relaxed text-slate-400 prose prose-invert max-w-none"
-            dangerouslySetInnerHTML={{ __html: (locale === 'ko' && game.description_ko) ? game.description_ko : (locale === 'ja' && game.description_ja) ? game.description_ja : (locale === 'de' && game.description_de) ? game.description_de : (locale === 'es' && game.description_es) ? game.description_es : (game.description_en || '') }}
-          />
-        </section>
-      ) : null}
 
       {/* Main Patcher Area */}
       {selectedTrainer ? (() => {
@@ -1092,7 +1066,7 @@ export default function PatcherClient({
       </div>
       
       {(playerCountSlot || steamNewsSlot || systemReqSlot) && (
-        <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 lg:sticky lg:top-8">
+        <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 lg:sticky lg:top-24">
           {playerCountSlot}
           {steamNewsSlot}
           {systemReqSlot}
