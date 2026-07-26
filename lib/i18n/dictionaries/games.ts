@@ -3,7 +3,7 @@ export const gamesDict = {
   "ko": {
     "supportedGamesTitle": "지원 가능한 트레이너 목록 (Games)",
     "searchPlaceholder": "게임 이름으로 검색...",
-    "noGamesFound": "검색 결과가 없습니다. 다른 검색어를 입력해 주세요.",
+    "noGamesFound": "검색 결과가 없습니다. 다른 검색어를 입력해 주십시오.",
     "loadMore": "더 많은 게임 보기",
     "recentUpdatesTitle": "최신 업데이트 트레이너",
     "popularTrainersTitle": "인기 트레이너",

@@ -585,6 +585,7 @@ export default function PatcherClient({
             <div className="pt-1">
               <h1 className="text-xl md:text-2xl font-bold text-white font-outfit">{displayTitle}</h1>
               <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-mono">Original Game: {game.title_en}</p>
+              {playerCountSlot}
             </div>
           </div>
 
@@ -704,9 +705,8 @@ export default function PatcherClient({
 
         </div>
         
-        {(playerCountSlot || steamNewsSlot || systemReqSlot) && (
-          <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 lg:sticky lg:top-24">
-            {playerCountSlot}
+        {(steamNewsSlot || systemReqSlot) && (
+          <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6">
             {steamNewsSlot}
             {systemReqSlot}
           </aside>
@@ -744,6 +744,8 @@ export default function PatcherClient({
             <h1 className="text-xl md:text-2xl font-bold text-white font-outfit">{displayTitle}</h1>
             <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-mono mb-3">Original Game: {game.title_en}</p>
             
+            {playerCountSlot}
+
             {gameDescription && (
               <div className="mb-3">
                 <div 
@@ -1065,9 +1067,8 @@ export default function PatcherClient({
 
       </div>
       
-      {(playerCountSlot || steamNewsSlot || systemReqSlot) && (
-        <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 lg:sticky lg:top-24">
-          {playerCountSlot}
+      {(steamNewsSlot || systemReqSlot) && (
+        <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6">
           {steamNewsSlot}
           {systemReqSlot}
         </aside>

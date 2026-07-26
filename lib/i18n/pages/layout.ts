@@ -12,7 +12,7 @@ import {
 export const layoutMetadataContent = {
   ko: {
     title: '게임 트레이너 한글 패치 & 다운로드 플랫폼 | LocalPatcher',
-    description: '스팀 게임 트레이너 및 플링(FLiNG) 치트 키 한글화 패치 플랫폼. 서버 업로드 없이 브라우저에서 로컬로 한글 패치를 적용하고 다운로드하세요.',
+    description: '스팀 게임 트레이너 및 플링(FLiNG) 치트 키 한글화 패치 플랫폼. 서버 업로드 없이 브라우저에서 로컬로 한글 패치를 적용하고 다운로드하십시오.',
     keywords: ['게임', '한글', '패치', '트레이너', '치트', '스팀', '플링', '번역', '다운로드', '무료', '로컬패처', 'LocalPatcher'],
   },
   en: {

@@ -40,7 +40,7 @@ export default async function SystemRequirements({ steamAppId, locale }: SystemR
       </div>
       
       <div className="p-6 max-h-[500px] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-800 [&::-webkit-scrollbar-thumb]:rounded-full">
-        <div className="flex flex-col gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {minimum && (
             <div className="flex flex-col space-y-3">
               <h4 className="text-sm font-bold text-emerald-400 font-mono border-b border-slate-800 pb-2">{pt.minimum}</h4>

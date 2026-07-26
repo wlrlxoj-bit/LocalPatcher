@@ -12,7 +12,7 @@ import {
 export const supportPageContent = {
   ko: {
     title: 'LocalPatcher 운영 후원 안내',
-    subtitle: '서버 업로드 없는 로컬 패치 플랫폼의 지속 가능한 가동을 응원해 주세요.',
+    subtitle: '서버 업로드 없는 로컬 패치 플랫폼의 지속 가능한 가동을 응원해 주십시오.',
     cardTitle: 'Patreon 정기 후원 (준비 중)',
     cardIntro: 'LocalPatcher는 회원가입이나 유료 결제 없이 무료로 이용할 수 있는 유틸리티 서비스입니다. 안정적인 서버 운영과 지속적인 신규 트레이너 데이터 업데이트를 지원하고자 하신다면 후원에 참여하실 수 있습니다.',
     pledgeText: '매월 커피 한 잔 분량의 작은 후원이 서버 인프라 유지와 최신 게임 대응 데이터베이스의 신속한 업데이트를 지속하는 가장 큰 원동력이 됩니다.',
