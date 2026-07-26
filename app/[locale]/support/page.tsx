@@ -1,13 +1,13 @@
 import React from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Heart } from 'lucide-react';
-import { getDictionary, Locale } from '@/lib/i18n';
-import { getSupportContent } from '@/lib/i18n-page-content';
+import { getCommonDict, Locale } from '@/lib/i18n/index';
+import { getSupportContent } from '@/lib/i18n/index';
 
 export default async function SupportPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? (locale as Locale) : 'ko';
-  const t = getDictionary(currentLocale);
+  const t = getCommonDict(currentLocale);
   const localizedContent = getSupportContent(currentLocale);
 
   return (

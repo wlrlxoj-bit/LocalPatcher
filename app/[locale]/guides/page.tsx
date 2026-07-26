@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, ExternalLink, ShieldAlert } from 'lucide-react';
 import { SITE_URL, localizedAlternates } from '@/lib/site';
-import { Locale } from '@/lib/i18n';
-import { getGuidesContent } from '@/lib/i18n-page-content';
+import { Locale } from '@/lib/i18n/index';
+import { getGuidesContent } from '@/lib/i18n/index';
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;

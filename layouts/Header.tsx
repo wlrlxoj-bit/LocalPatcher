@@ -4,15 +4,15 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Shield, Globe, Menu, X } from 'lucide-react';
-import { getDictionary, Locale } from '@/lib/i18n';
+import { getCommonDict, getPatcherDict, Locale } from '@/lib/i18n';
 import { SUPPORTED_LOCALES } from '@/lib/site';
 
 interface HeaderProps {
   locale: Locale;
 }
-
 export default function Header({ locale }: HeaderProps) {
-  const t = getDictionary(locale);
+  const t = getCommonDict(locale);
+  const pt = getPatcherDict(locale);
   const pathname = usePathname();
   const router = useRouter();
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
@@ -74,7 +74,7 @@ export default function Header({ locale }: HeaderProps) {
             href={`/${locale}/guides`} 
             className={`${pathname.includes('/guides') ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'} transition-colors duration-200`}
           >
-            {t.guideTab}
+            {pt.guideTab}
           </Link>
           <Link 
             href={`/${locale}/about`}
@@ -95,6 +95,7 @@ export default function Header({ locale }: HeaderProps) {
           
           {/* Language Dropdown */}
           <div className="relative">
+            <span className="relative z-10">{pt.guideTab}</span>
             <button 
               onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
               className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/60 hover:bg-slate-800/80 text-xs font-medium text-slate-300 transition-all duration-200 focus:outline-none"
@@ -150,9 +151,9 @@ export default function Header({ locale }: HeaderProps) {
             <Link 
               href={`/${locale}/guides`}
               onClick={() => setIsMobileMenuOpen(false)}
-              className={`${pathname.includes('/guides') ? 'text-cyan-400 font-semibold' : 'text-slate-400'} transition-colors`}
+              className="block px-3 py-2 rounded-md text-base font-medium text-slate-300 hover:text-cyan-400 hover:bg-slate-800/50"
             >
-              {t.guideTab}
+              {pt.guideTab}
             </Link>
             <Link 
               href={`/${locale}/about`}

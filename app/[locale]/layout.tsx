@@ -4,8 +4,8 @@ import Footer from '@/layouts/Footer';
 import '@/app/globals.css';
 import Script from 'next/script';
 import { SITE_URL } from '@/lib/site';
-import type { Locale } from '@/lib/i18n';
-import { getLayoutMetadata } from '@/lib/i18n-page-content';
+import type { Locale } from '@/lib/i18n/index';
+import { getLayoutMetadata } from '@/lib/i18n/index';
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;

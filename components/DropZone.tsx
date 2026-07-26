@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, CheckCircle2, AlertTriangle, Loader2, Info, Download } from 'lucide-react';
-import { Locale, getDictionary, getLocaleSuffix } from '@/lib/i18n';
+import { Locale, getCommonDict, getPatcherDict, getLocaleSuffix } from '@/lib/i18n/index';
 import { ZipWriter, BlobWriter, BlobReader } from '@zip.js/zip.js';
 import { supabase } from '@/lib/supabase';
 import { trackAnalyticsEvent } from '@/lib/analytics';
@@ -43,7 +43,8 @@ class PatchFailureError extends Error {
   }
 }
 export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainers, mappingsMap, onTrainerDetected }: DropZoneProps) {
-  const t = getDictionary(locale);
+  const t = getCommonDict(locale);
+  const pt = getPatcherDict(locale);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isDragActive, setIsDragActive] = useState(false);
@@ -116,11 +117,11 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
     try {
       // 1. File Size Verification (Max 15MB size limit)
       if (file.size > 15 * 1024 * 1024) {
-        throw new PatchFailureError('file_too_large', '파일 크기가 최대 제한 용량(15MB)을 초과합니다.');
+        throw new PatchFailureError('file_too_large', pt.errFileTooLarge);
       }
 
       if (!file.name.toLowerCase().endsWith('.exe') || file.size < 64) {
-        throw new PatchFailureError('invalid_type', '올바른 형식의 원본 트레이너 실행 파일(.exe)을 선택해 주세요.');
+        throw new PatchFailureError('invalid_type', pt.errInvalidType);
       }
 
       if (!fileSelectedTrackedRef.current && !patchFailedTrackedRef.current) {
@@ -177,7 +178,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
       if (!bypassCheck) {
         if (!isPE) {
           console.warn('Uploaded file is not a valid PE executable.');
-          throw new PatchFailureError('not_pe', '올바른 정식 원본 트레이너 파일이 아닙니다. 버전에 맞는 FLiNG 원본 실행 파일을 올려주십시오.');
+          throw new PatchFailureError('not_pe', pt.errNotPe);
         }
 
         // 1. Check if the uploaded file's size matches the currently selected trainer.original_file_size
@@ -195,11 +196,11 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
               activeMappings = mappingsMap[matchingTrainer.id] || [];
             } else {
               console.warn(`No trainer version matches file hash ${fileHash}.`);
-              throw new PatchFailureError('unsupported_version', '올바른 정식 원본 트레이너 파일이 아닙니다. 버전에 맞는 FLiNG 원본 실행 파일을 올려주십시오.');
+              throw new PatchFailureError('unsupported_version', pt.errNotPe);
             }
           } else {
             console.warn(`No trainer version matches file size ${file.size} bytes.`);
-            throw new PatchFailureError('unsupported_version', '올바른 정식 원본 트레이너 파일이 아닙니다. 버전에 맞는 FLiNG 원본 실행 파일을 올려주십시오.');
+            throw new PatchFailureError('unsupported_version', pt.errNotPe);
           }
         } else {
           // File size matches the currently selected trainer
@@ -215,7 +216,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
               activeMappings = mappingsMap[otherTrainer.id] || [];
             } else {
               console.warn(`No trainer version matches file size and hash.`);
-              throw new PatchFailureError('unsupported_version', '올바른 정식 원본 트레이너 파일이 아닙니다. 버전에 맞는 FLiNG 원본 실행 파일을 올려주십시오.');
+              throw new PatchFailureError('unsupported_version', pt.errNotPe);
             }
           } else {
             // Perfect match with currently selected trainer
@@ -230,7 +231,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
           const { offset_dec } = mapping;
           if (offset_dec >= textSectionOffset && offset_dec < textSectionOffset + textSectionSize) {
             console.warn(`Blocked attempt to patch executable code in .text section at offset: ${offset_dec} (range: [${textSectionOffset}, ${textSectionOffset + textSectionSize}))`);
-            throw new PatchFailureError('unsupported_version', '올바른 정식 원본 트레이너 파일이 아닙니다. 버전에 맞는 FLiNG 원본 실행 파일을 올려주십시오.');
+            throw new PatchFailureError('unsupported_version', pt.errNotPe);
           }
         }
       }
@@ -376,7 +377,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
         });
       }
       setStatus('error');
-      setErrorMsg(err instanceof Error ? err.message : '파일 패치 중 알 수 없는 에러가 발생했습니다.');
+      setErrorMsg(err instanceof Error ? err.message : pt.errUnknown);
     }
   };
 
@@ -467,16 +468,16 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
               <UploadCloud className="w-7 h-7" />
             </div>
             <h3 className="text-base font-semibold text-slate-200 mt-5 group-hover:text-cyan-400 transition-colors">
-              {t.dropzoneTitle}
+              {pt.dropzoneTitle}
             </h3>
             <p className="text-xs text-slate-500 mt-2">
-              {t.dropzoneSub}
+              {pt.dropzoneSub}
             </p>
             <button
               onClick={triggerFileSelect}
               className="mt-6 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-xs font-bold text-slate-950 shadow-md transition-all active:scale-95"
             >
-              {t.dropzoneSelectBtn}
+              {pt.dropzoneSelectBtn}
             </button>
           </>
         )}
@@ -484,7 +485,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
         {status === 'processing' && (
           <div className="flex flex-col items-center py-4">
             <Loader2 className="w-10 h-10 text-cyan-400 animate-spin" />
-            <h3 className="text-sm font-semibold text-slate-300 mt-4">{t.patcherProcessing}</h3>
+            <h3 className="text-sm font-semibold text-slate-300 mt-4">{pt.patcherProcessing}</h3>
           </div>
         )}
 
@@ -492,10 +493,10 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
           <div className="flex flex-col items-center py-6 w-full max-w-sm">
             <Loader2 className="w-10 h-10 text-cyan-400 animate-spin" />
             <h3 className="text-sm font-semibold text-slate-300 mt-4">
-              {t.securingPackagingTitle}
+              {pt.securingPackagingTitle}
             </h3>
             <p className="text-xs text-slate-500 mt-1">
-              {t.securingPackagingSub}
+              {pt.securingPackagingSub}
             </p>
             
             {/* 프로그레스 바 */}
@@ -517,10 +518,10 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
             </div>
             <h3 className="text-base font-bold text-emerald-400 mt-4">PATCH SUCCESS</h3>
             <p className="text-xs text-slate-400 mt-2 max-w-sm">
-              {t.patcherSuccess}
+              {pt.patcherSuccess}
             </p>
             <p className="text-[10px] text-slate-500 mt-1 font-mono">File: {fileName}</p>
-            <p className="text-[10px] text-cyan-400 mt-1 font-semibold">{t.detectedVersionLabel}: {trainer.version_str}</p>
+            <p className="text-[10px] text-cyan-400 mt-1 font-semibold">{pt.detectedVersionLabel}: {trainer.version_str}</p>
             
             <a
                 href={patchedFileUrl || '#'}
@@ -529,17 +530,17 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
                 className="mt-6 w-full max-w-xs px-6 py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-bold text-sm shadow-xl shadow-cyan-500/25 flex items-center justify-center space-x-2 transform hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-200"
               >
                 <Download className="w-4 h-4 text-slate-950" />
-                <span>{t.downloadPatchedFile}</span>
+                <span>{pt.downloadPatchedFile}</span>
               </a>
 
             {/* Password Notice */}
             <div className="mt-4 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-left max-w-xs w-full">
               <p className="text-[11px] font-semibold text-amber-400 flex items-center justify-center space-x-1">
                 <Info className="w-3.5 h-3.5 mr-1 flex-shrink-0" />
-                <span>{t.extractionPasswordNotice}</span>
+                <span>{pt.extractionPasswordNotice}</span>
               </p>
               <p className="text-[9px] text-slate-400 mt-1 leading-normal text-center">
-                {t.extractionSecurityNotice}
+                {pt.extractionSecurityNotice}
               </p>
             </div>
 
@@ -547,7 +548,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
               onClick={handleReset}
               className="mt-4 text-[11px] text-slate-500 hover:text-slate-300 underline transition-colors"
             >
-              {t.patchAnotherFileBtn}
+              {pt.patchAnotherFileBtn}
             </button>
           </div>
         )}
@@ -557,7 +558,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
             <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/20">
               <AlertTriangle className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-rose-400 mt-4">{t.patchFailedHeading}</h3>
+            <h3 className="text-base font-bold text-rose-400 mt-4">{pt.patchFailedHeading}</h3>
             <p className="text-xs text-slate-300 mt-2 max-w-md bg-slate-950/80 p-3 rounded-lg border border-slate-800/80 text-left leading-relaxed">
               {errorMsg}
             </p>
@@ -565,7 +566,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
               onClick={() => setStatus('idle')}
               className="mt-6 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 transition-colors"
             >
-              {t.retryBtnText}
+              {pt.retryBtnText}
             </button>
           </div>
         )}

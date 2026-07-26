@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { ArrowRight, Lock } from 'lucide-react';
-import { getGameTitle, Locale } from '@/lib/i18n';
+import { getGameTitle, Locale } from '@/lib/i18n/index';
 
 interface GameCardProps {
   game: {

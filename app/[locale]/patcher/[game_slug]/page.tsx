@@ -9,7 +9,7 @@ import {
   resolveGameSlugAlias,
   sortTrainersLatestFirst,
 } from '@/lib/supabase';
-import { Locale, getGameTitle } from '@/lib/i18n';
+import { Locale, getGameTitle, getPatcherDict } from '@/lib/i18n/index';
 import { SITE_URL } from '@/lib/site';
 
 export const dynamic = 'force-dynamic';
@@ -102,48 +102,19 @@ export async function generateMetadata({ params }: PatcherPageProps) {
     ? trainers.map(t => t.version_str).join(', ')
     : '';
 
-  let title = '';
-  let description = '';
-
-  if (currentLocale === 'ko') {
-    title = `${game.title_ko} 트레이너 한글 패치 - 무설치 브라우저 로컬 변환 | LocalPatcher`;
-    description = hasApprovedTranslation
-      ? `${game.title_ko} (${game.title_en}) 트레이너 한글 번역 패치(${versionsStr})를 제공합니다. 파일을 서버에 올리지 않고 웹브라우저에서 로컬로 변환할 수 있습니다.`
-      : `${game.title_ko} (${game.title_en}) 트레이너(${versionsStr})의 변환 지원 정보와 자동 번역 처리 상태를 확인하세요. 파일은 서버에 업로드되지 않습니다.`;
-  } else if (currentLocale === 'ja') {
-    const titleJa = game.title_ja || game.title_en;
-    title = `${titleJa} トレーナー日本語化パッチ - ブラウザでのローカル変換 | LocalPatcher`;
-    description = hasApprovedTranslation
-      ? `${titleJa}の最新トレーナー用日本語化翻訳パッチ(${versionsStr})です。サーバーにファイルを一切アップロードせず、Webブラウザ内で完全にローカルで日本語化できます。`
-      : `${titleJa}のトレーナー(${versionsStr})に関する変換対応情報と自動翻訳の処理状況を確認できます。ファイルはサーバーにアップロードされません。`;
-  } else if (currentLocale === 'de') {
-    const titleDe = game.title_de || game.title_en;
-    title = `${titleDe} Trainer Deutsch Lokalisierung - Lokaler Browser-Patcher | LocalPatcher`;
-    description = hasApprovedTranslation
-      ? `Lokalisierungs-Patch (${versionsStr}) für ${titleDe} (${game.title_en}). Wandeln Sie Optionstexte lokal im Browser um ohne Upload.`
-      : `Trainer-Informationen (${versionsStr}) für ${titleDe} (${game.title_en}). Dateiverarbeitung erfolgt lokal im Browser.`;
-  } else if (currentLocale === 'es') {
-    const titleEs = game.title_es || game.title_en;
-    title = `Parche en Español para Trainer de ${titleEs} - Parcheador Local | LocalPatcher`;
-    description = hasApprovedTranslation
-      ? `Parche de localización (${versionsStr}) para el trainer de ${titleEs} (${game.title_en}). Traduzca opciones en su navegador sin subir archivos.`
-      : `Información de compatibilidad (${versionsStr}) para ${titleEs} (${game.title_en}). Procesamiento local en el navegador.`;
-  } else {
-    title = `${game.title_en} Original Trainer Information & Compatibility | LocalPatcher`;
-    description = `Check original English trainer versions, supported option counts, compatibility, and the official download source for ${game.title_en} (${versionsStr}).`;
-  }
+  const pt = getPatcherDict(currentLocale as Locale);
   const gameName = getGameTitle(game, currentLocale as Locale);
   const gameNameEn = game.title_en;
 
-  const keywords = currentLocale === 'ko'
-    ? [gameName, gameNameEn, '게임', '한글', '패치', '트레이너', '치트', '스팀', '플링', '번역', '다운로드', '무료']
-    : currentLocale === 'ja'
-      ? [gameName, gameNameEn, 'ゲーム', '日本語化', 'パッチ', 'トレーナー', 'チート', '無料', 'ダウンロード', '日本'].filter(Boolean)
-      : currentLocale === 'de'
-        ? [gameName, gameNameEn, 'spiele', 'trainer', 'cheats', 'übersetzung', 'patch', 'download', 'deutsch', 'localpatcher']
-        : currentLocale === 'es'
-          ? [gameName, gameNameEn, 'juegos', 'trainer', 'trucos', 'traducción', 'parche', 'descargar', 'español', 'localpatcher']
-          : [gameNameEn, 'game', 'trainer', 'cheats', 'translation', 'patch', 'download', 'free', 'localized'];
+  const title = hasApprovedTranslation 
+    ? pt.metaTitleApproved.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn)
+    : pt.metaTitleUnapproved.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn);
+    
+  const description = hasApprovedTranslation
+    ? pt.metaDescApproved.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn).replace('{versionsStr}', versionsStr)
+    : pt.metaDescUnapproved.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn).replace('{versionsStr}', versionsStr);
+
+  const keywords = pt.metaKeywords.map(k => k.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn));
 
   return {
     title,

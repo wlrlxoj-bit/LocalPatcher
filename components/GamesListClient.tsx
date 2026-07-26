@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import SearchBar from '@/components/SearchBar';
 import GameCard from '@/components/GameCard';
-import { Locale, getDictionary, getGameTitle } from '@/lib/i18n';
+import { Locale, getCommonDict, getPatcherDict, getGamesDict, getGameTitle } from '@/lib/i18n';
 import { Info, ShieldCheck, Zap, ChevronDown } from 'lucide-react';
 
 interface Game {
@@ -150,7 +150,9 @@ function getChosung(str: string): string {
 }
 
 export default function GamesListClient({ games, trainers, locale }: GamesListClientProps) {
-  const t = getDictionary(locale);
+  const t = getCommonDict(locale);
+  const pt = getPatcherDict(locale as Locale);
+  const gt = getGamesDict(locale as Locale);
   const [searchQuery, setSearchQuery] = useState('');
   const [visibleCount, setVisibleCount] = useState(18);
 
@@ -287,13 +289,13 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
       {/* Games List Title & Search */}
       <div id="games-section" className={`w-full ${searchQuery ? 'max-w-4xl' : 'max-w-7xl'} mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 pt-8 border-t border-slate-800/50`}>
         <h2 className="font-bold text-xl sm:text-2xl tracking-tight text-white font-outfit">
-          {searchQuery ? t.supportedGamesTitle : t.recentUpdatesTitle}
+          {searchQuery ? gt.supportedGamesTitle : gt.recentUpdatesTitle}
         </h2>
         
         <SearchBar 
           value={searchQuery}
           onChange={setSearchQuery}
-          placeholder={t.searchPlaceholder}
+          placeholder={gt.searchPlaceholder}
         />
       </div>
 
@@ -311,7 +313,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
                     trainerVersion={trainer.version}
                     optionCount={trainer.count}
                     locale={locale}
-                    optionsLabel={t.optionsCount}
+                    optionsLabel={pt.optionsCount}
                   />
                 );
               })}
@@ -327,7 +329,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
                   onClick={() => setVisibleCount(prev => prev + 18)}
                   className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-700 bg-slate-800/60 text-slate-300 font-outfit text-sm font-medium tracking-wide transition-all duration-300 hover:bg-cyan-500/20 hover:border-cyan-500/50 hover:text-cyan-300 hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] cursor-pointer"
                 >
-                  {t.loadMore}
+                  {gt.loadMore}
                   <ChevronDown className="w-4 h-4" />
                 </button>
               </div>
@@ -342,7 +344,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
           <div className="lg:col-span-1 lg:sticky lg:top-24 flex flex-col gap-4 p-4 sm:p-5 rounded-2xl border border-slate-800 bg-slate-900/20 backdrop-blur-sm">
             <h3 className="font-bold text-lg text-white font-outfit border-b border-slate-800 pb-3 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-              {t.popularTrainersTitle}
+              {gt.popularTrainersTitle}
             </h3>
             <div className="flex flex-col gap-3">
               {popularGames.slice(0, 10).map((game, index) => {
@@ -383,7 +385,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
                         {getGameTitle(game, locale)}
                       </h4>
                       <p className="text-xs text-slate-500 mt-1 font-outfit">
-                        {trainer.count} {t.optionsCount}
+                        {trainer.count} {pt.optionsCount}
                       </p>
                     </div>
                   </a>
@@ -406,13 +408,13 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
                     trainerVersion={trainer.version}
                     optionCount={trainer.count}
                     locale={locale}
-                    optionsLabel={t.optionsCount}
+                    optionsLabel={pt.optionsCount}
                   />
                 );
               })
             ) : (
               <div className="col-span-full py-12 text-center text-slate-500 text-sm">
-                {t.noGamesFound}
+                {gt.noGamesFound}
               </div>
             )}
           </div>
@@ -427,7 +429,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
                 onClick={() => setVisibleCount(prev => prev + 18)}
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-700 bg-slate-800/60 text-slate-300 font-outfit text-sm font-medium tracking-wide transition-all duration-300 hover:bg-cyan-500/20 hover:border-cyan-500/50 hover:text-cyan-300 hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] cursor-pointer"
               >
-                {t.loadMore}
+                {gt.loadMore}
                 <ChevronDown className="w-4 h-4" />
               </button>
             </div>
@@ -445,54 +447,54 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
         
         <h3 className="text-lg md:text-xl font-bold text-white mb-6 flex items-center font-outfit">
           <ShieldCheck className="w-5 h-5 mr-2 text-cyan-400" />
-          {t.aboutHeader}
+          {pt.aboutHeader}
         </h3>
 
         <div className="space-y-6 text-sm text-slate-400">
           <div>
             <h4 className="font-semibold text-slate-200 flex items-center">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 mr-2"></span>
-              {t.aboutSub}
+              {pt.aboutSub}
             </h4>
             <p className="mt-2 text-xs leading-relaxed pl-3.5">
-              {t.aboutDesc}
+              {pt.aboutDesc}
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800/60">
             <div>
               <h5 className="font-bold text-slate-200 flex items-center text-xs uppercase tracking-wide">
-                {t.safetyTitle1}
+                {pt.safetyTitle1}
               </h5>
               <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
-                {t.safetyDesc1}
+                {pt.safetyDesc1}
               </p>
             </div>
 
             <div>
               <h5 className="font-bold text-slate-200 flex items-center text-xs uppercase tracking-wide">
-                {t.safetyTitle2}
+                {pt.safetyTitle2}
               </h5>
               <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
-                {t.safetyDesc2}
+                {pt.safetyDesc2}
               </p>
             </div>
 
             <div>
               <h5 className="font-bold text-slate-200 flex items-center text-xs uppercase tracking-wide">
-                {t.safetyTitle3}
+                {pt.safetyTitle3}
               </h5>
               <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
-                {t.safetyDesc3}
+                {pt.safetyDesc3}
               </p>
             </div>
 
             <div>
               <h5 className="font-bold text-slate-200 flex items-center text-xs uppercase tracking-wide">
-                {t.safetyTitle4}
+                {pt.safetyTitle4}
               </h5>
               <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
-                {t.safetyDesc4}
+                {pt.safetyDesc4}
               </p>
             </div>
           </div>

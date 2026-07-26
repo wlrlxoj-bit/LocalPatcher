@@ -1,7 +1,7 @@
 import React from 'react';
 import GamesListClient from '@/components/GamesListClient';
 import { getGamesWithTrainers } from '@/lib/supabase';
-import { Locale } from '@/lib/i18n';
+import { Locale } from '@/lib/i18n/index';
 
 export const dynamic = 'force-dynamic';
 

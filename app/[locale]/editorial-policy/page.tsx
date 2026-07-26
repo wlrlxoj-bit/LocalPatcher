@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, BadgeCheck, Bot, Megaphone, RefreshCw } from 'lucide-react';
 import { SITE_URL, localizedAlternates } from '@/lib/site';
-import type { Locale } from '@/lib/i18n';
-import { getEditorialContent } from '@/lib/i18n-page-content';
+import type { Locale } from '@/lib/i18n/index';
+import { getEditorialContent } from '@/lib/i18n/index';
 
 const localeOf = (value: string): Locale => (value === 'en' || value === 'ja' || value === 'ko' || value === 'de' || value === 'es') ? value as Locale : 'ko';
 

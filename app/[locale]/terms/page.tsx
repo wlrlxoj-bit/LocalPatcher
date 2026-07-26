@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { ArrowLeft, FileText, ShieldAlert } from 'lucide-react';
-import { getDictionary, Locale } from '@/lib/i18n';
+import { getCommonDict, Locale } from '@/lib/i18n/index';
 import type { Metadata } from 'next';
 import { SITE_URL, localizedAlternates } from '@/lib/site';
-import { getTermsContent } from '@/lib/i18n-page-content';
+import { getTermsContent } from '@/lib/i18n/index';
 import React from 'react';
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
 export default async function TermsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const currentLocale: Locale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? locale as Locale : 'ko';
-  const t = getDictionary(currentLocale);
+  const t = getCommonDict(currentLocale);
   const page = getTermsContent(currentLocale);
 
   return (

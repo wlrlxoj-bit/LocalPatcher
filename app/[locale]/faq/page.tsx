@@ -4,8 +4,8 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { AlertOctagon, Ban, ChevronDown, HelpCircle, Lock } from 'lucide-react';
 
-import { Locale } from '@/lib/i18n';
-import { getFaqContent } from '@/lib/i18n-page-content';
+import { Locale } from '@/lib/i18n/index';
+import { getFaqContent } from '@/lib/i18n/index';
 
 export default function FAQPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = React.use(params);

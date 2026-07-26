@@ -1,13 +1,13 @@
 import React from 'react';
 import Link from 'next/link';
-import { getDictionary, Locale } from '@/lib/i18n';
+import { getCommonDict, Locale } from '@/lib/i18n/index';
 
 interface FooterProps {
   locale: Locale;
 }
 
 export default function Footer({ locale }: FooterProps) {
-  const t = getDictionary(locale);
+  const t = getCommonDict(locale);
 
   return (
     <footer className="border-t border-slate-800/60 bg-slate-950/40 py-8 mt-16">

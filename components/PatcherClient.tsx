@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ArrowRight, AlertTriangle, Share2 } from 'lucide-react';
-import { Locale, getDictionary, getGameTitle } from '@/lib/i18n';
+import { Locale, getCommonDict, getPatcherDict, getGameTitle } from '@/lib/i18n';
 import DropZone from '@/components/DropZone';
 import AdSenseUnit from '@/components/AdSenseUnit';
 import { trackAnalyticsEvent } from '@/lib/analytics';
@@ -406,7 +406,8 @@ export default function PatcherClient({
 }: PatcherClientProps) {
   // 서버가 version_str 기준으로 정렬한 순서를 metadata/JSON-LD와 동일하게 유지합니다.
   const sortedTrainers = trainers;
-  const t = getDictionary(locale);
+  const t = getCommonDict(locale);
+  const pt = getPatcherDict(locale as Locale);
   const displayTitle = getGameTitle(game, locale);
   // Set default selected trainer version
   const [selectedTrainerId, setSelectedTrainerId] = useState<number>(
@@ -530,7 +531,7 @@ export default function PatcherClient({
     
     navigator.clipboard.writeText(promoText)
       .then(() => {
-        alert(t.shareSuccess);
+        alert(pt.shareSuccess);
       })
       .catch((err) => {
         console.error('Failed to copy text: ', err);
@@ -574,7 +575,7 @@ export default function PatcherClient({
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/20 transition-all duration-200 shadow-sm cursor-pointer"
             >
               <Share2 className="w-3.5 h-3.5" />
-              <span>{t.shareBtn}</span>
+              <span>{pt.shareBtn}</span>
             </button>
           </div>
         </div>
@@ -607,17 +608,17 @@ export default function PatcherClient({
           
           <h5 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
-            {t.supportedBuilds}
+            {pt.supportedBuilds}
           </h5>
           
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-800 text-[11px] text-slate-500 uppercase tracking-wider font-mono">
-                  <th className="py-3 px-4 font-semibold">{t.buildVersion}</th>
-                  <th className="py-3 px-4 font-semibold">{t.fileSize}</th>
-                  <th className="py-3 px-4 font-semibold text-center">{t.cheatCountLabel}</th>
-                  <th className="py-3 px-4 font-semibold text-right">{t.statusLabel}</th>
+                  <th className="py-3 px-4 font-semibold">{pt.buildVersion}</th>
+                  <th className="py-3 px-4 font-semibold">{pt.fileSize}</th>
+                  <th className="py-3 px-4 font-semibold text-center">{pt.cheatCountLabel}</th>
+                  <th className="py-3 px-4 font-semibold text-right">{pt.statusLabel}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50 text-xs">
@@ -633,11 +634,11 @@ export default function PatcherClient({
                       {t_option.original_file_size ? `${(t_option.original_file_size / 1024 / 1024).toFixed(2)} MB` : 'N/A'}
                     </td>
                     <td className="py-3.5 px-4 text-center text-slate-400 font-mono">
-                      {t_option.option_count ? t.cheatCountText.replace('{count}', String(t_option.option_count || 0)) : 'N/A'}
+                      {t_option.option_count ? pt.cheatCountText.replace('{count}', String(t_option.option_count || 0)) : 'N/A'}
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.05)]">
-                        {t.autoDetectable}
+                        {pt.autoDetectable}
                       </span>
                     </td>
                   </tr>
@@ -690,7 +691,7 @@ export default function PatcherClient({
               href={`/${locale}/guides`}
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-400 hover:bg-amber-500/20 transition-all duration-200"
             >
-              <span>{t.bypassGuide.replace('{antiCheat}', game.anti_cheat)}</span>
+              <span>{pt.bypassGuide.replace('{antiCheat}', game.anti_cheat)}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           )}
@@ -718,7 +719,7 @@ export default function PatcherClient({
             className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/20 transition-all duration-200 shadow-sm cursor-pointer"
           >
             <Share2 className="w-3.5 h-3.5" />
-            <span>{t.shareBtn}</span>
+            <span>{pt.shareBtn}</span>
           </button>
         </div>
       </div>
@@ -846,17 +847,17 @@ export default function PatcherClient({
               
               <h5 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
-                {t.supportedBuilds}
+                {pt.supportedBuilds}
               </h5>
               
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-800 text-[11px] text-slate-500 uppercase tracking-wider font-mono">
-                      <th className="py-3 px-4 font-semibold">{t.buildVersion}</th>
-                      <th className="py-3 px-4 font-semibold">{t.fileSize}</th>
-                      <th className="py-3 px-4 font-semibold text-center">{t.cheatCountLabel}</th>
-                      <th className="py-3 px-4 font-semibold text-right">{t.statusLabel}</th>
+                      <th className="py-3 px-4 font-semibold">{pt.buildVersion}</th>
+                      <th className="py-3 px-4 font-semibold">{pt.fileSize}</th>
+                      <th className="py-3 px-4 font-semibold text-center">{pt.cheatCountLabel}</th>
+                      <th className="py-3 px-4 font-semibold text-right">{pt.statusLabel}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50 text-xs">
@@ -872,11 +873,11 @@ export default function PatcherClient({
                           {t_option.original_file_size ? `${(t_option.original_file_size / 1024 / 1024).toFixed(2)} MB` : 'N/A'}
                         </td>
                         <td className="py-3.5 px-4 text-center text-slate-400 font-mono">
-                          {t_option.option_count ? t.cheatCountText.replace('{count}', String(t_option.option_count || 0)) : 'N/A'}
+                          {t_option.option_count ? pt.cheatCountText.replace('{count}', String(t_option.option_count || 0)) : 'N/A'}
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.05)]">
-                            {t.autoDetectable}
+                            {pt.autoDetectable}
                           </span>
                         </td>
                       </tr>
@@ -892,10 +893,10 @@ export default function PatcherClient({
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 id="trainer-preview-heading" className="text-sm font-bold text-slate-200">
-                    {t.optionPreviewTitle}
+                    {pt.optionPreviewTitle}
                   </h2>
                   <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                    {t.optionPreviewSub} ({selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length})
+                    {pt.optionPreviewSub} ({selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length})
                   </p>
                 </div>
                 <button
@@ -905,7 +906,7 @@ export default function PatcherClient({
                   aria-controls="trainer-ui-preview"
                   className="min-h-10 shrink-0 rounded-lg border border-slate-700 bg-slate-950/40 px-4 py-2 text-xs font-semibold text-slate-300 transition-colors hover:border-cyan-500/40 hover:text-cyan-300"
                 >
-                  {isPreviewOpen ? t.hidePreviewBtn : t.showFullPreviewBtn}
+                  {isPreviewOpen ? pt.hidePreviewBtn : pt.showFullPreviewBtn}
                 </button>
               </div>
               {isPreviewOpen && (
@@ -928,7 +929,7 @@ export default function PatcherClient({
         );
       })() : (
         <div className="py-12 text-center text-slate-500">
-          {t.noTrainerVersion}
+          {pt.noTrainerVersion}
         </div>
       )}
 
@@ -1131,13 +1132,14 @@ interface TrainerUIPreviewProps {
 }
 
 function TrainerUIPreview({ game, trainer, mappings, locale }: TrainerUIPreviewProps) {
-  const t = getDictionary(locale);
+  const t = getCommonDict(locale);
+  const pt = getPatcherDict(locale as Locale);
 
   if (!mappings || mappings.length === 0) {
     return (
       <div className="mt-6 p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden text-center text-xs text-slate-500">
         <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent"></div>
-        {t.noSupportedOptions}
+        {pt.noSupportedOptions}
       </div>
     );
   }
@@ -1157,11 +1159,11 @@ function TrainerUIPreview({ game, trainer, mappings, locale }: TrainerUIPreviewP
       
       <h5 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
-        {t.cheatPreviewHeading}
+        {pt.cheatPreviewHeading}
       </h5>
       
       <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-        {t.cheatPreviewSub}
+        {pt.cheatPreviewSub}
       </p>
 
       {/* Static Trainer Preview Container */}
