@@ -317,9 +317,22 @@ async function fixCoverImages(
         continue;
       }
 
-      // CDN 커버 이미지 URL 생성
-      const coverUrl = buildSteamCoverUrl(appId);
-      console.log(`  ✅ [${game.title_en}] AppID: ${appId} → ${coverUrl}`);
+      // CDN 커버 이미지 URL 생성 및 검증
+      let coverUrl = buildSteamCoverUrl(appId);
+      const isAccessible = await isUrlAccessible(coverUrl);
+      
+      if (!isAccessible) {
+        console.log(`  ⚠️ [${game.title_en}] AppID: ${appId} 커버 이미지(404) 존재하지 않음. 기본 이미지로 대체합니다.`);
+        coverUrl = '/images/default_cover.jpg';
+        
+        // 이미 기본 이미지인 경우 업데이트 생략
+        if (game.cover_image_url === coverUrl) {
+          console.log(`  ⏭️ [${game.title_en}] 이미 기본 이미지 사용 중. 건너뜁니다.`);
+          continue;
+        }
+      } else {
+        console.log(`  ✅ [${game.title_en}] AppID: ${appId} → ${coverUrl}`);
+      }
 
       // Supabase 업데이트
       const { error } = await supabase

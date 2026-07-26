@@ -818,7 +818,16 @@ def fetch_steam_meta(game_title: str):
                         title_ja = title_ja.replace("®", "").replace("™", "").strip()
                         
                 cover_url = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/header.jpg"
-                print(f"[+] Found Steam AppID: {appid}, Korean: {title_ko}, Japanese: {title_ja}")
+                
+                # Check if cover image actually exists
+                try:
+                    c_res = requests.head(cover_url, timeout=3)
+                    if c_res.status_code != 200:
+                        cover_url = '/images/default_cover.jpg'
+                except:
+                    cover_url = '/images/default_cover.jpg'
+                    
+                print(f"[+] Found Steam AppID: {appid}, Korean: {title_ko}, Japanese: {title_ja}, Cover: {cover_url}")
                 return {
                     'appid': appid,
                     'title_ko': title_ko,
