@@ -695,6 +695,7 @@ export default function PatcherClient({
                         optionCount={trainer?.option_count || 0}
                         locale={locale}
                         optionsLabel="Options"
+                        hideDetails={true}
                       />
                     );
                   })}
@@ -1010,6 +1011,7 @@ export default function PatcherClient({
                         optionCount={trainer.option_count}
                         locale={locale}
                         optionsLabel={locale === 'ko' ? '옵션' : locale === 'ja' ? 'オプション' : locale === 'de' ? 'Optionen' : locale === 'es' ? 'Opciones' : 'Options'}
+                        hideDetails={true}
                       />
                     );
                   })}

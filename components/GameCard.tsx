@@ -22,9 +22,10 @@ interface GameCardProps {
   optionCount: number;
   locale: Locale;
   optionsLabel: string;
+  hideDetails?: boolean;
 }
 
-export default function GameCard({ game, trainerVersion, optionCount, locale, optionsLabel }: GameCardProps) {
+export default function GameCard({ game, trainerVersion, optionCount, locale, optionsLabel, hideDetails = false }: GameCardProps) {
   const displayTitle = getGameTitle(game, locale);
   
   return (
@@ -58,12 +59,14 @@ export default function GameCard({ game, trainerVersion, optionCount, locale, op
           <h4 className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors line-clamp-1">
             {displayTitle}
           </h4>
-          <p className="text-xs text-slate-500 mt-1">Version: {trainerVersion}</p>
+          {!hideDetails && (
+            <p className="text-xs text-slate-500 mt-1">Version: {trainerVersion}</p>
+          )}
         </div>
 
         <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-800/40">
           <span className="text-[10px] font-bold text-cyan-400/90 tracking-wide uppercase">
-            {optionCount}{optionsLabel}
+            {!hideDetails ? `${optionCount}${optionsLabel}` : ''}
           </span>
           <div className="p-1 rounded-lg bg-slate-800/60 group-hover:bg-cyan-500 group-hover:text-slate-950 text-slate-400 transition-all">
             <ArrowRight className="w-4 h-4 transform group-hover:translate-x-0.5 transition-transform" />

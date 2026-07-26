@@ -13,7 +13,13 @@ async function fetchSteamDescriptions(titleEn: string, appid: string) {
     'es': 'spanish'
   };
 
-  const descriptions: Record<string, string> = {};
+  const result: any = {
+    descriptions: {} as Record<string, string>,
+    genres: [] as string[],
+    tags: [] as string[],
+  };
+
+  let fetchedGenresAndTags = false;
 
   for (const [langCode, steamLang] of Object.entries(languages)) {
     try {
@@ -27,7 +33,18 @@ async function fetchSteamDescriptions(titleEn: string, appid: string) {
       if (res.ok) {
         const data = await res.json() as any;
         if (data[appid]?.success) {
-          descriptions[`description_${langCode}`] = data[appid].data.short_description || '';
+          const gameData = data[appid].data;
+          result.descriptions[`description_${langCode}`] = gameData.short_description || '';
+          
+          if (!fetchedGenresAndTags && langCode === 'en') {
+            if (gameData.genres) {
+              result.genres = gameData.genres.map((g: any) => g.description);
+            }
+            if (gameData.categories) {
+              result.tags = gameData.categories.map((c: any) => c.description);
+            }
+            fetchedGenresAndTags = true;
+          }
         }
       }
       // Wait 1.5 seconds between language requests to avoid Steam rate limits
@@ -37,17 +54,16 @@ async function fetchSteamDescriptions(titleEn: string, appid: string) {
     }
   }
 
-  return descriptions;
+  return result;
 }
 
 async function main() {
   console.log('[*] Fetching games without descriptions...');
   
-  // We'll process games that don't have description_en yet
+  // We'll process games that don't have description_en or genres yet
   const { data: games, error } = await supabase
     .from('games')
-    .select('id, title_en, cover_image_url')
-    .is('description_en', null)
+    .select('id, title_en, cover_image_url, description_en, genres')
     .order('id', { ascending: false });
 
   if (error || !games) {
@@ -55,11 +71,12 @@ async function main() {
     return;
   }
 
-  console.log(`[*] Found ${games.length} games to backfill.`);
+  const gamesToProcess = games.filter(g => !g.description_en || !g.genres || g.genres.length === 0);
+  console.log(`[*] Found ${gamesToProcess.length} games to backfill out of ${games.length} total.`);
 
-  for (let i = 0; i < games.length; i++) {
-    const game = games[i];
-    console.log(`[${i+1}/${games.length}] Processing ${game.title_en}...`);
+  for (let i = 0; i < gamesToProcess.length; i++) {
+    const game = gamesToProcess[i];
+    console.log(`[${i+1}/${gamesToProcess.length}] Processing ${game.title_en}...`);
     
     // Extract appid from cover_image_url
     // e.g. https://cdn.cloudflare.steamstatic.com/steam/apps/1091500/header.jpg
@@ -71,21 +88,27 @@ async function main() {
     
     const appid = match[1];
     
-    const descriptions = await fetchSteamDescriptions(game.title_en, appid);
+    const result = await fetchSteamDescriptions(game.title_en, appid);
     
-    if (Object.keys(descriptions).length > 0) {
+    if (Object.keys(result.descriptions).length > 0 || result.genres.length > 0 || result.tags.length > 0) {
+      const updateData = {
+        ...result.descriptions,
+        ...(result.genres.length > 0 ? { genres: result.genres } : {}),
+        ...(result.tags.length > 0 ? { tags: result.tags } : {}),
+      };
+
       const { error: updateError } = await supabase
         .from('games')
-        .update(descriptions)
+        .update(updateData)
         .eq('id', game.id);
         
       if (updateError) {
         console.error(`  [-] Failed to update DB for ${game.title_en}:`, updateError);
       } else {
-        console.log(`  [+] Successfully updated descriptions for ${game.title_en}`);
+        console.log(`  [+] Successfully updated SEO info for ${game.title_en}`);
       }
     } else {
-      console.log(`  [-] No descriptions found for ${game.title_en}`);
+      console.log(`  [-] No descriptions/genres found for ${game.title_en}`);
     }
     
     // Additional delay between games
