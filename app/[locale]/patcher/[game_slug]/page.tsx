@@ -1,6 +1,7 @@
 import React from 'react';
 import { notFound, permanentRedirect } from 'next/navigation';
 import PatcherClient from '@/components/PatcherClient';
+import SteamNews from '@/components/SteamNews';
 import {
   getGameBySlug,
   getTrainersForGame,
@@ -268,6 +269,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
         popularGames={popularGames}
         relatedGames={relatedGames}
         locale={currentLocale as Locale}
+        steamNewsSlot={game.steam_app_id ? <SteamNews steamAppId={game.steam_app_id} locale={currentLocale as Locale} /> : undefined}
       />
     </>
   );

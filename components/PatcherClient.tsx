@@ -51,6 +51,7 @@ interface PatcherClientProps {
   locale: Locale;
   popularGames?: any[];
   relatedGames?: any[];
+  steamNewsSlot?: React.ReactNode;
 }
 
 interface PartnerStoreWidgetProps {
@@ -413,6 +414,7 @@ export default function PatcherClient({
   locale,
   popularGames = [],
   relatedGames = [],
+  steamNewsSlot,
 }: PatcherClientProps) {
   // 서버가 version_str 기준으로 정렬한 순서를 metadata/JSON-LD와 동일하게 유지합니다.
   const sortedTrainers = trainers;
@@ -550,8 +552,9 @@ export default function PatcherClient({
 
   if (locale === 'en') {
     return (
-      <div className="max-w-4xl mx-auto px-6 py-12 flex flex-col">
-        {/* Back button */}
+      <div className="max-w-6xl mx-auto px-6 py-12 flex flex-col lg:flex-row gap-8 items-start">
+        <div className="flex-1 w-full min-w-0 flex flex-col">
+          {/* Back button */}
         <div className="mb-6">
           <Link 
             href={`/${locale}`}
@@ -703,12 +706,20 @@ export default function PatcherClient({
               </section>
             )}
 
+        </div>
+        
+        {steamNewsSlot && (
+          <div className="w-full lg:w-80 shrink-0 flex flex-col gap-6 lg:sticky lg:top-8">
+            {steamNewsSlot}
+          </div>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-12 flex flex-col">
+    <div className="max-w-6xl mx-auto px-6 py-12 flex flex-col lg:flex-row gap-8 items-start">
+      <div className="flex-1 w-full min-w-0 flex flex-col">
       
       {/* Back button */}
       <div className="mb-6">
@@ -1049,6 +1060,13 @@ export default function PatcherClient({
         </div>
       )}
 
+      </div>
+      
+      {steamNewsSlot && (
+        <div className="w-full lg:w-80 shrink-0 flex flex-col gap-6 lg:sticky lg:top-8">
+          {steamNewsSlot}
+        </div>
+      )}
     </div>
   );
 }
