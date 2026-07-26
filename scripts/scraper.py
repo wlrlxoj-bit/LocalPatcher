@@ -778,16 +778,20 @@ def fetch_recent_trainers():
         return []
 
 def fetch_steam_meta(game_title: str):
-    """Queries Steam Store Search and App Details APIs to fetch appid, cover art, and official Korean/Japanese titles."""
+    """Queries Steam Store Search and App Details APIs to fetch appid, cover art, and official titles and descriptions."""
     default_meta = {
         'appid': '1091500',
         'title_ko': game_title,
         'title_ja': game_title,
-        'cover_url': '/images/default_cover.jpg'
+        'cover_url': '/images/default_cover.jpg',
+        'description_en': '',
+        'description_ko': '',
+        'description_ja': '',
+        'description_de': '',
+        'description_es': ''
     }
     try:
         print(f"[*] Searching Steam store details for: {game_title}...")
-        # Step 1: Search for game AppID
         search_url = f"https://store.steampowered.com/api/storesearch/?term={requests.utils.quote(game_title)}&l=english&cc=US"
         res = requests.get(search_url, timeout=5)
         if res.status_code == 200:
@@ -797,43 +801,52 @@ def fetch_steam_meta(game_title: str):
                 appid = str(items[0]["id"])
                 title_en = items[0]["name"]
                 
-                # Step 2: Fetch Korean details
-                details_url = f"https://store.steampowered.com/api/appdetails?appids={appid}&l=korean"
-                d_res = requests.get(details_url, timeout=5)
-                title_ko = title_en  # fallback
-                if d_res.status_code == 200:
-                    d_data = d_res.json()
-                    if d_data.get(appid, {}).get("success"):
-                        title_ko = d_data[appid]["data"]["name"]
-                        title_ko = title_ko.replace("®", "").replace("™", "").strip()
-                
-                # Step 3: Fetch Japanese details
-                details_ja_url = f"https://store.steampowered.com/api/appdetails?appids={appid}&l=japanese"
-                d_ja_res = requests.get(details_ja_url, timeout=5)
-                title_ja = title_en  # fallback
-                if d_ja_res.status_code == 200:
-                    d_ja_data = d_ja_res.json()
-                    if d_ja_data.get(appid, {}).get("success"):
-                        title_ja = d_ja_data[appid]["data"]["name"]
-                        title_ja = title_ja.replace("®", "").replace("™", "").strip()
-                        
-                cover_url = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/header.jpg"
-                
-                # Check if cover image actually exists
-                try:
-                    c_res = requests.head(cover_url, timeout=3)
-                    if c_res.status_code != 200:
-                        cover_url = '/images/default_cover.jpg'
-                except:
-                    cover_url = '/images/default_cover.jpg'
-                    
-                print(f"[+] Found Steam AppID: {appid}, Korean: {title_ko}, Japanese: {title_ja}, Cover: {cover_url}")
-                return {
-                    'appid': appid,
-                    'title_ko': title_ko,
-                    'title_ja': title_ja,
-                    'cover_url': cover_url
+                languages = {
+                    'en': 'english',
+                    'ko': 'koreana',
+                    'ja': 'japanese',
+                    'de': 'german',
+                    'es': 'spanish'
                 }
+                meta = {
+                    'appid': appid,
+                    'title_ko': title_en,
+                    'title_ja': title_en,
+                    'cover_url': f"https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/header.jpg",
+                    'description_en': '',
+                    'description_ko': '',
+                    'description_ja': '',
+                    'description_de': '',
+                    'description_es': ''
+                }
+                
+                import time
+                for lang_code, steam_lang in languages.items():
+                    try:
+                        details_url = f"https://store.steampowered.com/api/appdetails?appids={appid}&l={steam_lang}"
+                        d_res = requests.get(details_url, timeout=5)
+                        if d_res.status_code == 200:
+                            d_data = d_res.json()
+                            if d_data.get(appid, {}).get("success"):
+                                data = d_data[appid]["data"]
+                                title = data.get("name", title_en).replace("®", "").replace("™", "").strip()
+                                desc = data.get("short_description", "")
+                                if lang_code == 'ko': meta['title_ko'] = title
+                                if lang_code == 'ja': meta['title_ja'] = title
+                                meta[f'description_{lang_code}'] = desc
+                        time.sleep(0.1)
+                    except:
+                        pass
+                
+                try:
+                    c_res = requests.head(meta['cover_url'], timeout=3)
+                    if c_res.status_code != 200:
+                        meta['cover_url'] = '/images/default_cover.jpg'
+                except:
+                    meta['cover_url'] = '/images/default_cover.jpg'
+                    
+                print(f"[+] Found Steam AppID: {appid}, Cover: {meta['cover_url']}")
+                return meta
     except Exception as e:
         print(f"[-] Steam search failed: {e}")
     return default_meta
@@ -883,6 +896,11 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                 'title_ja': steam_meta['title_ja'],
                 'slug': post['slug'],
                 'cover_image_url': steam_meta['cover_url'],
+                'description_en': steam_meta['description_en'],
+                'description_ko': steam_meta['description_ko'],
+                'description_ja': steam_meta['description_ja'],
+                'description_de': steam_meta['description_de'],
+                'description_es': steam_meta['description_es'],
                 'anti_cheat': 'none',
                 'fling_url': post['link']
             }).execute()
@@ -1191,3 +1209,49 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def sync_popular_fling_trainers(db: Client):
+    """Scrapes the 'Popular Trainers' widget on FLiNG's home page and syncs is_popular and popularity_index."""
+    url = 'https://flingtrainer.com/'
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code != 200:
+            print(f'[-] Failed to scrape FLiNG index page for popular posts: {response.status_code}')
+            return
+            
+        soup = BeautifulSoup(response.text, 'html.parser')
+        popular_slugs = []
+        for widget in soup.select('.widget'):
+            title_elem = widget.select_one('.widget-title')
+            if not title_elem:
+                # fallback for some themes
+                title_elem = widget.select_one('h3')
+            if title_elem and ('popular' in title_elem.text.lower() or 'top' in title_elem.text.lower()):
+                for a in widget.select('a'):
+                    href = a.get('href', '')
+                    if 'trainer' in href:
+                        slug = normalize_fling_slug(href)
+                        if slug not in popular_slugs:
+                            popular_slugs.append(slug)
+                break
+
+        if not popular_slugs:
+            print('[-] No popular trainers found on FLiNG homepage.')
+            return
+
+        print(f'[*] Found {len(popular_slugs)} popular trainers on FLiNG. Syncing...')
+        
+        # Reset all current popular games
+        db.table('games').update({'is_popular': False, 'popularity_index': None}).neq('slug', 'dummy').execute()
+        
+        # Update new popular games
+        for idx, slug in enumerate(popular_slugs):
+            db.table('games').update({'is_popular': True, 'popularity_index': idx}).eq('slug', slug).execute()
+            
+        print('[+] Successfully synced popular trainers.')
+        
+    except Exception as e:
+        print(f'[-] Error syncing popular trainers: {e}')
+

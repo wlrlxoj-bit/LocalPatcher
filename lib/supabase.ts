@@ -355,6 +355,23 @@ export async function getGamesWithTrainers() {
   }
 }
 
+export const getPopularGamesWithTrainers = cache(async () => {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('games')
+      .select('*, trainers(id, version_str, option_count)')
+      .eq('is_popular', true)
+      .order('popularity_index', { ascending: true })
+      .limit(20);
+    if (error || !data) throw error;
+    return data;
+  } catch (err) {
+    console.error('getPopularGamesWithTrainers failed:', err);
+    return [];
+  }
+});
+
 export const getGameBySlug = cache(async (slug: string) => {
   if (!supabase) return mockGames.find(g => g.slug === slug) || null;
   try {

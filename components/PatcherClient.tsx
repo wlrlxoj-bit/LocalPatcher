@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ChevronLeft, ArrowRight, AlertTriangle, Share2 } from 'lucide-react';
 import { Locale, getCommonDict, getPatcherDict, getGameTitle } from '@/lib/i18n';
 import DropZone from '@/components/DropZone';
+import GameCard from '@/components/GameCard';
 import AdSenseUnit from '@/components/AdSenseUnit';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 import type { UnapprovedTranslationStatus } from '@/lib/supabase';
@@ -16,6 +17,11 @@ interface Game {
   title_ja?: string;
   slug: string;
   cover_image_url: string;
+  description_en?: string;
+  description_ko?: string;
+  description_ja?: string;
+  description_de?: string;
+  description_es?: string;
   anti_cheat: string;
   fling_url?: string;
 }
@@ -43,6 +49,7 @@ interface PatcherClientProps {
   mappingsMap: Record<number, Mapping[]>;
   unapprovedStatusMap: Record<number, UnapprovedTranslationStatus | null>;
   locale: Locale;
+  popularGames?: any[];
 }
 
 interface PartnerStoreWidgetProps {
@@ -649,7 +656,53 @@ export default function PatcherClient({
         </div>
         <AdSenseUnit locale={locale} slot={midAdSlot} />
         <PartnerStoreWidget game={game} locale={locale} t={t} trainerId={selectedTrainerId} />
-        <AdSenseUnit locale={locale} slot={bottomAdSlot} />
+        
+            <AdSenseUnit locale={locale} slot={bottomAdSlot} />
+
+            {/* SEO About This Game Section */}
+            {(locale === 'en' && game.description_en) ||
+             (locale === 'ko' && game.description_ko) ||
+             (locale === 'ja' && game.description_ja) ||
+             (locale === 'de' && game.description_de) ||
+             (locale === 'es' && game.description_es) ? (
+              <section className="mt-8 rounded-xl border border-slate-800 bg-slate-900/30 p-6" aria-labelledby="about-game-heading">
+                <h2 id="about-game-heading" className="text-lg font-bold text-slate-200 mb-4">
+                  {locale === 'ko' ? '게임 소개' : locale === 'ja' ? 'ゲーム紹介' : locale === 'de' ? 'Über dieses Spiel' : locale === 'es' ? 'Acerca de este juego' : 'About This Game'}
+                </h2>
+                <div 
+                  className="text-sm leading-relaxed text-slate-400 prose prose-invert max-w-none"
+                  dangerouslySetInnerHTML={{ __html: locale === 'en' ? game.description_en! : locale === 'ko' ? game.description_ko! : locale === 'ja' ? game.description_ja! : locale === 'de' ? game.description_de! : game.description_es! }}
+                />
+              </section>
+            ) : null}
+
+            {/* Popular Trainers Grid */}
+            {popularGames.length > 0 && (
+              <section className="mt-12" aria-labelledby="popular-trainers-heading">
+                <div className="flex items-center gap-3 mb-6">
+                  <h2 id="popular-trainers-heading" className="text-xl font-bold text-slate-100">
+                    {locale === 'ko' ? '인기 트레이너' : locale === 'ja' ? '人気のトレーナー' : locale === 'de' ? 'Beliebte Trainer' : locale === 'es' ? 'Entrenadores populares' : 'Popular Trainers'}
+                  </h2>
+                  <div className="h-px flex-1 bg-gradient-to-r from-slate-800 to-transparent"></div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {popularGames.slice(0, 6).map((pg) => {
+                    const trainer = pg.trainers?.[0];
+                    return (
+                      <GameCard
+                        key={pg.id}
+                        game={pg}
+                        trainerVersion={trainer?.version_str || '1.0'}
+                        optionCount={trainer?.option_count || 0}
+                        locale={locale}
+                        optionsLabel={locale === 'ko' ? '옵션' : locale === 'ja' ? 'オプション' : locale === 'de' ? 'Optionen' : locale === 'es' ? 'Opciones' : 'Options'}
+                      />
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
       </div>
     );
   }
@@ -1152,6 +1205,7 @@ interface TrainerUIPreviewProps {
   trainer: Trainer;
   mappings: Mapping[];
   locale: Locale;
+  popularGames?: any[];
 }
 
 function TrainerUIPreview({ game, trainer, mappings, locale }: TrainerUIPreviewProps) {

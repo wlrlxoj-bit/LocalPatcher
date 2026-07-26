@@ -7,6 +7,7 @@ import {
   getLatestUnapprovedStatusesForTrainers,
   getMappingsForTrainers,
   resolveGameSlugAlias,
+  getPopularGamesWithTrainers,
   sortTrainersLatestFirst,
 } from '@/lib/supabase';
 import { Locale, getGameTitle, getPatcherDict } from '@/lib/i18n/index';
@@ -186,6 +187,8 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
   // 4. Build JSON-LD structured data for SoftwareApplication
   const pt = getPatcherDict(currentLocale as Locale);
 
+  const popularGames = await getPopularGamesWithTrainers();
+
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
@@ -248,6 +251,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
         }))}
         mappingsMap={mappingsMap}
         unapprovedStatusMap={unapprovedStatusMap}
+        popularGames={popularGames}
         locale={currentLocale as Locale}
       />
     </>

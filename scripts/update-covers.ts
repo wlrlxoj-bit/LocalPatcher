@@ -110,9 +110,9 @@ function initSupabase(): SupabaseClient {
   // Node.js 20 환경에서 Supabase 실시간 소켓 초기화 에러(WebSocket support 누락) 방지를 위한 더미 WebSocket 주입
   if (typeof (global as any).WebSocket === 'undefined') {
     (global as any).WebSocket = class DummyWebSocket {
-      addEventListener() {}
-      removeEventListener() {}
-      close() {}
+      addEventListener() { }
+      removeEventListener() { }
+      close() { }
     };
   }
 
@@ -204,8 +204,8 @@ async function identifyProblematicGames(
     if (!url || url.trim() === '') {
       missingCover.push(game);
     } else if (
-      url.includes('default_cover.jpg') || 
-      url.includes('default_cover.png') || 
+      url.includes('default_cover.jpg') ||
+      url.includes('default_cover.png') ||
       url.includes('default_cover') ||
       url.includes('wp-content/uploads') // 플링 서버 자체 업로드 주소는 정식 스팀 커버가 아니므로 복구 대상으로 간주
     ) {
@@ -313,20 +313,20 @@ async function fixCoverImages(
       if (!appId) {
         console.log(`  ❌ [${game.title_en}] Steam에서 찾을 수 없음. 기본 이미지로 대체합니다.`);
         report.coverFailed.push(game.title_en);
-        
+
         const defaultCover = '/images/default_cover.jpg';
         if (game.cover_image_url !== defaultCover) {
           const { error } = await supabase
             .from('games')
             .update({ cover_image_url: defaultCover })
             .eq('id', game.id);
-            
+
           if (!error) {
             console.log(`  ✅ [${game.title_en}] 기본 이미지 업데이트 완료`);
             report.coverUpdated.push(game.title_en);
           }
         }
-        
+
         await delay(); // 레이트 리밋 방지
         continue;
       }
@@ -334,11 +334,11 @@ async function fixCoverImages(
       // CDN 커버 이미지 URL 생성 및 검증
       let coverUrl = buildSteamCoverUrl(appId);
       const isAccessible = await isUrlAccessible(coverUrl);
-      
+
       if (!isAccessible) {
         console.log(`  ⚠️ [${game.title_en}] AppID: ${appId} 커버 이미지(404) 존재하지 않음. 기본 이미지로 대체합니다.`);
         coverUrl = '/images/default_cover.jpg';
-        
+
         // 이미 기본 이미지인 경우 업데이트 생략
         if (game.cover_image_url === coverUrl) {
           console.log(`  ⏭️ [${game.title_en}] 이미 기본 이미지 사용 중. 건너뜁니다.`);
