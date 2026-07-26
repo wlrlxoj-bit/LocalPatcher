@@ -21,7 +21,7 @@ KEY = (
     r"(?:Num(?:Pad)?\s*(?:[0-9]|Plus|Minus|Decimal|Divide|Multiply|[+\-./*])"
     r"|F(?:[1-9]|1[0-9]|2[0-4])|Ctrl|Alt|Shift|Home|End|Insert|Delete"
     r"|PageUp|PageDown|Up|Down|Left|Right|Arrow(?:Up|Down|Left|Right)"
-    r"|Bracket(?:Left|Right)|[\[\]]|[A-Z0-9])"
+    r"|Bracket(?:Left|Right)|[\[\]]|[A-Z0-9+\-=\.,/])"
 )
 # 긴 토큰을 먼저 배치해 `->`가 `-`로 부분 매칭되지 않게 한다.
 OPTION_RE = re.compile(

@@ -427,8 +427,6 @@ def translate_line(line: str):
     """Attempts dictionary translation for a single line. Returns None if it needs LLM translation."""
     parts = parse_option_line(line)
     if not parts:
-        if is_option_candidate(line):
-            raise RuntimeError("지원하지 않는 옵션 줄 형식")
         return line
     hotkey, delimiter, label = parts
     notes = ""
