@@ -10,22 +10,7 @@ SUPABASE_URL = os.environ['NEXT_PUBLIC_SUPABASE_URL']
 SUPABASE_KEY = os.environ['SUPABASE_SERVICE_ROLE_KEY']
 db = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# 인기 13개 게임 (기존 ja 매핑 스크립트 참고)
-POPULAR_SLUGS = [
-    'elden-ring',
-    'palworld',
-    'cyberpunk-2077',
-    'grand-theft-auto-v',
-    'red-dead-redemption-2',
-    'the-witcher-3-wild-hunt',
-    'hogwarts-legacy',
-    'baldur-s-gate-3',
-    'resident-evil-4',
-    'stardew-valley',
-    'monster-hunter-world',
-    'terraria',
-    'hollow-knight'
-]
+# Remove POPULAR_SLUGS filter to process all games
 
 def load_dictionary():
     res = db.table('common_dictionary').select('english_term, translated_de, translated_es').execute()
@@ -158,12 +143,12 @@ def process_language(lang_code: str, trans_dict: dict, popular_games: list):
 def main():
     de_dict, es_dict = load_dictionary()
     
-    print("[*] Fetching popular games...")
-    game_res = db.table('games').select('id, slug, title_en, fling_url').in_('slug', POPULAR_SLUGS).execute()
-    popular_games = game_res.data or []
+    print("[*] Fetching all games...")
+    game_res = db.table('games').select('id, slug, title_en, fling_url').execute()
+    all_games = game_res.data or []
     
-    fail_de = process_language('de', de_dict, popular_games)
-    fail_es = process_language('es', es_dict, popular_games)
+    fail_de = process_language('de', de_dict, all_games)
+    fail_es = process_language('es', es_dict, all_games)
     
     print("\n[*] All translation mappings extension tasks completed.")
     if fail_de or fail_es:

@@ -48,26 +48,26 @@ export const aboutPageContent = {
   },
   de: { 
     title: 'Über LocalPatcher', 
-    description: 'Erfahren Sie mehr über Zweck, Umfang und Unabhängigkeit von LocalPatcher.', 
+    description: 'Erfahren Sie mehr über den Zweck, den Verarbeitungsumfang und die Unabhängigkeit von LocalPatcher.', 
     back: 'Zurück zur Spiele-Liste', 
-    intro: 'LocalPatcher ist ein browserbasiertes Tool, das englische Optionstext in unterstützten Spiele-Trainern lokal übersetzt.', 
+    intro: 'LocalPatcher ist ein browserbasiertes Tool, das englische Optionstexte in unterstützten Spiele-Trainern in andere Sprachen übersetzt.', 
     sections: [
-      ['Im Browser verarbeitet', 'Dateiprüfungen und Text-Ersetzungen finden lokal in Ihrem Browser statt. Es werden keine Dateien auf Server hochgeladen.'],
-      ['Umfang des Dienstes', 'LocalPatcher verteilt keine Original-Trainer-Exekutivdateien. Sie müssen die unterstützte Version selbst besitzen.'],
-      ['Unabhängiger Dienst', 'LocalPatcher steht in keiner Verbindung zu Spiele-Entwicklern oder Trainer-Erstellern.'],
-      ['Kein Bypass-Tool', 'Der Dienst umgeht keine Anti-Cheat- oder DRM-Systeme. Verwenden Sie Trainer niemals in Online-Modi.'],
+      ['Im Browser verarbeitet', 'Die Überprüfung und Textkonvertierung der von Ihnen ausgewählten Datei erfolgen direkt in Ihrem Browser. Der Dienst ist nicht darauf ausgelegt, Ihre Originaldatei auf LocalPatcher-Server hochzuladen oder dort zu speichern.'],
+      ['Umfang des Dienstes', 'LocalPatcher verteilt keine Original-Trainer-Exekutivdateien. Sie müssen selbst eine rechtmäßig erworbene, unterstützte Version der Originaldatei bereitstellen. Wir garantieren weder für die Sicherheit noch für die ordnungsgemäße Funktion der resultierenden Datei.'],
+      ['Unabhängiger Dienst', 'LocalPatcher steht in keiner Verbindung zu Spieleentwicklern, Publishern oder Trainer-Erstellern und wird von diesen weder unterstützt noch gebilligt. Marken und Spielnamen werden ausschließlich zu Identifikationszwecken verwendet.'],
+      ['Kein Umgehungswerkzeug', 'Dieser Dienst umgeht keine DRM-Systeme, Lizenzprüfungen, Onlinedienste oder Anti-Cheat-Technologien und bietet keine entsprechenden Anleitungen. Verwenden Sie Trainer niemals in Online-, kompetitiven oder Anti-Cheat-Umgebungen.'],
     ]
   },
   es: { 
     title: 'Acerca de LocalPatcher', 
-    description: 'Conozca el propósito, alcance y la independencia de LocalPatcher.', 
+    description: 'Conozca el propósito, el alcance del procesamiento y la independencia de LocalPatcher.', 
     back: 'Volver a la lista de juegos', 
-    intro: 'LocalPatcher es una herramienta de navegador que reemplaza textos de opciones de trainers con traducciones locales.', 
+    intro: 'LocalPatcher es una herramienta de navegador que reemplaza las cadenas de opciones en inglés de los trainers de juegos registrados a otros idiomas.', 
     sections: [
-      ['Procesado en su navegador', 'La verificación y sustitución de texto ocurren en su navegador. No se suben archivos a nuestros servidores.'],
-      ['Alcance del servicio', 'LocalPatcher no distribuye ejecutables originales de trainers. Debe obtener legalmente la versión compatible.'],
-      ['Servicio independiente', 'LocalPatcher no está afiliado ni respaldado por desarrolladores de juegos ni creadores de trainers.'],
-      ['No es una herramienta de bypass', 'El servicio no elude sistemas anti-cheat ni DRM. No use trainers en modos online.'],
+      ['Procesado en su navegador', 'La verificación del archivo que seleccione y la conversión de texto se llevan a cabo dentro de su navegador. No está diseñado para subir ni almacenar su archivo original en los servidores de LocalPatcher.'],
+      ['Alcance del servicio', 'LocalPatcher no distribuye los archivos ejecutables originales de los trainers. Usted debe proporcionar directamente una versión original compatible obtenida de forma legal, y no garantizamos la seguridad ni el funcionamiento normal del resultado de la conversión.'],
+      ['Servicio independiente', 'LocalPatcher no está afiliado, respaldado ni patrocinado por desarrolladores de juegos, editores ni creadores de trainers. Las marcas comerciales y los nombres de los juegos se utilizan únicamente con fines de identificación.'],
+      ['No es una herramienta de evasión', 'Este servicio no elude los sistemas DRM, las comprobaciones de licencias, los servicios en línea ni la tecnología anti-cheat, y no proporciona instrucciones para hacerlo. No lo utilice en entornos en línea, competitivos o con anti-cheat.'],
     ]
   }
 };
@@ -75,4 +75,3 @@ export const aboutPageContent = {
 export function getAboutContent(locale: Locale) {
   return aboutPageContent[locale] || aboutPageContent.en;
 }
-

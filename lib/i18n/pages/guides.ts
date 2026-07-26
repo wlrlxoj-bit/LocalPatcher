@@ -54,30 +54,30 @@ export const guidesPageContent = {
   },
   de: {
     title: 'Sicherheitsleitfaden für Trainer', 
-    description: 'Wichtige Sicherheitsregeln für die Nutzung von Spiele-Trainern.',
-    warningTitle: 'Nicht in Online- oder Multiplayer-Modi verwenden',
-    warning: 'Die Nutzung von Trainern in Online-Modi verstößt gegen Richtlinien und kann zu Kontosperren führen.',
+    description: 'Grundlegende Sicherheitsregeln zur Vermeidung von Online- und Anti-Cheat-Umgebungen sowie zur sorgfältigen Überprüfung von Trainer-Dateien.',
+    warningTitle: 'Verwenden Sie niemals Trainer in Online- oder Multiplayer-Modi',
+    warning: 'Die Nutzung von Trainern in kompetitiven, Multiplayer-, Ranglisten- oder Anti-Cheat-geschützten Umgebungen kann zu Verstößen gegen Richtlinien, Kontosperren oder Datenverlust führen. Auch die Nutzung im Offline-Modus garantiert weder Sicherheit noch den Schutz vor Sanktionen.',
     sections: [
-      ['Nur offizielle Einzelspieler-Modi', 'Nutzen Sie Trainer ausschließlich im Offline-Singleplayer.'],
-      ['Keine Bypass-Unterstützung', 'LocalPatcher unterstützt keine Umgehung von Anti-Cheat-Systemen.'],
-      ['Dateien vor der Ausführung prüfen', 'Sichern Sie stets Ihre Spielstände und prüfen Sie Versionen.'],
-      ['Virenwarnungen ernst nehmen', 'Prüfen Sie Quelldateien sorgfältig auf digitalen Signaturen.'],
+      ['Nur offizielle Offline-Funktionen prüfen', 'Nutzen Sie ausschließlich Einzelspieler- und Offline-Optionen, die offiziell vom Entwickler oder der Plattform bereitgestellt werden, und überprüfen Sie diese in den offiziellen Dokumentationen. Das bloße Trennen der Internetverbindung deaktiviert das Anti-Cheat-System nicht und macht die Nutzung nicht sicher.'],
+      ['Keine Unterstützung für Bypasses oder Dateiänderungen', 'LocalPatcher bietet und unterstützt keine Methoden zur Umgehung von Anti-Cheat-Systemen, zur Änderung geschützter ausführbarer Dateien, für DLL-Injektionen, benutzerdefinierte Loader oder die Deaktivierung von Sicherheitsfunktionen.'],
+      ['Dateien vor der Ausführung überprüfen', 'Stellen Sie sicher, dass Spiel- und Trainer-Versionen übereinstimmen, und sichern Sie wichtige Speicherstände in einem separaten Ordner. Laden Sie Trainer nur von der offiziellen Quelle des Erstellers herunter und überprüfen Sie, wenn möglich, digitale Signaturen und veröffentlichte Hash-Werte.'],
+      ['Virenwarnungen nicht pauschal ignorieren', 'Tools, die in den Speicher eingreifen, können von Antivirenprogrammen erkannt werden, aber nicht jede Warnung ist ein Fehlalarm. Überprüfen Sie Dateien mit aktueller Antivirensoftware und multiplen Scannern. Führen Sie eine Datei nicht aus, wenn Quelle, Signatur, Hash oder die Scan-Ergebnisse fragwürdig sind.'],
     ],
-    note: 'Die Verantwortung liegt beim Nutzer. LocalPatcher garantiert nicht für Dateisicherheit.',
+    note: 'Die alleinige Verantwortung für die Nutzung der Dateien und etwaige Kontosperren liegt beim Benutzer. Die lokale Dateikonvertierung oder Hash-Überprüfung durch LocalPatcher garantiert nicht die Sicherheit der Original- oder der resultierenden Datei.',
     terms: 'Nutzungsbedingungen', privacy: 'Datenschutz', badge: 'SAFETY FIRST',
   },
   es: {
-    title: 'Guía de Seguridad del Trainer', 
-    description: 'Precauciones básicas para evitar entornos online y anti-cheat.',
-    warningTitle: 'No usar en modos en línea o multijugador',
-    warning: 'Usar trainers en entornos multijugador puede sancionar su cuenta o dañar datos.',
+    title: 'Guía de Seguridad para Trainers', 
+    description: 'Precauciones básicas para evitar entornos online y anti-cheat, y revisar los archivos del trainer con cuidado.',
+    warningTitle: 'No utilizar en modos en línea o multijugador',
+    warning: 'El uso de trainers en entornos competitivos, multijugador, de clasificación o protegidos por anti-cheat puede resultar en violaciones a las normas de la plataforma, suspensiones de cuentas o corrupción de datos. El uso sin conexión no garantiza la seguridad ni la evasión de sanciones.',
     sections: [
-      ['Usar solo opciones offline oficiales', 'Utilice solo funciones en solitario offline confirmadas.'],
-      ['Sin soporte de bypass', 'LocalPatcher no proporciona métodos de evasión de anti-cheat.'],
-      ['Comprobar archivos antes de ejecutar', 'Verifique versiones y respalde sus partidas antes de jugar.'],
-      ['No ignorar alertas de antivirus', 'Consulte múltiples antivirus antes de ejecutar un archivo.'],
+      ['Verifique únicamente funciones offline oficiales', 'Utilice solo las opciones de un solo jugador y fuera de línea proporcionadas oficialmente por el desarrollador o la plataforma, y confírmelas en la documentación oficial. Desconectar el internet no desactiva el sistema anti-cheat ni hace que el uso sea seguro.'],
+      ['Sin soporte para evasión o modificación de archivos', 'LocalPatcher no proporciona ni apoya la evasión de sistemas anti-cheat, la modificación de archivos ejecutables protegidos, la inyección de DLL, los cargadores personalizados o la desactivación de controles de seguridad.'],
+      ['Compruebe los archivos antes de ejecutarlos', 'Asegúrese de que las versiones del juego y del trainer coincidan y haga una copia de seguridad de las partidas guardadas importantes en una ubicación separada. Obtenga los trainers únicamente de la fuente oficial de su creador y, si es posible, verifique las firmas digitales y los hashes publicados.'],
+      ['Nunca ignore las advertencias del antivirus', 'Las herramientas de manipulación de memoria pueden ser detectadas, pero no todas las alertas son falsos positivos. Consulte con antivirus actualizados y múltiples escáneres. No ejecute un archivo si su origen, firma, hash o resultados de escaneo son sospechosos.'],
     ],
-    note: 'El usuario es responsable del uso del archivo. LocalPatcher no garantiza la seguridad final.',
+    note: 'Usted es el único responsable del uso del archivo y de las posibles sanciones de la cuenta. El procesamiento local o la comprobación de hashes por parte de LocalPatcher no garantiza la seguridad del archivo original ni del archivo resultante.',
     terms: 'Términos de Servicio', privacy: 'Política de Privacidad', badge: 'SAFETY FIRST',
   }
 };
@@ -85,4 +85,3 @@ export const guidesPageContent = {
 export function getGuidesContent(locale: Locale) {
   return guidesPageContent[locale] || guidesPageContent.en;
 }
-
