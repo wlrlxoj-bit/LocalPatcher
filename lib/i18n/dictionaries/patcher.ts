@@ -113,7 +113,13 @@ export const patcherDict = {
     "jsonLdFaq2A": "네, LocalPatcher는 100% 브라우저 인메모리 로컬 패처로 동작하며 오프라인 싱글플레이용 사용을 강력히 권장합니다.",
     "steamNewsTitle": "최근 스팀 공식 업데이트",
     "steamNewsEmpty": "최근 업데이트 소식이 없습니다.",
-    "steamNewsSeo": "새로운 패치가 출시되었을 수 있습니다. 버전이 달라 트레이너가 작동하지 않는다면, 업데이트된 FLiNG 버전을 기다려주세요."
+    "steamNewsSeo": "새로운 패치가 출시되었을 수 있습니다. 버전이 달라 트레이너가 작동하지 않는다면, 업데이트된 FLiNG 버전을 기다려주세요.",
+    "systemRequirements": "PC 시스템 요구 사양",
+    "minimum": "최소 사양",
+    "recommended": "권장 사양",
+    "livePlayerCount": "현재 스팀 접속자",
+    "showMore": "더보기",
+    "showLess": "간략히 보기"
   },
   "en": {
     "dropzoneTitle": "Drag & drop original trainer executable (.exe) here",
@@ -225,7 +231,13 @@ export const patcherDict = {
     "jsonLdFaq2A": "Yes, LocalPatcher operates 100% locally in your browser memory and is recommended for offline singleplayer use.",
     "steamNewsTitle": "Recent Steam Updates",
     "steamNewsEmpty": "No recent update news.",
-    "steamNewsSeo": "A new patch may have been released. If the trainer doesn't work due to a version mismatch, please wait for the updated FLiNG version."
+    "steamNewsSeo": "A new patch may have been released. If the trainer doesn't work due to a version mismatch, please wait for the updated FLiNG version.",
+    "systemRequirements": "System Requirements",
+    "minimum": "Minimum",
+    "recommended": "Recommended",
+    "livePlayerCount": "Live Players",
+    "showMore": "Show more",
+    "showLess": "Show less"
   },
   "ja": {
     "dropzoneTitle": "オリジナルのゲームトレーナー実行ファイル（.exe）をここにドロップしてください",
@@ -338,7 +350,13 @@ export const patcherDict = {
     "jsonLdFaq2A": "Yes, LocalPatcher operates 100% locally in your browser memory and is recommended for offline singleplayer use.",
     "steamNewsTitle": "最新のSteam公式アップデート",
     "steamNewsEmpty": "最近のアップデート情報はありません。",
-    "steamNewsSeo": "新しいパッチがリリースされた可能性があります。バージョンの違いによりトレーナーが動作しない場合は、更新されたFLiNGバージョンをお待ちください。"
+    "steamNewsSeo": "新しいパッチがリリースされた可能性があります。バージョンの違いによりトレーナーが動作しない場合は、更新されたFLiNGバージョンをお待ちください。",
+    "systemRequirements": "システム要件",
+    "minimum": "最低",
+    "recommended": "推奨",
+    "livePlayerCount": "現在のプレイヤー数",
+    "showMore": "もっと見る",
+    "showLess": "折りたたむ"
   },
   "de": {
     "dropzoneTitle": "Original-Trainer EXE hierher ziehen",
@@ -451,7 +469,13 @@ export const patcherDict = {
     "jsonLdFaq2A": "Yes, LocalPatcher operates 100% locally in your browser memory and is recommended for offline singleplayer use.",
     "steamNewsTitle": "Aktuelle Steam-Updates",
     "steamNewsEmpty": "Keine aktuellen Update-Nachrichten.",
-    "steamNewsSeo": "Möglicherweise wurde ein neuer Patch veröffentlicht. Wenn der Trainer aufgrund unterschiedlicher Versionen nicht funktioniert, warten Sie bitte auf die aktualisierte FLiNG-Version."
+    "steamNewsSeo": "Möglicherweise wurde ein neuer Patch veröffentlicht. Wenn der Trainer aufgrund unterschiedlicher Versionen nicht funktioniert, warten Sie bitte auf die aktualisierte FLiNG-Version.",
+    "systemRequirements": "Systemanforderungen",
+    "minimum": "Minimum",
+    "recommended": "Empfohlen",
+    "livePlayerCount": "Aktuelle Spieler",
+    "showMore": "Mehr anzeigen",
+    "showLess": "Weniger anzeigen"
   },
   "es": {
     "dropzoneTitle": "Arrastre el EXE original del trainer aquí",
@@ -564,7 +588,13 @@ export const patcherDict = {
     "jsonLdFaq2A": "Yes, LocalPatcher operates 100% locally in your browser memory and is recommended for offline singleplayer use.",
     "steamNewsTitle": "Actualizaciones recientes de Steam",
     "steamNewsEmpty": "No hay noticias de actualización recientes.",
-    "steamNewsSeo": "Es posible que se haya lanzado un nuevo parche. Si el trainer no funciona debido a diferencias de versión, espere a la versión de FLiNG actualizada."
+    "steamNewsSeo": "Es posible que se haya lanzado un nuevo parche. Si el trainer no funciona debido a diferencias de versión, espere a la versión de FLiNG actualizada.",
+    "systemRequirements": "Requisitos del sistema",
+    "minimum": "Mínimo",
+    "recommended": "Recomendado",
+    "livePlayerCount": "Jugadores en línea",
+    "showMore": "Mostrar más",
+    "showLess": "Mostrar menos"
   }
 };
 

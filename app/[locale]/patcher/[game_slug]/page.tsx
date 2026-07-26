@@ -2,6 +2,8 @@ import React from 'react';
 import { notFound, permanentRedirect } from 'next/navigation';
 import PatcherClient from '@/components/PatcherClient';
 import SteamNews from '@/components/SteamNews';
+import SteamPlayerCount from '@/components/SteamPlayerCount';
+import SystemRequirements from '@/components/SystemRequirements';
 import {
   getGameBySlug,
   getTrainersForGame,
@@ -15,8 +17,9 @@ import {
 import { Locale, getGameTitle, getPatcherDict } from '@/lib/i18n/index';
 import { translateGenre } from '@/lib/i18n/genres';
 import { SITE_URL } from '@/lib/site';
+import { extractSteamAppId } from '@/lib/steam';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 3600; // 1 hour ISR cache
 
 interface PatcherPageProps {
   params: Promise<{
@@ -244,6 +247,8 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
     ]
   };
 
+  const steamAppId = extractSteamAppId(game.cover_image_url);
+
   return (
     <>
       <script
@@ -269,7 +274,9 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
         popularGames={popularGames}
         relatedGames={relatedGames}
         locale={currentLocale as Locale}
-        steamNewsSlot={game.steam_app_id ? <SteamNews steamAppId={game.steam_app_id} locale={currentLocale as Locale} /> : undefined}
+        steamNewsSlot={steamAppId ? <SteamNews steamAppId={steamAppId} locale={currentLocale as Locale} /> : undefined}
+        playerCountSlot={steamAppId ? <SteamPlayerCount steamAppId={steamAppId} locale={currentLocale as Locale} /> : undefined}
+        systemReqSlot={steamAppId ? <SystemRequirements steamAppId={steamAppId} locale={currentLocale as Locale} /> : undefined}
       />
     </>
   );

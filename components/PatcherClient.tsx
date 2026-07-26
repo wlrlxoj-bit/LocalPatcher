@@ -52,6 +52,8 @@ interface PatcherClientProps {
   popularGames?: any[];
   relatedGames?: any[];
   steamNewsSlot?: React.ReactNode;
+  playerCountSlot?: React.ReactNode;
+  systemReqSlot?: React.ReactNode;
 }
 
 interface PartnerStoreWidgetProps {
@@ -415,17 +417,22 @@ export default function PatcherClient({
   popularGames = [],
   relatedGames = [],
   steamNewsSlot,
+  playerCountSlot,
+  systemReqSlot,
 }: PatcherClientProps) {
   // 서버가 version_str 기준으로 정렬한 순서를 metadata/JSON-LD와 동일하게 유지합니다.
   const sortedTrainers = trainers;
   const t = getCommonDict(locale);
   const pt = getPatcherDict(locale as Locale);
   const displayTitle = getGameTitle(game, locale);
-  // Set default selected trainer version
   const [selectedTrainerId, setSelectedTrainerId] = useState<number>(
     sortedTrainers.length > 0 ? sortedTrainers[0].id : 0
   );
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isDescExpanded, setIsDescExpanded] = useState(false);
+  
+  const gameDescription = (game as any)[`description_${locale}`] || game.description_en || '';
+
   const patcherViewTrackedRef = useRef(false);
   const patcherSectionRef = useRef<HTMLDivElement>(null);
 
@@ -706,12 +713,16 @@ export default function PatcherClient({
               </section>
             )}
 
+            {/* systemReqSlot was removed from here because it's now in the sidebar */}
+
         </div>
         
-        {steamNewsSlot && (
-          <div className="w-full lg:w-80 shrink-0 flex flex-col gap-6 lg:sticky lg:top-8">
+        {(playerCountSlot || steamNewsSlot || systemReqSlot) && (
+          <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 lg:sticky lg:top-8">
+            {playerCountSlot}
             {steamNewsSlot}
-          </div>
+            {systemReqSlot}
+          </aside>
         )}
       </div>
     );
@@ -742,9 +753,25 @@ export default function PatcherClient({
             className="w-20 h-28 bg-slate-800 rounded-xl bg-cover bg-center border border-slate-700/50 shadow-md shrink-0"
             style={{ backgroundImage: `url(${game.cover_image_url})` }}
           />
-          <div className="pt-1">
+          <div className="pt-1 flex-1">
             <h1 className="text-xl md:text-2xl font-bold text-white font-outfit">{displayTitle}</h1>
-            <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-mono">Original Game: {game.title_en}</p>
+            <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-mono mb-3">Original Game: {game.title_en}</p>
+            
+            {gameDescription && (
+              <div className="mb-3">
+                <div 
+                  className={`text-sm text-slate-300 leading-relaxed overflow-hidden transition-all duration-300 ${isDescExpanded ? '' : 'line-clamp-3'}`}
+                  dangerouslySetInnerHTML={{ __html: gameDescription }}
+                />
+                <button 
+                  onClick={() => setIsDescExpanded(!isDescExpanded)}
+                  className="mt-1 text-xs font-semibold text-cyan-400 hover:text-cyan-300 focus:outline-none flex items-center gap-1"
+                >
+                  {isDescExpanded ? pt.showLess : pt.showMore}
+                </button>
+              </div>
+            )}
+            
           </div>
         </div>
 
@@ -1060,12 +1087,16 @@ export default function PatcherClient({
         </div>
       )}
 
+      {/* systemReqSlot was removed from here because it's now in the sidebar */}
+
       </div>
       
-      {steamNewsSlot && (
-        <div className="w-full lg:w-80 shrink-0 flex flex-col gap-6 lg:sticky lg:top-8">
+      {(playerCountSlot || steamNewsSlot || systemReqSlot) && (
+        <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 lg:sticky lg:top-8">
+          {playerCountSlot}
           {steamNewsSlot}
-        </div>
+          {systemReqSlot}
+        </aside>
       )}
     </div>
   );
@@ -1388,6 +1419,8 @@ function TrainerUIPreview({ game, trainer, mappings, locale }: TrainerUIPreviewP
         </div>
 
       </div>
+
+
 
       {/* Disclaimer Notice */}
       <p className="mt-4 text-[10px] text-amber-500/70 leading-relaxed text-center">

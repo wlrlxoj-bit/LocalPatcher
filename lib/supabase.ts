@@ -33,6 +33,11 @@ export interface Game {
   cover_image_url: string;
   anti_cheat: string;
   fling_url?: string;
+  description_en?: string;
+  description_ko?: string;
+  description_ja?: string;
+  description_de?: string;
+  description_es?: string;
 }
 
 // Mock database data

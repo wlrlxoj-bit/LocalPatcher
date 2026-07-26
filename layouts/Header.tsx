@@ -95,7 +95,6 @@ export default function Header({ locale }: HeaderProps) {
           
           {/* Language Dropdown */}
           <div className="relative">
-            <span className="relative z-10">{pt.guideTab}</span>
             <button 
               onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
               className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/60 hover:bg-slate-800/80 text-xs font-medium text-slate-300 transition-all duration-200 focus:outline-none"
