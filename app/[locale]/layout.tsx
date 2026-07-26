@@ -5,40 +5,14 @@ import '@/app/globals.css';
 import Script from 'next/script';
 import { SITE_URL } from '@/lib/site';
 import type { Locale } from '@/lib/i18n';
+import { getLayoutMetadata } from '@/lib/i18n-page-content';
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? locale : 'ko';
+  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? (locale as Locale) : 'ko';
   
-  const title = currentLocale === 'ko' 
-    ? '게임 트레이너 한글 패치 & 다운로드 플랫폼 | LocalPatcher' 
-    : currentLocale === 'ja' 
-      ? 'ゲームトレーナー日本語化パッチ＆ダウンロード | LocalPatcher' 
-      : currentLocale === 'de'
-        ? 'LocalPatcher - Spiele-Trainer Lokalisierungs-Tool'
-        : currentLocale === 'es'
-          ? 'LocalPatcher - Herramienta de Localización de Trainers'
-          : 'LocalPatcher - Trainer Localization Portal';
-      
-  const description = currentLocale === 'ko' 
-    ? '스팀 게임 트레이너 및 플링(FLiNG) 치트 키 한글화 패치 플랫폼. 서버 업로드 없이 브라우저에서 로컬로 한글 패치를 적용하고 다운로드하세요.'
-    : currentLocale === 'ja'
-      ? 'SteamゲームトレーナーおよびFLiNGチートツールの日本語化パッチプラットフォーム。ファイルをサーバーにアップロードせず、ブラウザ上でローカルに日本語訳パッチを適用・ダウンロードできます。'
-      : currentLocale === 'de'
-        ? 'Ein Browser-Tool zum lokalen Übersetzen von Spiele-Trainern ohne Datei-Upload.'
-        : currentLocale === 'es'
-          ? 'Una herramienta de navegador para parchear trainers de juegos localmente sin subir archivos.'
-          : 'A client-side trainer patch utility that replaces supported text in game trainers with localized strings without uploading files to our server.';
-
-  const keywords = currentLocale === 'ko'
-    ? ['게임', '한글', '패치', '트레이너', '치트', '스팀', '플링', '번역', '다운로드', '무료', '로컬패처', 'LocalPatcher']
-    : currentLocale === 'ja'
-      ? ['ゲーム', '日本語化', '日本語訳', 'パッチ', 'トレーナー', 'チート', '無料', 'ダウンロード', '日本', 'ローカルパッチャー', 'LocalPatcher']
-      : currentLocale === 'de'
-        ? ['spiele', 'trainer', 'cheats', 'übersetzung', 'patch', 'download', 'deutsch', 'localpatcher']
-        : currentLocale === 'es'
-          ? ['juegos', 'trainer', 'trucos', 'traducción', 'parche', 'descargar', 'español', 'localpatcher']
-          : ['game', 'trainer', 'cheats', 'translation', 'patch', 'download', 'free', 'localized', 'localpatcher'];
+  const meta = getLayoutMetadata(currentLocale);
+  const { title, description, keywords } = meta;
 
   return {
     metadataBase: new URL(SITE_URL),

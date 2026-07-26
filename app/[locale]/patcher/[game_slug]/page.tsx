@@ -9,7 +9,7 @@ import {
   resolveGameSlugAlias,
   sortTrainersLatestFirst,
 } from '@/lib/supabase';
-import { Locale } from '@/lib/i18n';
+import { Locale, getGameTitle } from '@/lib/i18n';
 import { SITE_URL } from '@/lib/site';
 
 export const dynamic = 'force-dynamic';
@@ -96,6 +96,8 @@ export async function generateMetadata({ params }: PatcherPageProps) {
   }
   if (koEligible) alternateLanguages.ko = `/ko/patcher/${canonicalSlug}`;
   if (jaEligible) alternateLanguages.ja = `/ja/patcher/${canonicalSlug}`;
+  if (deEligible) alternateLanguages.de = `/de/patcher/${canonicalSlug}`;
+  if (esEligible) alternateLanguages.es = `/es/patcher/${canonicalSlug}`;
   const versionsStr = trainers && trainers.length > 0
     ? trainers.map(t => t.version_str).join(', ')
     : '';
@@ -114,19 +116,34 @@ export async function generateMetadata({ params }: PatcherPageProps) {
     description = hasApprovedTranslation
       ? `${titleJa}の最新トレーナー用日本語化翻訳パッチ(${versionsStr})です。サーバーにファイルを一切アップロードせず、Webブラウザ内で完全にローカルで日本語化できます。`
       : `${titleJa}のトレーナー(${versionsStr})に関する変換対応情報と自動翻訳の処理状況を確認できます。ファイルはサーバーにアップロードされません。`;
+  } else if (currentLocale === 'de') {
+    const titleDe = game.title_de || game.title_en;
+    title = `${titleDe} Trainer Deutsch Lokalisierung - Lokaler Browser-Patcher | LocalPatcher`;
+    description = hasApprovedTranslation
+      ? `Lokalisierungs-Patch (${versionsStr}) für ${titleDe} (${game.title_en}). Wandeln Sie Optionstexte lokal im Browser um ohne Upload.`
+      : `Trainer-Informationen (${versionsStr}) für ${titleDe} (${game.title_en}). Dateiverarbeitung erfolgt lokal im Browser.`;
+  } else if (currentLocale === 'es') {
+    const titleEs = game.title_es || game.title_en;
+    title = `Parche en Español para Trainer de ${titleEs} - Parcheador Local | LocalPatcher`;
+    description = hasApprovedTranslation
+      ? `Parche de localización (${versionsStr}) para el trainer de ${titleEs} (${game.title_en}). Traduzca opciones en su navegador sin subir archivos.`
+      : `Información de compatibilidad (${versionsStr}) para ${titleEs} (${game.title_en}). Procesamiento local en el navegador.`;
   } else {
     title = `${game.title_en} Original Trainer Information & Compatibility | LocalPatcher`;
     description = `Check original English trainer versions, supported option counts, compatibility, and the official download source for ${game.title_en} (${versionsStr}).`;
   }
-
-  const gameName = currentLocale === 'ko' ? game.title_ko : currentLocale === 'ja' ? (game.title_ja || game.title_en) : game.title_en;
+  const gameName = getGameTitle(game, currentLocale as Locale);
   const gameNameEn = game.title_en;
 
   const keywords = currentLocale === 'ko'
     ? [gameName, gameNameEn, '게임', '한글', '패치', '트레이너', '치트', '스팀', '플링', '번역', '다운로드', '무료']
     : currentLocale === 'ja'
       ? [gameName, gameNameEn, 'ゲーム', '日本語化', 'パッチ', 'トレーナー', 'チート', '無料', 'ダウンロード', '日本'].filter(Boolean)
-      : [gameNameEn, 'game', 'trainer', 'cheats', 'translation', 'patch', 'download', 'free', 'localized'];
+      : currentLocale === 'de'
+        ? [gameName, gameNameEn, 'spiele', 'trainer', 'cheats', 'übersetzung', 'patch', 'download', 'deutsch', 'localpatcher']
+        : currentLocale === 'es'
+          ? [gameName, gameNameEn, 'juegos', 'trainer', 'trucos', 'traducción', 'parche', 'descargar', 'español', 'localpatcher']
+          : [gameNameEn, 'game', 'trainer', 'cheats', 'translation', 'patch', 'download', 'free', 'localized'];
 
   return {
     title,
