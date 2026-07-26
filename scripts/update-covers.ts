@@ -311,8 +311,22 @@ async function fixCoverImages(
       const appId = await searchSteamAppId(game.title_en);
 
       if (!appId) {
-        console.log(`  ❌ [${game.title_en}] Steam에서 찾을 수 없음`);
+        console.log(`  ❌ [${game.title_en}] Steam에서 찾을 수 없음. 기본 이미지로 대체합니다.`);
         report.coverFailed.push(game.title_en);
+        
+        const defaultCover = '/images/default_cover.jpg';
+        if (game.cover_image_url !== defaultCover) {
+          const { error } = await supabase
+            .from('games')
+            .update({ cover_image_url: defaultCover })
+            .eq('id', game.id);
+            
+          if (!error) {
+            console.log(`  ✅ [${game.title_en}] 기본 이미지 업데이트 완료`);
+            report.coverUpdated.push(game.title_en);
+          }
+        }
+        
         await delay(); // 레이트 리밋 방지
         continue;
       }
