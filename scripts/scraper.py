@@ -136,25 +136,32 @@ def has_english_leak(text: str) -> bool:
 db_dictionary_ko = {}
 db_dictionary_ja = {}
 
-def save_new_translations_to_dictionary(original_line: str, translated_line: str, db: Client):
-    """Extracts clean option labels and inserts them into Supabase 'common_dictionary' table to dynamically train the database dictionary."""
+def save_new_translations_to_dictionary(original_line: str, translated_line: str, language_code: str, db: Client):
+    """Extracts clean option labels and inserts/updates them into Supabase 'common_dictionary' table to dynamically train the database dictionary."""
     try:
-        pattern = r"^([a-zA-Z0-9\+\s\.\-\*\/↑↓←→]+)\s*-\s*([^\*]+)(.*)$"
-        match_orig = re.match(pattern, original_line.strip())
-        match_trans = re.match(pattern, translated_line.strip())
-        if match_orig and match_trans:
-            eng_label = match_orig.group(2).strip()
-            kor_label = match_trans.group(2).strip()
-            eng_lower = eng_label.lower().replace("'", "").strip()
+        parts_orig = parse_option_line(original_line.strip())
+        parts_trans = parse_option_line(translated_line.strip())
+        if parts_orig and parts_trans:
+            eng_label = parts_orig[2].strip()
+            trans_label = parts_trans[2].strip()
+            if not eng_label or not trans_label:
+                return
+                
+            column_name = {
+                'ko': 'korean_translation',
+                'ja': 'translated_ja',
+                'de': 'translated_de',
+                'es': 'translated_es'
+            }.get(language_code)
             
-            if eng_lower not in db_dictionary_ko and eng_lower not in COMMON_TRANSLATIONS:
-                # Insert to Supabase common_dictionary table
-                db.table('common_dictionary').insert({
-                    'english_term': eng_label,
-                    'korean_translation': kor_label
-                }).execute()
-                db_dictionary_ko[eng_lower] = kor_label
-                print(f"[+] Dynamic Dictionary Learned: '{eng_label}' -> '{kor_label}'")
+            if not column_name:
+                return
+                
+            db.table('common_dictionary').upsert({
+                'english_term': eng_label,
+                column_name: trans_label
+            }, on_conflict='english_term').execute()
+            print(f"[+] Dynamic Dictionary Learned ({language_code}): '{eng_label}' -> '{trans_label}'")
     except Exception as e:
         # Silently fail if table doesn't exist or duplicate key error occurs
         pass
@@ -379,6 +386,10 @@ def process_translation_block_de(text: str, db: Client) -> str:
             parts = _split_option_for_translation(line)
             trans_line = parts[0] + llm_results[llm_index]
             llm_index += 1
+            if trans_line != line:
+                save_new_translations_to_dictionary(line, trans_line, \'es\', db)
+            if trans_line != line:
+                save_new_translations_to_dictionary(line, trans_line, \'de\', db)
             
         if len(trans_line) < orig_len:
             trans_line += " " * (orig_len - len(trans_line))
@@ -508,7 +519,7 @@ def process_translation_block(text: str, db: Client) -> str:
             llm_index += 1
             # Save newly translated term to dynamic dictionary table for self-learning caching
             if trans_line != line:
-                save_new_translations_to_dictionary(line, trans_line, db)
+                save_new_translations_to_dictionary(line, trans_line, 'ko', db)
 
         # Apply Space Padding to synchronize string length in bytes/chars
         if len(trans_line) < orig_len:
@@ -649,6 +660,8 @@ def process_translation_block_ja(text: str, db: Client) -> str:
                 raise RuntimeError("번역 결과와 옵션 줄의 대응 관계가 손상됨")
             trans_line = parts[0] + llm_results[llm_index]
             llm_index += 1
+            if trans_line != line:
+                save_new_translations_to_dictionary(line, trans_line, 'ja', db)
 
         if len(trans_line) < orig_len:
             trans_line += " " * (orig_len - len(trans_line))
