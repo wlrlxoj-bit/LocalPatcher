@@ -12,6 +12,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   return {
     title: `${copy.title} | LocalPatcher`,
     description: copy.sub,
+    keywords: copy.keywords,
     alternates: {
       canonical: `${SITE_URL}/${currentLocale}/faq`,
       languages: localizedAlternates('/faq'),

@@ -184,6 +184,8 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
   // 4. Build JSON-LD structured data for SoftwareApplication
 
   // 4. Build JSON-LD structured data for SoftwareApplication
+  const pt = getPatcherDict(currentLocale as Locale);
+
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
@@ -195,11 +197,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
       'price': '0',
       'priceCurrency': 'USD',
     },
-    'description': currentLocale === 'ko'
-      ? `${game.title_ko} (${game.title_en}) 트레이너 한글 패치를 설치 없이 브라우저에서 로컬로 적용하는 유틸리티입니다.`
-      : currentLocale === 'ja'
-        ? `${game.title_en}のトレーナー日本語化パッチをブラウザ上でローカルに適用するツール。`
-        : `Original English trainer version, option count, compatibility, and official source information for ${game.title_en}.`,
+    'description': pt.jsonLdDescription.replace('{gameTitleKo}', game.title_ko || game.title_en).replace('{gameTitleEn}', game.title_en),
     'screenshot': game.cover_image_url,
     'softwareVersion': trainers[0]?.version_str || '1.0',
     'downloadUrl': `${SITE_URL}/${currentLocale}/patcher/${patcherData?.canonicalSlug ?? game.slug}`,
@@ -211,26 +209,18 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
     'mainEntity': [
       {
         '@type': 'Question',
-        'name': currentLocale === 'ko'
-          ? `${game.title_ko || game.title_en} 트레이너 한글 패치 시 바이러스 오진이 발생하면 어떻게 하나요?`
-          : `${game.title_en} Trainer False Positive Warning`,
+        'name': pt.jsonLdFaq1Q.replace('{gameTitle}', game.title_ko || game.title_en).replace('{gameTitleEn}', game.title_en),
         'acceptedAnswer': {
           '@type': 'Answer',
-          'text': currentLocale === 'ko'
-            ? '트레이너 바이너리의 인메모리 참조 특성으로 인해 백신에서 탐지(False Positive)할 수 있습니다. 백신 예외 처리 후 안전하게 사용 가능하며 파일은 서버로 전송되지 않습니다.'
-            : 'Trainers naturally reference memory addresses, which may trigger false-positive warnings in antivirus programs. Add an exception in your antivirus.'
+          'text': pt.jsonLdFaq1A
         }
       },
       {
         '@type': 'Question',
-        'name': currentLocale === 'ko'
-          ? `${game.title_ko || game.title_en} 트레이너는 오프라인에서 사용할 수 있나요?`
-          : `Can ${game.title_en} trainer be used offline?`,
+        'name': pt.jsonLdFaq2Q.replace('{gameTitle}', game.title_ko || game.title_en).replace('{gameTitleEn}', game.title_en),
         'acceptedAnswer': {
           '@type': 'Answer',
-          'text': currentLocale === 'ko'
-            ? '네, LocalPatcher는 100% 브라우저 인메모리 로컬 패처로 동작하며 오프라인 싱글플레이용 사용을 강력히 권장합니다.'
-            : 'Yes, LocalPatcher operates 100% locally in your browser memory and is recommended for offline singleplayer use.'
+          'text': pt.jsonLdFaq2A
         }
       }
     ]

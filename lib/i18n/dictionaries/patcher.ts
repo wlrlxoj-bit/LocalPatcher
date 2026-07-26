@@ -105,7 +105,12 @@ export const patcherDict = {
       "번역",
       "다운로드",
       "무료"
-    ]
+    ],
+    "jsonLdDescription": "{gameTitleKo} ({gameTitleEn}) 트레이너 한글 패치를 설치 없이 브라우저에서 로컬로 적용하는 유틸리티입니다.",
+    "jsonLdFaq1Q": "{gameTitle} 트레이너 한글 패치 시 바이러스 오진이 발생하면 어떻게 하나요?",
+    "jsonLdFaq1A": "트레이너 바이너리의 인메모리 참조 특성으로 인해 백신에서 탐지(False Positive)할 수 있습니다. 백신 예외 처리 후 안전하게 사용 가능하며 파일은 서버로 전송되지 않습니다.",
+    "jsonLdFaq2Q": "{gameTitle} 트레이너는 오프라인에서 사용할 수 있나요?",
+    "jsonLdFaq2A": "네, LocalPatcher는 100% 브라우저 인메모리 로컬 패처로 동작하며 오프라인 싱글플레이용 사용을 강력히 권장합니다."
   },
   "en": {
     "dropzoneTitle": "Drag & drop original trainer executable (.exe) here",
@@ -209,7 +214,12 @@ export const patcherDict = {
       "download",
       "free",
       "localized"
-    ]
+    ],
+    "jsonLdDescription": "Original English trainer version, option count, compatibility, and official source information for {gameTitleEn}.",
+    "jsonLdFaq1Q": "{gameTitleEn} Trainer False Positive Warning",
+    "jsonLdFaq1A": "Trainers naturally reference memory addresses, which may trigger false-positive warnings in antivirus programs. Add an exception in your antivirus.",
+    "jsonLdFaq2Q": "Can {gameTitleEn} trainer be used offline?",
+    "jsonLdFaq2A": "Yes, LocalPatcher operates 100% locally in your browser memory and is recommended for offline singleplayer use."
   },
   "ja": {
     "dropzoneTitle": "オリジナルのゲームトレーナー実行ファイル（.exe）をここにドロップしてください",
@@ -314,7 +324,12 @@ export const patcherDict = {
       "無料",
       "ダウンロード",
       "日本"
-    ]
+    ],
+    "jsonLdDescription": "{gameTitleEn}のトレーナー日本語化パッチをブラウザ上でローカルに適用するツール。",
+    "jsonLdFaq1Q": "{gameTitleEn} Trainer False Positive Warning",
+    "jsonLdFaq1A": "Trainers naturally reference memory addresses, which may trigger false-positive warnings in antivirus programs. Add an exception in your antivirus.",
+    "jsonLdFaq2Q": "Can {gameTitleEn} trainer be used offline?",
+    "jsonLdFaq2A": "Yes, LocalPatcher operates 100% locally in your browser memory and is recommended for offline singleplayer use."
   },
   "de": {
     "dropzoneTitle": "Original-Trainer EXE hierher ziehen",
@@ -419,7 +434,12 @@ export const patcherDict = {
       "download",
       "deutsch",
       "localpatcher"
-    ]
+    ],
+    "jsonLdDescription": "Original English trainer version, option count, compatibility, and official source information for {gameTitleEn}.",
+    "jsonLdFaq1Q": "{gameTitleEn} Trainer False Positive Warning",
+    "jsonLdFaq1A": "Trainers naturally reference memory addresses, which may trigger false-positive warnings in antivirus programs. Add an exception in your antivirus.",
+    "jsonLdFaq2Q": "Can {gameTitleEn} trainer be used offline?",
+    "jsonLdFaq2A": "Yes, LocalPatcher operates 100% locally in your browser memory and is recommended for offline singleplayer use."
   },
   "es": {
     "dropzoneTitle": "Arrastre el EXE original del trainer aquí",
@@ -524,7 +544,12 @@ export const patcherDict = {
       "descargar",
       "español",
       "localpatcher"
-    ]
+    ],
+    "jsonLdDescription": "Original English trainer version, option count, compatibility, and official source information for {gameTitleEn}.",
+    "jsonLdFaq1Q": "{gameTitleEn} Trainer False Positive Warning",
+    "jsonLdFaq1A": "Trainers naturally reference memory addresses, which may trigger false-positive warnings in antivirus programs. Add an exception in your antivirus.",
+    "jsonLdFaq2Q": "Can {gameTitleEn} trainer be used offline?",
+    "jsonLdFaq2A": "Yes, LocalPatcher operates 100% locally in your browser memory and is recommended for offline singleplayer use."
   }
 };
 
