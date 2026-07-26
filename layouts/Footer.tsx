@@ -8,13 +8,6 @@ interface FooterProps {
 
 export default function Footer({ locale }: FooterProps) {
   const t = getDictionary(locale);
-  const trustLinks = {
-    ko: { about: '사이트 소개', editorial: '편집 정책', contact: '오류 신고' },
-    en: { about: 'About', editorial: 'Editorial Policy', contact: 'Report an Issue' },
-    ja: { about: 'サイト紹介', editorial: '編集方針', contact: '問題を報告' },
-    de: { about: 'Über uns', editorial: 'Redaktionsrichtlinien', contact: 'Problem melden' },
-    es: { about: 'Acerca de', editorial: 'Política Editorial', contact: 'Reportar Problema' },
-  }[locale] || { about: 'About', editorial: 'Editorial Policy', contact: 'Report an Issue' };
 
   return (
     <footer className="border-t border-slate-800/60 bg-slate-950/40 py-8 mt-16">
@@ -30,9 +23,9 @@ export default function Footer({ locale }: FooterProps) {
 
         {/* Right Side: Links */}
         <div className="flex flex-wrap gap-x-6 gap-y-2 justify-center md:justify-end min-w-[240px] text-slate-400">
-          <Link href={`/${locale}/about`} className="hover:text-slate-200 transition-colors">{trustLinks.about}</Link>
-          <Link href={`/${locale}/editorial-policy`} className="hover:text-slate-200 transition-colors">{trustLinks.editorial}</Link>
-          <Link href={`/${locale}/contact`} className="hover:text-slate-200 transition-colors">{trustLinks.contact}</Link>
+          <Link href={`/${locale}/about`} className="hover:text-slate-200 transition-colors">{t.aboutLink}</Link>
+          <Link href={`/${locale}/editorial-policy`} className="hover:text-slate-200 transition-colors">{t.editorialLink}</Link>
+          <Link href={`/${locale}/contact`} className="hover:text-slate-200 transition-colors">{t.contactLink}</Link>
           <Link href={`/${locale}/terms`} className="hover:text-slate-200 transition-colors">
             {t.terms}
           </Link>

@@ -157,7 +157,7 @@ export default async function TermsPage({ params }: { params: Promise<{ locale: 
       <aside className="mt-8 rounded-2xl border border-cyan-500/20 bg-cyan-950/10 p-5 text-sm leading-7 text-slate-300 sm:p-6">
         {page.privacy}{' '}
         <Link href={`/${currentLocale}/privacy`} className="font-semibold text-cyan-400 underline decoration-cyan-400/30 underline-offset-4 hover:text-cyan-300">
-          {currentLocale === 'ko' ? '개인정보처리방침 보기' : currentLocale === 'ja' ? 'プライバシーポリシーを見る' : currentLocale === 'de' ? 'Datenschutzbestimmungen anzeigen' : currentLocale === 'es' ? 'Ver Política de Privacidad' : 'View Privacy Policy'}
+          {t.viewPrivacyPolicyLink}
         </Link>
       </aside>
     </main>

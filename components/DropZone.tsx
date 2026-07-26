@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, CheckCircle2, AlertTriangle, Loader2, Info, Download } from 'lucide-react';
-import { Locale, getDictionary } from '@/lib/i18n';
+import { Locale, getDictionary, getLocaleSuffix } from '@/lib/i18n';
 import { ZipWriter, BlobWriter, BlobReader } from '@zip.js/zip.js';
 import { supabase } from '@/lib/supabase';
 import { trackAnalyticsEvent } from '@/lib/analytics';
@@ -343,7 +343,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
       // 5. Package the patched executable into a password-protected ZIP archive to bypass Defender quarantine
       const zipWriter = new ZipWriter(new BlobWriter("application/zip"));
       
-      const suffix = locale === 'ko' ? '_KOR' : locale === 'ja' ? '_JPN' : locale === 'de' ? '_DEU' : locale === 'es' ? '_ESP' : '_patched';
+      const suffix = getLocaleSuffix(locale);
       const exeName = file.name.replace(/\.exe$/i, `${suffix}.exe`);
       const exeBlob = new Blob([bytes], { type: 'application/octet-stream' });
       
@@ -492,10 +492,10 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
           <div className="flex flex-col items-center py-6 w-full max-w-sm">
             <Loader2 className="w-10 h-10 text-cyan-400 animate-spin" />
             <h3 className="text-sm font-semibold text-slate-300 mt-4">
-              {locale === 'ko' ? '보안 패키징 진행 중...' : locale === 'ja' ? 'セキュリティパッケージ進行中...' : 'Securing and packaging file...'}
+              {t.securingPackagingTitle}
             </h3>
             <p className="text-xs text-slate-500 mt-1">
-              {locale === 'ko' ? '다운로드 파일을 ZIP 형식으로 준비하고 있습니다.' : locale === 'ja' ? 'ダウンロードファイルをZIP形式で準備しています。' : 'Preparing the download as a ZIP archive.'}
+              {t.securingPackagingSub}
             </p>
             
             {/* 프로그레스 바 */}

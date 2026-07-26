@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { ArrowRight, Lock } from 'lucide-react';
-import { Locale } from '@/lib/i18n';
+import { getGameTitle, Locale } from '@/lib/i18n';
 
 interface GameCardProps {
   game: {
@@ -25,15 +25,7 @@ interface GameCardProps {
 }
 
 export default function GameCard({ game, trainerVersion, optionCount, locale, optionsLabel }: GameCardProps) {
-  const displayTitle = locale === 'ko' 
-    ? game.title_ko 
-    : locale === 'ja' 
-      ? (game.title_ja || game.title_en) 
-      : locale === 'de' 
-        ? (game.title_de || game.title_en) 
-        : locale === 'es' 
-          ? (game.title_es || game.title_en) 
-          : game.title_en;
+  const displayTitle = getGameTitle(game, locale);
   
   return (
     <Link 

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ArrowRight, AlertTriangle, Share2 } from 'lucide-react';
-import { Locale, getDictionary } from '@/lib/i18n';
+import { Locale, getDictionary, getGameTitle } from '@/lib/i18n';
 import DropZone from '@/components/DropZone';
 import AdSenseUnit from '@/components/AdSenseUnit';
 import { trackAnalyticsEvent } from '@/lib/analytics';
@@ -313,10 +313,10 @@ function PartnerStoreWidget({ game, locale, t, trainerId }: PartnerStoreWidgetPr
       <div className="z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-left">
         <div>
           <h3 className="text-base font-bold text-slate-200 font-outfit">
-            {locale === 'ko' ? '게임 판매처 가격 확인' : locale === 'ja' ? 'ゲーム販売ストアの価格を確認' : 'Check game store prices'}
+            {t.gameStorePricesTitle}
           </h3>
           <p className="mt-1 max-w-xl text-xs leading-relaxed text-slate-500">
-            {locale === 'ko' ? '패치 작업과 별개인 외부 판매처 정보입니다. 일부 링크는 사이트 운영에 도움이 되는 제휴 링크일 수 있습니다.' : locale === 'ja' ? 'パッチ機能とは別の外部ストア情報です。一部のリンクはサイト運営を支援するアフィリエイトリンクの場合があります。' : 'These external store links are separate from the patcher. Some may be affiliate links that help support the site.'}
+            {t.gameStoreNotice}
           </p>
         </div>
         
@@ -407,7 +407,7 @@ export default function PatcherClient({
   // 서버가 version_str 기준으로 정렬한 순서를 metadata/JSON-LD와 동일하게 유지합니다.
   const sortedTrainers = trainers;
   const t = getDictionary(locale);
-  const displayTitle = locale === 'ko' ? game.title_ko : locale === 'ja' ? (game.title_ja || game.title_en) : game.title_en;
+  const displayTitle = getGameTitle(game, locale);
   // Set default selected trainer version
   const [selectedTrainerId, setSelectedTrainerId] = useState<number>(
     sortedTrainers.length > 0 ? sortedTrainers[0].id : 0
@@ -892,18 +892,10 @@ export default function PatcherClient({
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 id="trainer-preview-heading" className="text-sm font-bold text-slate-200">
-                    {locale === 'ko' ? '번역 옵션 미리보기' : locale === 'ja' ? '翻訳オプションのプレビュー' : locale === 'de' ? 'Vorschau der Übersetzungsoptionen' : locale === 'es' ? 'Vista previa de opciones' : 'Translation option preview'}
+                    {t.optionPreviewTitle}
                   </h2>
                   <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                    {locale === 'ko'
-                      ? `지원 옵션 ${selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length}개를 변환 전에 확인할 수 있습니다.`
-                      : locale === 'ja'
-                        ? `対応する${selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length}個のオプションを変換前に確認できます。`
-                        : locale === 'de'
-                          ? `Überprüfen Sie ${selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length} Optionen vor der Konvertierung.`
-                          : locale === 'es'
-                            ? `Revise ${selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length} opciones antes de convertir.`
-                            : `Review ${selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length} supported options before converting.`}
+                    {t.optionPreviewSub} ({selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length})
                   </p>
                 </div>
                 <button
@@ -913,9 +905,7 @@ export default function PatcherClient({
                   aria-controls="trainer-ui-preview"
                   className="min-h-10 shrink-0 rounded-lg border border-slate-700 bg-slate-950/40 px-4 py-2 text-xs font-semibold text-slate-300 transition-colors hover:border-cyan-500/40 hover:text-cyan-300"
                 >
-                  {isPreviewOpen
-                    ? (locale === 'ko' ? '미리보기 접기' : locale === 'ja' ? 'プレビューを閉じる' : locale === 'de' ? 'Vorschau ausblenden' : locale === 'es' ? 'Ocultar vista previa' : 'Hide preview')
-                    : (locale === 'ko' ? '전체 미리보기 펼치기' : locale === 'ja' ? '全体プレビューを開く' : locale === 'de' ? 'Vollständige Vorschau anzeigen' : locale === 'es' ? 'Mostrar vista previa completa' : 'Show full preview')}
+                  {isPreviewOpen ? t.hidePreviewBtn : t.showFullPreviewBtn}
                 </button>
               </div>
               {isPreviewOpen && (
@@ -1141,11 +1131,13 @@ interface TrainerUIPreviewProps {
 }
 
 function TrainerUIPreview({ game, trainer, mappings, locale }: TrainerUIPreviewProps) {
+  const t = getDictionary(locale);
+
   if (!mappings || mappings.length === 0) {
     return (
       <div className="mt-6 p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden text-center text-xs text-slate-500">
         <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent"></div>
-        한글 번역 매핑 정보가 등록되지 않아 트레이너 미리보기를 표시할 수 없습니다.
+        {t.noSupportedOptions}
       </div>
     );
   }
@@ -1165,20 +1157,11 @@ function TrainerUIPreview({ game, trainer, mappings, locale }: TrainerUIPreviewP
       
       <h5 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
-        {locale === 'ko' ? '한글 번역 치트 옵션 목록 미리보기' : locale === 'ja' ? '翻訳チートオプション一覧プレビュー' : locale === 'de' ? 'Vorschau der übersetzten Cheat-Optionen' : locale === 'es' ? 'Vista previa de opciones de trucos traducidas' : 'Translated Cheat Options Preview'}
+        {t.cheatPreviewHeading}
       </h5>
       
       <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-        {locale === 'ko'
-          ? '아래는 한글화 패치 적용 시 트레이너에 표시되는 번역된 치트 옵션 명칭과 단축키 목록입니다. 실제 게임에는 영향을 주지 않으며, 패치 전에 어떤 한글 번역 항목들이 포함되어 있는지 미리 확인하는 용도입니다.'
-          : locale === 'ja'
-            ? '以下は韓国語パッチ適用時にトレーナーに表示される翻訳されたチートオプション名とホットキーの一覧です。実際のゲームには影響を与えません。'
-            : locale === 'de'
-              ? 'Unten finden Sie die Liste der übersetzten Cheat-Optionen und Hotkeys, die nach dem Patchen angezeigt werden.'
-              : locale === 'es'
-                ? 'A continuación se muestra la lista de opciones de trucos y atajos traducidos que aparecerán en el trainer.'
-                : 'Below is a list of translated cheat option names and hotkeys that will appear in the trainer after applying the localization patch. This does not affect the actual game.'
-        }
+        {t.cheatPreviewSub}
       </p>
 
       {/* Static Trainer Preview Container */}
@@ -1215,7 +1198,7 @@ function TrainerUIPreview({ game, trainer, mappings, locale }: TrainerUIPreviewP
             <p className="text-slate-400 text-xs mt-1 font-mono">{trainer.version_str}</p>
             <div className="flex gap-2 mt-2">
               <span className="text-[10px] bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded font-semibold">
-                {locale === 'ko' ? 'KOREAN EDITION' : locale === 'ja' ? 'JAPANESE EDITION' : locale === 'de' ? 'GERMAN EDITION' : locale === 'es' ? 'SPANISH EDITION' : 'LOCALIZED EDITION'}
+                {t.localizedEditionBadge}
               </span>
             </div>
           </div>
