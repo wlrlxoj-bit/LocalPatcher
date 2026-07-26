@@ -961,7 +961,7 @@ export default function PatcherClient({
                   <h2 id="trainer-preview-heading" className="text-sm font-bold text-slate-200">
                     {pt.optionPreviewTitle}
                   </h2>
-                  <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                  <p className="mt-2 text-xs leading-relaxed text-cyan-300 bg-cyan-950/40 border border-cyan-800/50 px-3 py-2 rounded-lg inline-block">
                     {pt.optionPreviewSub} ({selectedTrainer.option_count || (mappingsMap[selectedTrainer.id] || []).length})
                   </p>
                 </div>
