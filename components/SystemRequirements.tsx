@@ -8,7 +8,7 @@ interface SystemRequirementsProps {
 }
 
 export default async function SystemRequirements({ steamAppId, locale }: SystemRequirementsProps) {
-  const details = await getSteamAppDetails(steamAppId);
+  const details = await getSteamAppDetails(steamAppId, locale);
   
   if (!details || !details.pc_requirements) {
     return null;

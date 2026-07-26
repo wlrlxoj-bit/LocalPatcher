@@ -3,20 +3,12 @@ import GamesListClient from '@/components/GamesListClient';
 import { getGamesWithTrainers } from '@/lib/supabase';
 import { Locale } from '@/lib/i18n/index';
 
+import GamesListSkeleton from '@/components/GamesListSkeleton';
+
 export const revalidate = 3600;
 
-export default async function LocalePage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
-  const { locale } = await params;
-  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? (locale as Locale) : 'ko';
-
-  // Fetch all games with their trainers in a single query
+async function GamesFetcher({ locale }: { locale: Locale }) {
   const gamesData = (await getGamesWithTrainers()) as any[];
-
-  // Map the returned data list to games and trainersList cleanly without changing expected types
   const games = gamesData.map(({ trainers, ...game }) => game);
   const trainersList = gamesData
     .filter(g => g.trainers && g.trainers.length > 0)
@@ -27,11 +19,20 @@ export default async function LocalePage({
       option_count: g.trainers[0].option_count
     }));
 
+  return <GamesListClient games={games} trainers={trainersList} locale={locale} />;
+}
+
+export default async function LocalePage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? (locale as Locale) : 'ko';
+
   return (
-    <GamesListClient 
-      games={games} 
-      trainers={trainersList} 
-      locale={currentLocale as Locale} 
-    />
+    <React.Suspense fallback={<GamesListSkeleton />}>
+      <GamesFetcher locale={currentLocale} />
+    </React.Suspense>
   );
 }

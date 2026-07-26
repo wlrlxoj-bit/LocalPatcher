@@ -338,7 +338,7 @@ export async function getGames() {
   }
 }
 
-export async function getGamesWithTrainers() {
+export const getGamesWithTrainers = unstable_cache(async () => {
   if (!supabase) {
     return mockGames.map(game => ({
       ...game,
@@ -358,9 +358,11 @@ export async function getGamesWithTrainers() {
       trainers: mockTrainers.filter(t => t.game_id === game.id)
     }));
   }
-}
+}, ['games-with-trainers'], { revalidate: 3600 });
 
-export const getPopularGamesWithTrainers = cache(async () => {
+import { unstable_cache } from 'next/cache';
+
+export const getPopularGamesWithTrainers = unstable_cache(async () => {
   if (!supabase) return [];
   try {
     const { data, error } = await supabase
@@ -375,7 +377,7 @@ export const getPopularGamesWithTrainers = cache(async () => {
     console.error('getPopularGamesWithTrainers failed:', err);
     return [];
   }
-});
+}, ['popular-games'], { revalidate: 3600 });
 
 export const getGameBySlug = cache(async (slug: string) => {
   if (!supabase) return mockGames.find(g => g.slug === slug) || null;

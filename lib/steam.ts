@@ -22,7 +22,7 @@ export interface SteamNewsResponse {
 export async function getSteamNews(appId: number, count: number = 3): Promise<SteamNewsItem[]> {
   try {
     const res = await fetch(
-      `https://api.steampowered.com/ISteamNews/GetNewsForApp/v0002/?appid=${appId}&count=${count}&maxlength=300&format=json`,
+      `https://api.steampowered.com/ISteamNews/GetNewsForApp/v0002/?appid=${appId}&count=${count * 4}&maxlength=300&format=json`,
       {
         next: { revalidate: 3600 * 6 }, // Cache for 6 hours
       }
@@ -34,7 +34,9 @@ export async function getSteamNews(appId: number, count: number = 3): Promise<St
     }
 
     const data = (await res.json()) as SteamNewsResponse;
-    return data.appnews?.newsitems || [];
+    const items = data.appnews?.newsitems || [];
+    // Only return official steam community announcements (feed_type 1)
+    return items.filter(item => item.feed_type === 1).slice(0, count);
   } catch (error) {
     console.error(`Error fetching Steam news for app ${appId}:`, error);
     return [];
@@ -54,10 +56,12 @@ export interface SteamAppDetails {
   };
 }
 
-export async function getSteamAppDetails(appId: number): Promise<SteamAppDetails | null> {
+export async function getSteamAppDetails(appId: number, locale: string = 'en'): Promise<SteamAppDetails | null> {
+  const langMap: Record<string, string> = { ko: 'korean', en: 'english', ja: 'japanese', de: 'german', es: 'spanish' };
+  const steamLang = langMap[locale] || 'english';
   try {
     const res = await fetch(
-      `https://store.steampowered.com/api/appdetails?appids=${appId}`,
+      `https://store.steampowered.com/api/appdetails?appids=${appId}&l=${steamLang}`,
       {
         next: { revalidate: 3600 * 24 }, // Cache for 24 hours
       }

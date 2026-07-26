@@ -64,31 +64,6 @@ export async function generateMetadata({ params }: PatcherPageProps) {
   const eligibleTrainerIds = trainers
     .filter((trainer) => trainer.option_count > 0)
     .map((trainer) => trainer.id);
-  const getLocaleMappings = (
-    targetLocale: 'ko' | 'ja' | 'de' | 'es'
-  ): Promise<Record<number, Array<unknown>>> =>
-    eligibleTrainerIds.length > 0
-      ? getMappingsForTrainers(eligibleTrainerIds, targetLocale)
-      : Promise.resolve({} as Record<number, Array<unknown>>);
-  const [koMappings, jaMappings, deMappings, esMappings] = await Promise.all([
-    getLocaleMappings('ko'),
-    getLocaleMappings('ja'),
-    getLocaleMappings('de'),
-    getLocaleMappings('es'),
-  ]);
-  const koEligible = Object.values(koMappings).some((mappings) => mappings.length > 0);
-  const jaEligible = Object.values(jaMappings).some((mappings) => mappings.length > 0);
-  const deEligible = Object.values(deMappings).some((mappings) => mappings.length > 0);
-  const esEligible = Object.values(esMappings).some((mappings) => mappings.length > 0);
-  const indexEligible = currentLocale === 'en'
-    ? enEligible
-    : currentLocale === 'ko'
-      ? koEligible
-      : currentLocale === 'ja'
-        ? jaEligible
-        : currentLocale === 'de'
-          ? deEligible
-          : esEligible;
   const latestTrainer = trainers[0];
   const metadataMappings = latestTrainer
     ? await getMappingsForTrainers([latestTrainer.id], currentLocale)
@@ -96,15 +71,20 @@ export async function generateMetadata({ params }: PatcherPageProps) {
   const hasApprovedTranslation = latestTrainer
     ? (metadataMappings[latestTrainer.id] || []).length > 0
     : false;
-  const alternateLanguages: Record<string, string> = {};
-  if (enEligible) {
-    alternateLanguages.en = `/en/patcher/${canonicalSlug}`;
-    alternateLanguages['x-default'] = `/en/patcher/${canonicalSlug}`;
-  }
-  if (koEligible) alternateLanguages.ko = `/ko/patcher/${canonicalSlug}`;
-  if (jaEligible) alternateLanguages.ja = `/ja/patcher/${canonicalSlug}`;
-  if (deEligible) alternateLanguages.de = `/de/patcher/${canonicalSlug}`;
-  if (esEligible) alternateLanguages.es = `/es/patcher/${canonicalSlug}`;
+
+  const indexEligible = currentLocale === 'en' 
+    ? enEligible 
+    : hasApprovedTranslation;
+
+  const alternateLanguages: Record<string, string> = {
+    en: `/en/patcher/${canonicalSlug}`,
+    'x-default': `/en/patcher/${canonicalSlug}`,
+    ko: `/ko/patcher/${canonicalSlug}`,
+    ja: `/ja/patcher/${canonicalSlug}`,
+    de: `/de/patcher/${canonicalSlug}`,
+    es: `/es/patcher/${canonicalSlug}`,
+  };
+
   const versionsStr = trainers && trainers.length > 0
     ? trainers.map(t => t.version_str).join(', ')
     : '';
