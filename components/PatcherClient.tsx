@@ -410,6 +410,7 @@ export default function PatcherClient({
   mappingsMap,
   unapprovedStatusMap,
   locale,
+  popularGames = [],
 }: PatcherClientProps) {
   // 서버가 version_str 기준으로 정렬한 순서를 metadata/JSON-LD와 동일하게 유지합니다.
   const sortedTrainers = trainers;
@@ -660,18 +661,14 @@ export default function PatcherClient({
             <AdSenseUnit locale={locale} slot={bottomAdSlot} />
 
             {/* SEO About This Game Section */}
-            {(locale === 'en' && game.description_en) ||
-             (locale === 'ko' && game.description_ko) ||
-             (locale === 'ja' && game.description_ja) ||
-             (locale === 'de' && game.description_de) ||
-             (locale === 'es' && game.description_es) ? (
+            {game.description_en ? (
               <section className="mt-8 rounded-xl border border-slate-800 bg-slate-900/30 p-6" aria-labelledby="about-game-heading">
                 <h2 id="about-game-heading" className="text-lg font-bold text-slate-200 mb-4">
-                  {locale === 'ko' ? '게임 소개' : locale === 'ja' ? 'ゲーム紹介' : locale === 'de' ? 'Über dieses Spiel' : locale === 'es' ? 'Acerca de este juego' : 'About This Game'}
+                  About This Game
                 </h2>
                 <div 
                   className="text-sm leading-relaxed text-slate-400 prose prose-invert max-w-none"
-                  dangerouslySetInnerHTML={{ __html: locale === 'en' ? game.description_en! : locale === 'ko' ? game.description_ko! : locale === 'ja' ? game.description_ja! : locale === 'de' ? game.description_de! : game.description_es! }}
+                  dangerouslySetInnerHTML={{ __html: game.description_en }}
                 />
               </section>
             ) : null}
@@ -681,12 +678,12 @@ export default function PatcherClient({
               <section className="mt-12" aria-labelledby="popular-trainers-heading">
                 <div className="flex items-center gap-3 mb-6">
                   <h2 id="popular-trainers-heading" className="text-xl font-bold text-slate-100">
-                    {locale === 'ko' ? '인기 트레이너' : locale === 'ja' ? '人気のトレーナー' : locale === 'de' ? 'Beliebte Trainer' : locale === 'es' ? 'Entrenadores populares' : 'Popular Trainers'}
+                    Popular Trainers
                   </h2>
                   <div className="h-px flex-1 bg-gradient-to-r from-slate-800 to-transparent"></div>
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {popularGames.slice(0, 6).map((pg) => {
+                  {popularGames.slice(0, 6).map((pg: any) => {
                     const trainer = pg.trainers?.[0];
                     return (
                       <GameCard
@@ -695,7 +692,7 @@ export default function PatcherClient({
                         trainerVersion={trainer?.version_str || '1.0'}
                         optionCount={trainer?.option_count || 0}
                         locale={locale}
-                        optionsLabel={locale === 'ko' ? '옵션' : locale === 'ja' ? 'オプション' : locale === 'de' ? 'Optionen' : locale === 'es' ? 'Opciones' : 'Options'}
+                        optionsLabel="Options"
                       />
                     );
                   })}
@@ -977,6 +974,46 @@ export default function PatcherClient({
             <PartnerStoreWidget game={game} locale={locale} t={t} trainerId={selectedTrainerId} />
             <SafetyAndUsageGuideSection game={game} locale={locale} />
             <AdSenseUnit locale={locale} slot={bottomAdSlot} />
+
+            {/* SEO About This Game Section */}
+            {(game.description_en || game.description_ko || game.description_ja || game.description_de || game.description_es) ? (
+              <section className="mt-8 rounded-xl border border-slate-800 bg-slate-900/30 p-6" aria-labelledby="about-game-heading">
+                <h2 id="about-game-heading" className="text-lg font-bold text-slate-200 mb-4">
+                  {locale === 'ko' ? '게임 소개' : locale === 'ja' ? 'ゲーム紹介' : locale === 'de' ? 'Über dieses Spiel' : locale === 'es' ? 'Acerca de este juego' : 'About This Game'}
+                </h2>
+                <div 
+                  className="text-sm leading-relaxed text-slate-400 prose prose-invert max-w-none"
+                  dangerouslySetInnerHTML={{ __html: (locale === 'ko' && game.description_ko) ? game.description_ko : (locale === 'ja' && game.description_ja) ? game.description_ja : (locale === 'de' && game.description_de) ? game.description_de : (locale === 'es' && game.description_es) ? game.description_es : (game.description_en || '') }}
+                />
+              </section>
+            ) : null}
+
+            {/* Popular Trainers Grid */}
+            {popularGames.length > 0 && (
+              <section className="mt-12" aria-labelledby="popular-trainers-heading">
+                <div className="flex items-center gap-3 mb-6">
+                  <h2 id="popular-trainers-heading" className="text-xl font-bold text-slate-100">
+                    {locale === 'ko' ? '인기 트레이너' : locale === 'ja' ? '人気のトレーナー' : locale === 'de' ? 'Beliebte Trainer' : locale === 'es' ? 'Entrenadores populares' : 'Popular Trainers'}
+                  </h2>
+                  <div className="h-px flex-1 bg-gradient-to-r from-slate-800 to-transparent"></div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {popularGames.slice(0, 6).map((pg: any) => {
+                    const trainer = pg.trainers?.[0];
+                    return (
+                      <GameCard
+                        key={pg.id}
+                        game={pg}
+                        trainerVersion={trainer?.version_str || '1.0'}
+                        optionCount={trainer?.option_count || 0}
+                        locale={locale}
+                        optionsLabel={locale === 'ko' ? '옵션' : locale === 'ja' ? 'オプション' : locale === 'de' ? 'Optionen' : locale === 'es' ? 'Opciones' : 'Options'}
+                      />
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
           </div>
         );
