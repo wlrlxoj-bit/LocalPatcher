@@ -387,9 +387,7 @@ def process_translation_block_de(text: str, db: Client) -> str:
             trans_line = parts[0] + llm_results[llm_index]
             llm_index += 1
             if trans_line != line:
-                save_new_translations_to_dictionary(line, trans_line, \'es\', db)
-            if trans_line != line:
-                save_new_translations_to_dictionary(line, trans_line, \'de\', db)
+                save_new_translations_to_dictionary(line, trans_line, 'de', db)
             
         if len(trans_line) < orig_len:
             trans_line += " " * (orig_len - len(trans_line))
@@ -426,6 +424,8 @@ def process_translation_block_es(text: str, db: Client) -> str:
             parts = _split_option_for_translation(line)
             trans_line = parts[0] + llm_results[llm_index]
             llm_index += 1
+            if trans_line != line:
+                save_new_translations_to_dictionary(line, trans_line, 'es', db)
             
         if len(trans_line) < orig_len:
             trans_line += " " * (orig_len - len(trans_line))
@@ -690,8 +690,8 @@ def scan_cheat_string_offset(exe_bytes: bytes):
     """Scans binary to detect the offset, encoding, and capacity of the hotkey options block."""
     # Look for hotkey signatures in both UTF-16LE and ASCII formats
     patterns = {
-        'UTF-16LE': b'N\x00u\x00m\x00 \x001\x00 \x00-\x00',
-        'ASCII': b'Num 1 -'
+        'UTF-16LE': b'N\x00u\x00m\x00 \x001\x00',
+        'ASCII': b'Num 1'
     }
     
     for encoding, pattern in patterns.items():

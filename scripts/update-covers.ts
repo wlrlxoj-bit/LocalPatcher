@@ -220,8 +220,8 @@ async function identifyProblematicGames(
   console.log(`🔍 한국어 제목 누락: ${missingTitleKo.length}건`);
   console.log(`🔍 임시/플링 업로드 커버 감지: ${brokenCover.length}건`);
 
-  // 2단계: 기존 커버 URL이 실제 404인지 추가 HEAD 요청 (최대 50건 샘플)
-  const checkLimit = Math.min(gamesWithCovers.length, 50);
+  // 2단계: 기존 커버 URL이 실제 404인지 추가 HEAD 요청 (전체 건 검사)
+  const checkLimit = gamesWithCovers.length;
   console.log(
     `🔎 남은 커버 중 추가 깨짐 확인... (최대 ${checkLimit}/${gamesWithCovers.length}건 검사)`
   );
