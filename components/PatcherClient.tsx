@@ -375,8 +375,8 @@ function PartnerStoreWidget({ game, locale, t, trainerId }: PartnerStoreWidgetPr
                 {store.badge}
               </div>
               
-              <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-                <div className="flex flex-col text-right font-mono pr-2">
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end mt-3 sm:mt-0">
+                <div className="flex flex-col text-left sm:text-right font-mono sm:pr-2">
                   {store.originalStr && (
                     <span className="text-[10px] text-slate-500 line-through">
                       {store.originalStr}
@@ -695,7 +695,7 @@ export default function PatcherClient({
           </div>
           
           {(steamNewsSlot || systemReqSlot) && (
-            <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 order-first lg:order-last mb-6 lg:mb-0">
+            <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 lg:order-last mb-6 lg:mb-0">
               {steamNewsSlot}
               {systemReqSlot}
             </aside>
@@ -833,7 +833,7 @@ export default function PatcherClient({
                     <AlertTriangle className="w-8 h-8 shrink-0 text-amber-400 mt-0.5" />
                     <div>
                       <h3 className="font-bold text-lg text-white mb-2 font-outfit">
-                        {isTranslationRejected ? pt.autoVerifyFailedTitle : pt.autoVerifyInProgressTitle}
+                        {isTranslationRejected ? pt.autoVerifyFailed : pt.autoVerifyInProgress}
                       </h3>
                       <p className="text-sm leading-relaxed text-amber-100/80">
                         {isTranslationRejected ? pt.autoVerifyFailedDesc : pt.autoVerifyInProgressDesc}
@@ -1049,7 +1049,7 @@ export default function PatcherClient({
         </div>
         
         {(steamNewsSlot || systemReqSlot) && (
-          <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 order-first lg:order-last mb-6 lg:mb-0">
+          <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 lg:order-last mb-6 lg:mb-0">
             {steamNewsSlot}
             {systemReqSlot}
           </aside>
@@ -1060,6 +1060,7 @@ export default function PatcherClient({
 }
 
 function SafetyAndUsageGuideSection({ game, locale }: { game: Game; locale: Locale }) {
+  const pt = getPatcherDict(locale as Locale);
 
   return (
     <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900/40 p-6 md:p-8 backdrop-blur-md relative overflow-hidden shadow-xl" aria-labelledby="safety-guide-heading">
