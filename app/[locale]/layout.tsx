@@ -88,7 +88,7 @@ export default async function LocaleLayout({
         {/* Google Analytics 4 */}
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
-          strategy="afterInteractive"
+          strategy="lazyOnload"
         />
         <Script id="google-analytics" strategy="afterInteractive">
           {`
@@ -99,9 +99,11 @@ export default async function LocaleLayout({
           `}
         </Script>
 
-        <div>
+        <div className="flex flex-col flex-1">
           <Header locale={currentLocale} />
-          {children}
+          <main className="flex-1 w-full">
+            {children}
+          </main>
         </div>
         <Footer locale={currentLocale} />
       </body>
