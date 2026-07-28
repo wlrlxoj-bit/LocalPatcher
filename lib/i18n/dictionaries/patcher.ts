@@ -1,6 +1,15 @@
 // Auto-generated patcher dictionary
 export const patcherDict = {
   "ko": {
+    "mobileNotSupportedTitle": "트레이너 패치는 PC에서만 가능합니다",
+    "mobileNotSupportedDesc": "로컬 인메모리 패치 특성상 모바일에서는 지원되지 않습니다. 링크를 저장하고 PC(Windows)에서 다시 접속해 주세요!",
+    "saveLinkBtn": "지금 링크 저장하기",
+    "relatedTrainers": "연관 트레이너",
+    "optionsLabel": "옵션",
+    "unsupportedTrainerTitle": "한글 패치 미지원 트레이너",
+    "unsupportedTrainerDesc": "해당 게임의 트레이너 파일은 텍스트가 암호화되거나 압축(Packed)되어 있어 브라우저 환경에서 한글 패치를 진행할 수 없습니다. 번역은 지원되지 않지만, 아래 버튼을 통해 원본 영문 트레이너를 직접 다운로드하여 사용하실 수 있습니다.",
+    "totalCheatOptions": "총 {count}개 치트 옵션",
+    "mobilePromoText": "🎮 [{gameTitle}] PC 트레이너 한글 패치!\n다운로드나 설치 없이 웹에서 3초 만에 바로 변환하세요.\n🔗 {currentUrl}",
     "dropzoneTitle": "원본 게임 트레이너 실행 파일(.exe)을 여기에 올려놓으십시오",
     "dropzoneSub": "또는 컴퓨터에서 직접 파일 선택하기 (최대 크기 15MB 제한)",
     "dropzoneAlert": "※ 하단의 리스트에서 대상 게임 및 트레이너 버전을 먼저 확인해 주십시오.",
@@ -122,6 +131,15 @@ export const patcherDict = {
     "showLess": "간략히 보기"
   },
   "en": {
+    "mobileNotSupportedTitle": "Patching is only possible on PC",
+    "mobileNotSupportedDesc": "Due to local in-memory patching, mobile is not supported. Save the link and access from a PC!",
+    "saveLinkBtn": "Save Link Now",
+    "relatedTrainers": "Related Trainers",
+    "optionsLabel": "Options",
+    "unsupportedTrainerTitle": "Unsupported Trainer for Translation",
+    "unsupportedTrainerDesc": "The trainer file for this game has encrypted or packed text, making it impossible to patch in the browser environment. While translation is not supported, you can still download and use the original English trainer directly via the button below.",
+    "totalCheatOptions": "{count} cheat options total",
+    "mobilePromoText": "🎮 [{gameTitle}] PC Trainer Localization!\nConvert instantly on the web without downloads or installations.\n🔗 {currentUrl}",
     "dropzoneTitle": "Drag & drop original trainer executable (.exe) here",
     "dropzoneSub": "Or choose a file from your computer (Max 15MB limit)",
     "dropzoneAlert": "* Please verify your game and trainer version in the list below first.",
@@ -240,6 +258,15 @@ export const patcherDict = {
     "showLess": "Show less"
   },
   "ja": {
+    "mobileNotSupportedTitle": "パッチ適用はPC環境でのみ可能です",
+    "mobileNotSupportedDesc": "ローカルメモリパッチの特性上、モバイルではサポートされていません。リンクを保存し、PC(Windows)から再度アクセスしてください。",
+    "saveLinkBtn": "今すぐリンクを保存",
+    "relatedTrainers": "関連トレーナー",
+    "optionsLabel": "オプション",
+    "unsupportedTrainerTitle": "翻訳非対応トレーナー",
+    "unsupportedTrainerDesc": "該当ゲームのトレーナーファイルはテキストが暗号化または圧縮（Packed）されているため、ブラウザ環境で日本語化パッチを進行できません。翻訳はサポートされていませんが、下のボタンから元の英語トレーナーを直接ダウンロードして使用できます。",
+    "totalCheatOptions": "合計 {count} チートオプション",
+    "mobilePromoText": "🎮 [{gameTitle}] PCトレーナー日本語化パッチ!\nダウンロードやインストール不要でウェブ上で即変換。\n🔗 {currentUrl}",
     "dropzoneTitle": "オリジナルのゲームトレーナー実行ファイル（.exe）をここにドロップしてください",
     "dropzoneSub": "またはコンピュータからファイルを選択（最大15MB制限）",
     "dropzoneAlert": "※ 下記のリストから対象ゲームとトレーナーのバージョンをあらかじめご確認ください。",
@@ -359,6 +386,15 @@ export const patcherDict = {
     "showLess": "折りたたむ"
   },
   "de": {
+    "mobileNotSupportedTitle": "Patching ist nur auf dem PC möglich",
+    "mobileNotSupportedDesc": "Aufgrund des lokalen In-Memory-Patchings wird Mobile nicht unterstützt. Link speichern & am PC öffnen!",
+    "saveLinkBtn": "Link jetzt speichern",
+    "relatedTrainers": "Ähnliche Trainer",
+    "optionsLabel": "Optionen",
+    "unsupportedTrainerTitle": "Nicht unterstützter Trainer für Übersetzung",
+    "unsupportedTrainerDesc": "Die Trainerdatei für dieses Spiel hat verschlüsselten oder komprimierten (Packed) Text, wodurch ein Patch in der Browserumgebung unmöglich ist. Obwohl die Übersetzung nicht unterstützt wird, können Sie den ursprünglichen englischen Trainer direkt über die Schaltfläche unten herunterladen.",
+    "totalCheatOptions": "Insgesamt {count} Cheat-Optionen",
+    "mobilePromoText": "🎮 [{gameTitle}] PC Trainer Lokalisierung!\nOhne Download oder Installation sofort im Web umwandeln.\n🔗 {currentUrl}",
     "dropzoneTitle": "Original-Trainer EXE hierher ziehen",
     "dropzoneSub": "Oder wählen Sie eine Datei von Ihrem Computer (Max 15MB)",
     "dropzoneAlert": "* Bitte überprüfen Sie vorher die Spiele- und Trainerversion.",
@@ -478,6 +514,15 @@ export const patcherDict = {
     "showLess": "Weniger anzeigen"
   },
   "es": {
+    "mobileNotSupportedTitle": "El parcheo solo es posible en PC",
+    "mobileNotSupportedDesc": "Debido al parcheo local en memoria, el móvil no es compatible. Guarde el enlace y acceda desde un PC!",
+    "saveLinkBtn": "Guardar enlace ahora",
+    "relatedTrainers": "Entrenadores relacionados",
+    "optionsLabel": "Opciones",
+    "unsupportedTrainerTitle": "Trainer no compatible para traducción",
+    "unsupportedTrainerDesc": "El archivo del trainer para este juego tiene texto cifrado o comprimido (Packed), lo que hace imposible aplicar un parche en el entorno del navegador. Aunque no se admite la traducción, aún puede descargar y usar el trainer original en inglés directamente mediante el botón a continuación.",
+    "totalCheatOptions": "{count} opciones de trucos en total",
+    "mobilePromoText": "🎮 [{gameTitle}] Parche de PC Trainer!\nConvierta instantáneamente en la web sin descargas ni instalaciones.\n🔗 {currentUrl}",
     "dropzoneTitle": "Arrastre el EXE original del trainer aquí",
     "dropzoneSub": "O elija un archivo de su ordenador (Límite máx. 15MB)",
     "dropzoneAlert": "* Verifique la versión del juego y del trainer en la lista.",
