@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ArrowRight, Lock } from 'lucide-react';
 import { getGameTitle, Locale } from '@/lib/i18n/index';
 
@@ -38,12 +39,13 @@ export default function GameCard({ game, trainerVersion, optionCount, locale, op
       <div 
         className="h-36 bg-slate-800 relative flex items-center justify-center overflow-hidden" 
       >
-        <img 
+        <Image 
           src={game.cover_image_url}
           alt={game.title_en}
-          loading={priority ? undefined : "lazy"}
-          {...(priority ? { fetchPriority: 'high' as any } : {})}
-          className="absolute inset-0 w-full h-full object-cover z-0"
+          fill
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          priority={priority}
+          className="object-cover z-0"
         />
         <div className="absolute inset-0 bg-slate-950/70 group-hover:bg-slate-950/60 transition-colors duration-300 z-10"></div>
         

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ChevronLeft, ArrowRight, AlertTriangle, Share2 } from 'lucide-react';
 import { Locale, getCommonDict, getPatcherDict, getGameTitle } from '@/lib/i18n';
 import DropZone from '@/components/DropZone';
@@ -581,12 +582,13 @@ export default function PatcherClient({
             <div 
               className="w-20 h-28 bg-slate-800 rounded-xl overflow-hidden border border-slate-700/50 shadow-md shrink-0 relative"
             >
-              <img 
+              <Image 
                 src={game.cover_image_url} 
                 alt={`${game.title_en} cover`}
-                fetchPriority="high"
-                decoding="sync"
-                className="w-full h-full object-cover"
+                fill
+                sizes="80px"
+                priority
+                className="object-cover"
               />
             </div>
             <div className="pt-1">
@@ -746,12 +748,13 @@ export default function PatcherClient({
           <div 
             className="w-20 h-28 bg-slate-800 rounded-xl overflow-hidden border border-slate-700/50 shadow-md shrink-0 relative"
           >
-            <img 
+            <Image 
               src={game.cover_image_url} 
               alt={`${game.title_en} cover`}
-              fetchPriority="high"
-              decoding="sync"
-              className="w-full h-full object-cover"
+              fill
+              sizes="80px"
+              priority
+              className="object-cover"
             />
           </div>
           <div className="pt-1 flex-1">

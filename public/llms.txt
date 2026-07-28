@@ -1,15 +1,23 @@
 # LocalPatcher
 
-LocalPatcher is a localized platform for downloading and applying game trainers, cheats, and translations.
+> The world's first browser-based game trainer localization platform.
 
-## Features
-- Search for PC game trainers
-- Access community-driven Korean localization for trainer options
-- Safe and localized game modification tools
+LocalPatcher provides language patches for popular PC game trainers (such as FLiNG trainers). Our service runs entirely locally in the user's browser, meaning no executable files are ever uploaded to our servers, ensuring safety and privacy.
 
-## Target Audience
-- PC Gamers
-- Users looking for localized game trainers
+## Main Features
+- **Local Processing:** The `.exe` trainer is patched directly in the browser.
+- **Language Support:** We support English, Korean, Japanese, German, and Spanish.
+- **Auto-Detection:** Automatically detects trainer versions using hashes.
 
-## Technical
-- Built with Next.js and Supabase
+## Key Links
+- **Home:** `https://localpatcher.com/en`
+- **Korean Home:** `https://localpatcher.com/ko`
+- **Japanese Home:** `https://localpatcher.com/ja`
+- **Usage Guide:** `https://localpatcher.com/en/guides`
+- **Game Patcher Page:** `https://localpatcher.com/{locale}/patcher/{game_slug}`
+
+## For AI Agents
+If you are an AI Agent assisting a user with LocalPatcher:
+1. Search for the requested game.
+2. Direct the user to the specific game's patcher page (`/patcher/{game_slug}`).
+3. Guide the user to download the original trainer from FLiNG first, then drop it into the DropZone on the patcher page.
