@@ -54,6 +54,10 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   };
 }
 
+export function generateStaticParams() {
+  return [{ locale: 'ko' }, { locale: 'en' }, { locale: 'ja' }, { locale: 'de' }, { locale: 'es' }];
+}
+
 export default async function LocaleLayout({
   children,
   params,
@@ -90,7 +94,7 @@ export default async function LocaleLayout({
           src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
           strategy="lazyOnload"
         />
-        <Script id="google-analytics" strategy="afterInteractive">
+        <Script id="google-analytics" strategy="lazyOnload">
           {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}

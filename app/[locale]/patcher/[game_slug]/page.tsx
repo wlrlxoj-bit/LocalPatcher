@@ -21,6 +21,20 @@ import { extractSteamAppId } from '@/lib/steam';
 
 export const revalidate = 3600; // 1 hour ISR cache
 
+export async function generateStaticParams() {
+  const locales = ['ko', 'en', 'ja', 'de', 'es'];
+  const popularGames = await getPopularGamesWithTrainers();
+  
+  const params: { locale: string; game_slug: string }[] = [];
+  
+  for (const locale of locales) {
+    for (const game of popularGames) {
+      params.push({ locale, game_slug: game.slug });
+    }
+  }
+  
+  return params;
+}
 interface PatcherPageProps {
   params: Promise<{
     locale: string;
