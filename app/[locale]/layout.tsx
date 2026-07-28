@@ -6,6 +6,7 @@ import Script from 'next/script';
 import { SITE_URL } from '@/lib/site';
 import type { Locale } from '@/lib/i18n/index';
 import { getLayoutMetadata } from '@/lib/i18n/index';
+import Providers from '@/components/ProgressBar';
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -103,13 +104,13 @@ export default async function LocaleLayout({
           `}
         </Script>
 
-        <div className="flex flex-col flex-1">
+        <Providers>
           <Header locale={currentLocale} />
-          <main className="flex-1 w-full">
+          <main className="flex-1 w-full flex flex-col">
             {children}
           </main>
-        </div>
-        <Footer locale={currentLocale} />
+          <Footer locale={currentLocale} />
+        </Providers>
       </body>
     </html>
   );
