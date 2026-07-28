@@ -1,0 +1,15 @@
+# LocalPatcher
+
+LocalPatcher is a localized platform for downloading and applying game trainers, cheats, and translations.
+
+## Features
+- Search for PC game trainers
+- Access community-driven Korean localization for trainer options
+- Safe and localized game modification tools
+
+## Target Audience
+- PC Gamers
+- Users looking for localized game trainers
+
+## Technical
+- Built with Next.js and Supabase

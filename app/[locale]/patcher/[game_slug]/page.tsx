@@ -32,8 +32,18 @@ const ELDEN_RING_SOURCE_SLUG = 'elden-ring-shadow-of-the-erdtree-trainer-1768067
 
 async function getCanonicalPatcherData(requestedSlug: string) {
   const aliasSlug = await resolveGameSlugAlias(requestedSlug);
-  const canonicalSlug = aliasSlug ?? requestedSlug;
-  const game = await getGameBySlug(canonicalSlug);
+  let canonicalSlug = aliasSlug ?? requestedSlug;
+  let game = await getGameBySlug(canonicalSlug);
+
+  if (!game && canonicalSlug.endsWith('-trainer')) {
+    const fallbackSlug = canonicalSlug.slice(0, -'-trainer'.length);
+    const fallbackGame = await getGameBySlug(fallbackSlug);
+    if (fallbackGame) {
+      canonicalSlug = fallbackSlug;
+      game = fallbackGame;
+    }
+  }
+
   if (!game) return null;
 
   let trainers = await getTrainersForGame(game.id);
@@ -59,6 +69,11 @@ export async function generateMetadata({ params }: PatcherPageProps) {
   if (!patcherData) {
     return {};
   }
+  
+  if (patcherData.canonicalSlug !== game_slug) {
+    permanentRedirect(`/${currentLocale}/patcher/${patcherData.canonicalSlug}`);
+  }
+
   const { canonicalSlug, game, trainers } = patcherData;
   const enEligible = trainers.some((trainer) => trainer.option_count > 0);
   const eligibleTrainerIds = trainers
@@ -155,14 +170,8 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
   if (patcherData && patcherData.canonicalSlug !== game_slug) {
     permanentRedirect(`/${currentLocale}/patcher/${patcherData.canonicalSlug}`);
   }
-  let game = patcherData?.game ?? null;
-  if (!game && game_slug.endsWith('-trainer')) {
-    const canonicalSlug = game_slug.slice(0, -'-trainer'.length);
-    game = await getGameBySlug(canonicalSlug);
-    if (game) {
-      permanentRedirect(`/${currentLocale}/patcher/${canonicalSlug}`);
-    }
-  }
+  
+  const game = patcherData?.game ?? null;
   if (!game) {
     notFound();
   }
