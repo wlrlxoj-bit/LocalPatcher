@@ -392,7 +392,7 @@ function PartnerStoreWidget({ game, locale, t, trainerId }: PartnerStoreWidgetPr
                   rel="noopener noreferrer"
                   onClick={() => trackMerchantClick(store.key)}
                   aria-label={`${store.name} - ${store.priceStr}`}
-                  className={`inline-flex items-center justify-center px-4 py-2 rounded-lg border text-xs font-bold transition-all duration-200 shrink-0 w-full sm:w-auto ${btnStyle}`}
+                  className={`inline-flex items-center justify-center px-4 py-2 rounded-lg border text-xs font-bold transition-all duration-200 flex-1 sm:flex-none sm:w-auto text-center ${btnStyle}`}
                 >
                   {store.key === 'steam' ? (t.goToSteam || 'Go to Steam ↗') : (t.viewDeal || 'View Deal')}
                 </a>
@@ -542,11 +542,11 @@ export default function PatcherClient({
     let promoText = '';
     
     if (locale === 'ko') {
-      promoText = `🎮 [${game.title_ko}] LocalPatcher 로컬 한글 변환 완료!\n선택한 파일을 서버에 업로드하지 않고 브라우저에서 번역 패치를 적용했습니다.\n🔗 ${currentUrl}`;
+      promoText = `🎮 [${game.title_ko || game.title_en}] PC 트레이너 한글 패치!\n다운로드나 설치 없이 웹에서 3초 만에 바로 변환하세요.\n🔗 ${currentUrl}`;
     } else if (locale === 'ja') {
-      promoText = `🎮 [${game.title_ja || game.title_en}] LocalPatcherでローカル日本語変換が完了!\n選択したファイルをサーバーへアップロードせず、ブラウザ内で翻訳パッチを適用しました。\n🔗 ${currentUrl}`;
+      promoText = `🎮 [${game.title_ja || game.title_en}] PCトレーナー日本語化パッチ!\nダウンロードやインストール不要でウェブ上で即変換。\n🔗 ${currentUrl}`;
     } else {
-      promoText = `🎮 [${game.title_en}] LocalPatcher local language conversion complete!\nThe selected file was patched locally in the browser without being uploaded to the server.\n🔗 ${currentUrl}`;
+      promoText = `🎮 [${game.title_en}] PC Trainer Localization!\nConvert instantly on the web without downloads or installations.\n🔗 ${currentUrl}`;
     }
 
     if (navigator.share) {
@@ -573,10 +573,9 @@ export default function PatcherClient({
 
   if (locale === 'en') {
     return (
-      <div className="max-w-6xl mx-auto px-6 py-12 flex flex-col lg:flex-row gap-8 items-start">
-        <div className="flex-1 w-full min-w-0 flex flex-col order-2 lg:order-1">
-          {/* Back button */}
-        <div className="mb-6">
+      <div className="max-w-6xl mx-auto px-6 py-12 flex flex-col gap-6 items-start w-full">
+        {/* Back button */}
+        <div className="mb-0 w-full">
           <Link 
             href={`/${locale}`}
             className="inline-flex items-center space-x-1 text-xs text-slate-500 hover:text-cyan-400 transition-colors"
@@ -623,7 +622,9 @@ export default function PatcherClient({
           </div>
         </div>
 
-        {/* Secondary Clean Card for original FLiNG download */}
+        <div className="flex flex-col lg:flex-row gap-8 w-full items-start">
+          <div className="flex-1 w-full min-w-0 flex flex-col">
+            {/* Secondary Clean Card for original FLiNG download */}
         <div className="relative rounded-xl border border-slate-800 bg-slate-900/30 p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 mb-8 shadow-md">
           <div className="flex flex-col text-center md:text-left gap-1">
             <h3 className="text-lg font-bold text-white font-outfit">
@@ -646,7 +647,7 @@ export default function PatcherClient({
         </div>
 
         {/* Supported Trainer Builds */}
-        <div className="p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.05)]">
+        <div className="hidden md:block p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.05)]">
           <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent"></div>
           
           <h5 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
@@ -725,24 +726,23 @@ export default function PatcherClient({
 
             {/* systemReqSlot was removed from here because it's now in the sidebar */}
 
+          </div>
+          
+          {(steamNewsSlot || systemReqSlot) && (
+            <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 order-first lg:order-last mb-6 lg:mb-0">
+              {steamNewsSlot}
+              {systemReqSlot}
+            </aside>
+          )}
         </div>
-        
-        {(steamNewsSlot || systemReqSlot) && (
-          <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 order-1 lg:order-2">
-            {steamNewsSlot}
-            {systemReqSlot}
-          </aside>
-        )}
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-12 flex flex-col lg:flex-row gap-8 items-start">
-      <div className="flex-1 w-full min-w-0 flex flex-col order-2 lg:order-1">
-      
+    <div className="max-w-6xl mx-auto px-6 py-12 flex flex-col gap-6 items-start w-full">
       {/* Back button */}
-      <div className="mb-6">
+      <div className="mb-0 w-full">
         <Link 
           href={`/${locale}`}
           className="inline-flex items-center space-x-1 text-xs text-slate-500 hover:text-cyan-400 transition-colors"
@@ -834,8 +834,10 @@ export default function PatcherClient({
         </div>
       </div>
 
-      {/* Main Patcher Area */}
-      {selectedTrainer ? (() => {
+      <div className="flex flex-col lg:flex-row gap-8 w-full items-start">
+        <div className="flex-1 w-full min-w-0 flex flex-col">
+          {/* Main Patcher Area */}
+          {selectedTrainer ? (() => {
         const isUnpatchable = selectedTrainer.option_count === 0;
         const isTranslationPending =
           (selectedTrainer.option_count ?? 0) > 0 &&
@@ -907,7 +909,7 @@ export default function PatcherClient({
               </div>
             ) : (
               <>
-                <section aria-labelledby="patcher-start-guide-title" className="rounded-2xl border border-cyan-500/35 bg-gradient-to-br from-cyan-950/35 via-slate-900/70 to-indigo-950/30 p-5 sm:p-6 shadow-[0_0_30px_rgba(6,182,212,0.12)]">
+                <section aria-labelledby="patcher-start-guide-title" className="hidden md:block rounded-2xl border border-cyan-500/35 bg-gradient-to-br from-cyan-950/35 via-slate-900/70 to-indigo-950/30 p-5 sm:p-6 shadow-[0_0_30px_rgba(6,182,212,0.12)]">
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-[3fr_2fr] md:items-center">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-400">{startGuide.eyebrow}</p>
@@ -986,7 +988,7 @@ export default function PatcherClient({
             )}
 
             {/* Supported Trainer Builds */}
-            <div className="p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.05)]">
+            <div className="hidden md:block p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.05)]">
               <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent"></div>
               
               <h5 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
@@ -1129,14 +1131,15 @@ export default function PatcherClient({
 
       {/* systemReqSlot was removed from here because it's now in the sidebar */}
 
+        </div>
+        
+        {(steamNewsSlot || systemReqSlot) && (
+          <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 order-first lg:order-last mb-6 lg:mb-0">
+            {steamNewsSlot}
+            {systemReqSlot}
+          </aside>
+        )}
       </div>
-      
-      {(steamNewsSlot || systemReqSlot) && (
-        <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 order-1 lg:order-2">
-          {steamNewsSlot}
-          {systemReqSlot}
-        </aside>
-      )}
     </div>
   );
 }
