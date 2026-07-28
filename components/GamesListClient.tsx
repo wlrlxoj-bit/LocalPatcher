@@ -304,7 +304,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
           {/* Left Column: Recent Updates */}
           <div className="lg:col-span-3 flex flex-col gap-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 w-full">
-              {latestGames.slice(0, visibleCount).map(game => {
+              {latestGames.slice(0, visibleCount).map((game, index) => {
                 const trainer = getTrainerInfo(game.id);
                 return (
                   <GameCard
@@ -314,6 +314,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
                     optionCount={trainer.count}
                     locale={locale}
                     optionsLabel={pt.optionsCount}
+                    priority={index < 6}
                   />
                 );
               })}
@@ -399,7 +400,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
           {/* Game Cards Grid for Search Results */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 w-full max-w-4xl mb-8">
             {filteredGames.length > 0 ? (
-              filteredGames.slice(0, visibleCount).map(game => {
+              filteredGames.slice(0, visibleCount).map((game, index) => {
                 const trainer = getTrainerInfo(game.id);
                 return (
                   <GameCard
@@ -409,6 +410,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
                     optionCount={trainer.count}
                     locale={locale}
                     optionsLabel={pt.optionsCount}
+                    priority={index < 6}
                   />
                 );
               })

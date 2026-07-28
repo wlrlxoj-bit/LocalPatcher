@@ -23,9 +23,10 @@ interface GameCardProps {
   locale: Locale;
   optionsLabel: string;
   hideDetails?: boolean;
+  priority?: boolean;
 }
 
-export default function GameCard({ game, trainerVersion, optionCount, locale, optionsLabel, hideDetails = false }: GameCardProps) {
+export default function GameCard({ game, trainerVersion, optionCount, locale, optionsLabel, hideDetails = false, priority = false }: GameCardProps) {
   const displayTitle = getGameTitle(game, locale);
   
   return (
@@ -35,10 +36,16 @@ export default function GameCard({ game, trainerVersion, optionCount, locale, op
     >
       {/* Game Cover Mock Image */}
       <div 
-        className="h-36 bg-slate-800 relative flex items-center justify-center overflow-hidden bg-cover bg-center" 
-        style={{ backgroundImage: `url(${game.cover_image_url})` }}
+        className="h-36 bg-slate-800 relative flex items-center justify-center overflow-hidden" 
       >
-        <div className="absolute inset-0 bg-slate-950/70 group-hover:bg-slate-950/60 transition-colors duration-300"></div>
+        <img 
+          src={game.cover_image_url}
+          alt={game.title_en}
+          loading={priority ? undefined : "lazy"}
+          {...(priority ? { fetchPriority: 'high' as any } : {})}
+          className="absolute inset-0 w-full h-full object-cover z-0"
+        />
+        <div className="absolute inset-0 bg-slate-950/70 group-hover:bg-slate-950/60 transition-colors duration-300 z-10"></div>
         
         {/* Anti-cheat solution indicator badge */}
         {game.anti_cheat && game.anti_cheat !== 'none' && (

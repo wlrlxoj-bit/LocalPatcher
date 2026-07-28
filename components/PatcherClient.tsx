@@ -579,9 +579,16 @@ export default function PatcherClient({
           {/* Game Specs */}
           <div className="flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-4 z-10">
             <div 
-              className="w-20 h-28 bg-slate-800 rounded-xl bg-cover bg-center border border-slate-700/50 shadow-md shrink-0"
-              style={{ backgroundImage: `url(${game.cover_image_url})` }}
-            />
+              className="w-20 h-28 bg-slate-800 rounded-xl overflow-hidden border border-slate-700/50 shadow-md shrink-0 relative"
+            >
+              <img 
+                src={game.cover_image_url} 
+                alt={`${game.title_en} cover`}
+                fetchPriority="high"
+                decoding="sync"
+                className="w-full h-full object-cover"
+              />
+            </div>
             <div className="pt-1">
               <h1 className="text-xl md:text-2xl font-bold text-white font-outfit">{displayTitle}</h1>
               <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-mono">Original Game: {game.title_en}</p>
@@ -737,9 +744,16 @@ export default function PatcherClient({
         {/* Game Specs */}
         <div className="flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-4 z-10">
           <div 
-            className="w-20 h-28 bg-slate-800 rounded-xl bg-cover bg-center border border-slate-700/50 shadow-md shrink-0"
-            style={{ backgroundImage: `url(${game.cover_image_url})` }}
-          />
+            className="w-20 h-28 bg-slate-800 rounded-xl overflow-hidden border border-slate-700/50 shadow-md shrink-0 relative"
+          >
+            <img 
+              src={game.cover_image_url} 
+              alt={`${game.title_en} cover`}
+              fetchPriority="high"
+              decoding="sync"
+              className="w-full h-full object-cover"
+            />
+          </div>
           <div className="pt-1 flex-1">
             <h1 className="text-xl md:text-2xl font-bold text-white font-outfit">{displayTitle}</h1>
             <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-mono mb-3">Original Game: {game.title_en}</p>
