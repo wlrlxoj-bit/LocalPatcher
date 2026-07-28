@@ -537,7 +537,7 @@ export default function PatcherClient({
     });
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
     let promoText = '';
     
@@ -547,6 +547,19 @@ export default function PatcherClient({
       promoText = `🎮 [${game.title_ja || game.title_en}] LocalPatcherでローカル日本語変換が完了!\n選択したファイルをサーバーへアップロードせず、ブラウザ内で翻訳パッチを適用しました。\n🔗 ${currentUrl}`;
     } else {
       promoText = `🎮 [${game.title_en}] LocalPatcher local language conversion complete!\nThe selected file was patched locally in the browser without being uploaded to the server.\n🔗 ${currentUrl}`;
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: document.title,
+          text: promoText,
+        });
+        return;
+      } catch (err) {
+        // Fallback if user cancels or share fails
+        console.warn('Share API failed or cancelled', err);
+      }
     }
     
     navigator.clipboard.writeText(promoText)
@@ -561,7 +574,7 @@ export default function PatcherClient({
   if (locale === 'en') {
     return (
       <div className="max-w-6xl mx-auto px-6 py-12 flex flex-col lg:flex-row gap-8 items-start">
-        <div className="flex-1 w-full min-w-0 flex flex-col">
+        <div className="flex-1 w-full min-w-0 flex flex-col order-2 lg:order-1">
           {/* Back button */}
         <div className="mb-6">
           <Link 
@@ -715,7 +728,7 @@ export default function PatcherClient({
         </div>
         
         {(steamNewsSlot || systemReqSlot) && (
-          <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6">
+          <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 order-1 lg:order-2">
             {steamNewsSlot}
             {systemReqSlot}
           </aside>
@@ -726,7 +739,7 @@ export default function PatcherClient({
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-12 flex flex-col lg:flex-row gap-8 items-start">
-      <div className="flex-1 w-full min-w-0 flex flex-col">
+      <div className="flex-1 w-full min-w-0 flex flex-col order-2 lg:order-1">
       
       {/* Back button */}
       <div className="mb-6">
@@ -926,15 +939,49 @@ export default function PatcherClient({
                 </section>
 
                 <div ref={patcherSectionRef} className="h-px w-full" aria-hidden="true" />
-                <DropZone 
-                  locale={locale} 
-                  gameId={game.id}
-                  gameSlug={game.slug}
-                  trainer={selectedTrainer}
-                  allTrainers={sortedTrainers}
-                  mappingsMap={mappingsMap}
-                  onTrainerDetected={handleTrainerDetected}
-                />
+                <div className="hidden md:block">
+                  <DropZone 
+                    locale={locale} 
+                    gameId={game.id}
+                    gameSlug={game.slug}
+                    trainer={selectedTrainer}
+                    allTrainers={sortedTrainers}
+                    mappingsMap={mappingsMap}
+                    onTrainerDetected={handleTrainerDetected}
+                  />
+                </div>
+                <div className="md:hidden p-6 md:p-8 rounded-2xl border border-cyan-500/20 bg-slate-900/40 backdrop-blur-md mb-8 text-center flex flex-col items-center justify-center shadow-lg">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-cyan-500/10 mb-6">
+                    <svg className="w-8 h-8 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <h2 className="text-xl font-bold text-slate-200 mb-3">
+                    {locale === 'ko' ? '트레이너 패치는 PC에서만 가능합니다' :
+                     locale === 'ja' ? 'パッチ適用はPC環境でのみ可能です' :
+                     locale === 'de' ? 'Patching ist nur auf dem PC möglich' :
+                     locale === 'es' ? 'El parcheo solo es posible en PC' :
+                     'Patching is only possible on PC'}
+                  </h2>
+                  <p className="text-sm text-slate-400 max-w-md mx-auto mb-8 leading-relaxed">
+                    {locale === 'ko' ? '로컬 인메모리 패치 특성상 모바일에서는 지원되지 않습니다. 링크를 저장하고 PC(Windows)에서 다시 접속해 주세요!' :
+                     locale === 'ja' ? 'ローカルパッチの特性上、モバイルではサポートされていません。リンクを保存し、PC(Windows)から再度アクセスしてください。' :
+                     locale === 'de' ? 'Aufgrund des lokalen Patchings wird Mobile nicht unterstützt. Link speichern & am PC öffnen.' :
+                     locale === 'es' ? 'Debido al parcheo local, móvil no es compatible. Guarde el enlace y acceda desde un PC.' :
+                     'Due to local patching, mobile is not supported. Save the link and access from a PC.'}
+                  </p>
+                  <button
+                    onClick={handleShare}
+                    className="inline-flex items-center justify-center px-6 py-3 rounded-xl border border-cyan-500 text-sm font-bold text-cyan-950 bg-cyan-500 hover:bg-cyan-400 transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.4)] w-full max-w-[280px]"
+                  >
+                    <Share2 className="w-4 h-4 mr-2" />
+                    {locale === 'ko' ? '지금 링크 저장하기' :
+                     locale === 'ja' ? '今すぐリンクを保存' :
+                     locale === 'de' ? 'Link jetzt speichern' :
+                     locale === 'es' ? 'Guardar enlace ahora' :
+                     'Save Link Now'}
+                  </button>
+                </div>
               </>
             )}
 
@@ -1085,7 +1132,7 @@ export default function PatcherClient({
       </div>
       
       {(steamNewsSlot || systemReqSlot) && (
-        <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6">
+        <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6 order-1 lg:order-2">
           {steamNewsSlot}
           {systemReqSlot}
         </aside>
