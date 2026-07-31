@@ -33,7 +33,7 @@ async function readAllPages<T>(fetchPage: (from: number, to: number) => Promise<
   throw new Error('색인 자격 조회가 안전 상한을 초과했습니다.');
 }
 
-/** 영어는 옵션 존재, 다국어(한국어·일본어·독일어·스페인어)는 승인 번역까지 있어야 색인 대상으로 판정합니다. */
+/** 영어나 다국어 번역 여부에 관계없이 트레이너(옵션)가 존재하면 무조건 색인(Index)을 허용합니다. */
 export const isPatcherIndexEligible = cache(async (gameId: number, locale: string): Promise<boolean> => {
   if (locale !== 'en' && locale !== 'ko' && locale !== 'ja' && locale !== 'de' && locale !== 'es') return false;
   const cacheKey = `${gameId}:${locale}`;
@@ -47,21 +47,7 @@ export const isPatcherIndexEligible = cache(async (gameId: number, locale: strin
   try {
     const { data: trainers, error: trainerError } = await supabase.from('trainers').select('id, option_count').eq('game_id', gameId).gt('option_count', 0);
     if (trainerError) throw trainerError;
-    if (!trainers?.length) {
-      eligibilityCache.set(cacheKey, { value: false, cachedAt: Date.now() });
-      return false;
-    }
-    let eligible = true;
-    if (locale !== 'en') {
-      const { count, error } = await supabase
-        .from('translation_mappings')
-        .select('id', { count: 'exact', head: true })
-        .in('trainer_id', trainers.map((trainer) => trainer.id))
-        .eq('language_code', locale)
-        .eq('is_approved', true);
-      if (error) throw error;
-      eligible = (count ?? 0) > 0;
-    }
+    const eligible = !!(trainers && trainers.length > 0);
     eligibilityCache.set(cacheKey, { value: eligible, cachedAt: Date.now() });
     return eligible;
   } catch (error) {
@@ -91,40 +77,17 @@ export async function getEligiblePatcherSlugs(locale: IndexableLocale): Promise<
       sitemapEligibilityCache.set(locale, { value: [], cachedAt: Date.now() });
       return [];
     }
-    let eligibleGameIds: Set<number>;
-    if (locale === 'en') {
-      eligibleGameIds = new Set(trainers.map((trainer) => trainer.game_id));
-    } else {
-      const mappedTrainerIds = new Set<number>();
-      for (let offset = 0; offset < trainers.length; offset += ID_CHUNK_SIZE) {
-        const trainerIds = trainers.slice(offset, offset + ID_CHUNK_SIZE).map((trainer) => trainer.id);
-        const mappings = await readAllPages<{ trainer_id: number }>(async (from, to) =>
-          await client
-            .from('translation_mappings')
-            .select('trainer_id')
-            .in('trainer_id', trainerIds)
-            .eq('language_code', locale)
-            .eq('is_approved', true)
-            .order('id')
-            .range(from, to)
-        );
-        mappings.forEach((mapping) => mappedTrainerIds.add(mapping.trainer_id));
-      }
-      eligibleGameIds = new Set(
-        trainers
-          .filter((trainer) => mappedTrainerIds.has(trainer.id))
-          .map((trainer) => trainer.game_id)
-      );
-    }
-    const existingSlugs = new Set(games.map((game) => game.slug));
-    const titleBySlug = new Map(games.map((game) => [game.slug, game.title_en]));
-    const slugs = [...new Set(
-      games
-        .filter((game) => eligibleGameIds.has(game.id))
-        .map((game) => canonicalizeListedGameSlug(game.slug, existingSlugs, titleBySlug))
-    )];
-    sitemapEligibilityCache.set(locale, { value: slugs, cachedAt: Date.now() });
-    return [...slugs];
+    
+    // 번역 여부에 관계없이 트레이너가 존재하는 모든 게임을 색인 대상(사이트맵)에 포함합니다.
+    const eligibleGameIds = new Set(trainers.map((trainer) => trainer.game_id));
+    const eligibleSlugs = games.filter((game) => eligibleGameIds.has(game.id)).map((game) => game.slug);
+    
+    const existingSlugs = new Set(eligibleSlugs);
+    const finalSlugs = [...new Set(eligibleSlugs.map((slug) => canonicalizeListedGameSlug(slug, existingSlugs)))];
+    
+    sitemapEligibilityCache.set(locale, { value: finalSlugs, cachedAt: Date.now() });
+    return finalSlugs;
+
   } catch (error) {
     const cached = readStaleCache(sitemapEligibilityCache.get(locale));
     if (cached !== undefined) return [...cached];
