@@ -339,24 +339,33 @@ export async function getGames() {
 }
 
 export const getGamesWithTrainers = unstable_cache(async () => {
+  const processData = (games: any[]) => {
+    return games.sort((a, b) => {
+      const maxA = a.trainers?.length > 0 ? Math.max(...a.trainers.map((t: any) => t.id)) : 0;
+      const maxB = b.trainers?.length > 0 ? Math.max(...b.trainers.map((t: any) => t.id)) : 0;
+      if (maxA !== maxB) return maxB - maxA;
+      return b.id - a.id;
+    });
+  };
+
   if (!supabase) {
-    return mockGames.map(game => ({
+    return processData(mockGames.map(game => ({
       ...game,
       trainers: mockTrainers.filter(t => t.game_id === game.id)
-    }));
+    })));
   }
   try {
     const { data, error } = await supabase
       .from('games')
       .select('*, trainers(id, version_str, option_count)');
     if (error || !data) throw error || new Error('No data');
-    return data;
+    return processData(data);
   } catch (err) {
     console.warn('getGamesWithTrainers failed, falling back:', err);
-    return mockGames.map(game => ({
+    return processData(mockGames.map(game => ({
       ...game,
       trainers: mockTrainers.filter(t => t.game_id === game.id)
-    }));
+    })));
   }
 }, ['games-with-trainers'], { revalidate: 3600 });
 
