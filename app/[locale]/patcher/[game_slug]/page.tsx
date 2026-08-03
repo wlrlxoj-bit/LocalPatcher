@@ -101,9 +101,8 @@ export async function generateMetadata({ params }: PatcherPageProps) {
     ? (metadataMappings[latestTrainer.id] || []).length > 0
     : false;
 
-  const indexEligible = currentLocale === 'en' 
-    ? enEligible 
-    : hasApprovedTranslation;
+  // 영어나 다국어 번역 여부에 관계없이 트레이너(옵션)가 존재하면 무조건 색인(Index)을 허용합니다.
+  const indexEligible = enEligible;
 
   const alternateLanguages: Record<string, string> = {
     en: `/en/patcher/${canonicalSlug}`,
