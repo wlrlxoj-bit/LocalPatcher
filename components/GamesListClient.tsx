@@ -174,7 +174,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
   const gamesWithTrainers = games;
 
   // Split into latest and popular games
-  const latestGames = [...gamesWithTrainers].sort((a, b) => b.id - a.id);
+  const latestGames = [...gamesWithTrainers];
 
   const popularGames = gamesWithTrainers
     .filter(game => game.is_popular === true)
@@ -233,7 +233,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
         }
         return isAPopular ? -1 : 1;
       }
-      return b.id - a.id;
+      return gamesWithTrainers.indexOf(a) - gamesWithTrainers.indexOf(b);
     });
 
   return (
