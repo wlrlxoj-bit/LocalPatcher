@@ -16,11 +16,36 @@ export default function AdminSystemPage() {
     setRunning(taskId);
     addLog(`Started task: ${taskId}`);
     
-    // Placeholder for actual API calls that run python scripts or Next.js background workers
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    addLog(`Task completed successfully: ${taskId}`);
-    setRunning(null);
+    try {
+      if (taskId === 'purge-cache') {
+        const res = await fetch('/api/admin/system/purge', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to purge cache');
+        addLog(`[Success] Next.js Data Cache Purged!`);
+      } else if (taskId === 'sync-popular') {
+        const res = await fetch('/api/admin/system/trigger-workflow', { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workflowId: 'scraper.yml' }) 
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to trigger workflow');
+        addLog(`[Success] GitHub Action (scraper.yml) dispatched.`);
+      } else if (taskId === 'gh-cover-maintenance') {
+        const res = await fetch('/api/admin/system/trigger-workflow', { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workflowId: 'maintenance.yml' }) 
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to trigger workflow');
+        addLog(`[Success] GitHub Action (maintenance.yml) dispatched.`);
+      }
+    } catch (err: any) {
+      addLog(`[Error] ${err.message}`);
+    } finally {
+      setRunning(null);
+    }
   };
 
   return (
@@ -35,7 +60,7 @@ export default function AdminSystemPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4">
           
-          {/* 1. Sync Popular Trainers */}
+          {/* 1. Sync Popular Trainers (scraper.yml) */}
           <div className="p-5 rounded-2xl border border-slate-800 bg-slate-950/50 space-y-4">
             <div className="flex items-start justify-between">
               <div>
@@ -45,7 +70,7 @@ export default function AdminSystemPage() {
                 </h4>
                 <p className="text-xs text-slate-400 mt-1">
                   Runs the crawler to fetch the latest trainer versions from FLiNG.<br/>
-                  <span className="text-slate-500">FLiNG 사이트에서 최신 트레이너 버전을 수집합니다.</span>
+                  <span className="text-slate-500">FLiNG 사이트에서 최신 트레이너 버전을 수집합니다. (GitHub Action)</span>
                 </p>
               </div>
               <button 
@@ -58,25 +83,25 @@ export default function AdminSystemPage() {
             </div>
           </div>
 
-          {/* 2. Backfill SEO Metadata */}
+          {/* 2. Game Cover Image Maintenance (maintenance.yml) */}
           <div className="p-5 rounded-2xl border border-slate-800 bg-slate-950/50 space-y-4">
             <div className="flex items-start justify-between">
               <div>
                 <h4 className="text-sm font-bold text-white flex items-center">
-                  <HardDrive className="w-4 h-4 mr-2 text-indigo-400" />
-                  Backfill SEO Metadata
+                  <Settings className="w-4 h-4 mr-2 text-amber-400" />
+                  Game Cover Image Maintenance
                 </h4>
                 <p className="text-xs text-slate-400 mt-1">
-                  Fetches Steam APIs to populate missing game covers and descriptions.<br/>
-                  <span className="text-slate-500">Steam API를 조회하여 누락된 게임 커버와 설명을 보완합니다.</span>
+                  Regularly backfills missing game cover images and metadata via Steam API.<br/>
+                  <span className="text-slate-500">Steam API를 통해 누락된 게임 커버 이미지와 메타데이터를 정기적으로 보완합니다. (GitHub Action)</span>
                 </p>
               </div>
               <button 
                 disabled={running !== null}
-                onClick={() => handleRunTask('backfill-seo')}
-                className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 disabled:opacity-50"
+                onClick={() => handleRunTask('gh-cover-maintenance')}
+                className="p-2 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 disabled:opacity-50"
               >
-                {running === 'backfill-seo' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                {running === 'gh-cover-maintenance' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
               </button>
             </div>
           </div>
@@ -100,52 +125,6 @@ export default function AdminSystemPage() {
                 className="p-2 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 disabled:opacity-50"
               >
                 {running === 'purge-cache' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-
-          {/* 4. GH Action: Auto-Scraper Pipeline */}
-          <div className="p-5 rounded-2xl border border-slate-800 bg-slate-950/50 space-y-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <h4 className="text-sm font-bold text-white flex items-center">
-                  <Settings className="w-4 h-4 mr-2 text-emerald-400" />
-                  FLiNG Trainer Auto-Scraper Pipeline
-                </h4>
-                <p className="text-xs text-slate-400 mt-1">
-                  Automatically scrapes the latest trainers from FLiNG and runs the translation pipeline.<br/>
-                  <span className="text-slate-500">FLiNG 사이트에서 최신 트레이너를 자동으로 수집하고 번역 파이프라인을 실행합니다. (GitHub Action)</span>
-                </p>
-              </div>
-              <button 
-                disabled={running !== null}
-                onClick={() => handleRunTask('gh-scraper-pipeline')}
-                className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 disabled:opacity-50"
-              >
-                {running === 'gh-scraper-pipeline' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-
-          {/* 5. GH Action: Game Cover Image Maintenance */}
-          <div className="p-5 rounded-2xl border border-slate-800 bg-slate-950/50 space-y-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <h4 className="text-sm font-bold text-white flex items-center">
-                  <Settings className="w-4 h-4 mr-2 text-amber-400" />
-                  Game Cover Image Maintenance
-                </h4>
-                <p className="text-xs text-slate-400 mt-1">
-                  Regularly backfills missing game cover images and metadata via Steam API.<br/>
-                  <span className="text-slate-500">Steam API를 통해 누락된 게임 커버 이미지와 메타데이터를 정기적으로 보완합니다. (GitHub Action)</span>
-                </p>
-              </div>
-              <button 
-                disabled={running !== null}
-                onClick={() => handleRunTask('gh-cover-maintenance')}
-                className="p-2 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 disabled:opacity-50"
-              >
-                {running === 'gh-cover-maintenance' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
               </button>
             </div>
           </div>
