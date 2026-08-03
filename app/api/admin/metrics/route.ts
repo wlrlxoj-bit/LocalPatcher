@@ -258,6 +258,45 @@ async function runReport(propertyId: string, accessToken: string, body: ReportBo
   return Number.isFinite(value) ? value : 0;
 }
 
+async function runTopPagesReport(propertyId: string, accessToken: string) {
+  try {
+    const response = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${encodeURIComponent(propertyId)}:runReport`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        dateRanges: [{ startDate: '29daysAgo', endDate: 'today' }],
+        dimensions: [{ name: 'pagePath' }],
+        metrics: [{ name: 'screenPageViews' }],
+        limit: '10'
+      }),
+      cache: 'no-store',
+    });
+    if (!response.ok) return [];
+    
+    const data = await response.json() as {
+      rows?: Array<{
+        dimensionValues?: Array<{ value?: string }>;
+        metricValues?: Array<{ value?: string }>;
+      }>;
+    };
+    
+    const pages = [];
+    for (const row of data.rows ?? []) {
+      const path = row.dimensionValues?.[0]?.value;
+      const views = Number(row.metricValues?.[0]?.value ?? 0);
+      if (path && Number.isFinite(views)) {
+        pages.push({ path, views });
+      }
+    }
+    return pages;
+  } catch {
+    return [];
+  }
+}
+
 /** 로그인한 관리자에게 최근 30일 동안의 GA4 성장 지표만 제공합니다. */
 export async function GET(request: Request) {
   if (!isValidAdminSession(readCookie(request, ADMIN_SESSION_COOKIE))) {
@@ -274,7 +313,11 @@ export async function GET(request: Request) {
     return NextResponse.json({
       status: 'unavailable',
       reason: 'GA4 연결 정보가 설정되지 않았습니다. 서버 환경변수를 확인해 주세요.',
+      dailyActiveUsers: null,
+      weeklyActiveUsers: null,
       monthlyActiveUsers: null,
+      totalActiveUsers: null,
+      topPages: [],
       previousMonthActiveUsers: null,
       downloadStarts: null,
       patchFunnel: null,
@@ -298,11 +341,37 @@ export async function GET(request: Request) {
       ? parsedStartDate
       : null;
 
-    const [monthlyActiveUsers, previousMonthActiveUsers, downloadStarts, recentFunnelEvents, failureBreakdownResult, recentPriceEvents, previousPriceEvents, cumulativePriceEvents] = await Promise.all([
+    const [
+      dailyActiveUsers,
+      weeklyActiveUsers,
+      monthlyActiveUsers, 
+      totalActiveUsers,
+      topPages,
+      previousMonthActiveUsers, 
+      downloadStarts, 
+      recentFunnelEvents, 
+      failureBreakdownResult, 
+      recentPriceEvents, 
+      previousPriceEvents, 
+      cumulativePriceEvents
+    ] = await Promise.all([
+      runReport(propertyId, accessToken, {
+        dateRanges: [{ startDate: 'today', endDate: 'today' }],
+        metrics: activeUsersMetric,
+      }),
+      runReport(propertyId, accessToken, {
+        dateRanges: [{ startDate: '6daysAgo', endDate: 'today' }],
+        metrics: activeUsersMetric,
+      }),
       runReport(propertyId, accessToken, {
         dateRanges: [{ startDate: '29daysAgo', endDate: 'today' }],
         metrics: activeUsersMetric,
       }),
+      runReport(propertyId, accessToken, {
+        dateRanges: [{ startDate: '365daysAgo', endDate: 'today' }],
+        metrics: activeUsersMetric,
+      }),
+      runTopPagesReport(propertyId, accessToken),
       runReport(propertyId, accessToken, {
         dateRanges: [{ startDate: '59daysAgo', endDate: '30daysAgo' }],
         metrics: activeUsersMetric,
@@ -424,7 +493,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       status: 'available',
+      dailyActiveUsers,
+      weeklyActiveUsers,
       monthlyActiveUsers,
+      totalActiveUsers,
+      topPages,
       previousMonthActiveUsers,
       downloadStarts,
       patchFunnel,
@@ -435,7 +508,11 @@ export async function GET(request: Request) {
     return NextResponse.json({
       status: 'unavailable',
       reason: 'GA4 통계를 가져오지 못했습니다. 서비스 계정의 속성 접근 권한을 확인해 주세요.',
+      dailyActiveUsers: null,
+      weeklyActiveUsers: null,
       monthlyActiveUsers: null,
+      totalActiveUsers: null,
+      topPages: [],
       previousMonthActiveUsers: null,
       downloadStarts: null,
       patchFunnel: null,

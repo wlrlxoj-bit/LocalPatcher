@@ -5,8 +5,9 @@ import { supabase } from '@/lib/supabase';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
-import { TrendingUp, AlertTriangle, PlayCircle, Loader2 } from 'lucide-react';
+import { TrendingUp, AlertTriangle, PlayCircle, Loader2, Users } from 'lucide-react';
 import Link from 'next/link';
+import AiReportButton from '@/components/AiReportButton';
 
 interface Game {
   id: number;
@@ -94,8 +95,9 @@ export default function AdminDashboardHome() {
 
   return (
     <div className="space-y-8 animate-fadeIn">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h2 className="text-2xl font-bold text-white">Dashboard Overview</h2>
+        {!loading && <AiReportButton stats={stats} metrics={monthlyMetrics} topGames={topGames} />}
       </div>
 
       {/* Top Action Items / To-Do */}
@@ -136,6 +138,26 @@ export default function AdminDashboardHome() {
         <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/20">
           <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Aggregate Downloads</div>
           <div className="text-4xl font-extrabold text-cyan-400 mt-4 font-outfit">{stats.totalDownloads.toLocaleString()}</div>
+        </div>
+      </div>
+
+      {/* Visitor KPI Cards (GA4) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div className="p-6 rounded-2xl border border-indigo-500/20 bg-indigo-950/10">
+          <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center"><Users className="w-3 h-3 mr-1" /> Daily Visitors</div>
+          <div className="text-3xl font-extrabold text-white mt-4 font-outfit">{monthlyMetrics?.dailyActiveUsers?.toLocaleString() || 0}</div>
+        </div>
+        <div className="p-6 rounded-2xl border border-indigo-500/20 bg-indigo-950/10">
+          <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center"><Users className="w-3 h-3 mr-1" /> Weekly Visitors</div>
+          <div className="text-3xl font-extrabold text-white mt-4 font-outfit">{monthlyMetrics?.weeklyActiveUsers?.toLocaleString() || 0}</div>
+        </div>
+        <div className="p-6 rounded-2xl border border-indigo-500/20 bg-indigo-950/10">
+          <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center"><Users className="w-3 h-3 mr-1" /> Monthly Visitors</div>
+          <div className="text-3xl font-extrabold text-white mt-4 font-outfit">{monthlyMetrics?.monthlyActiveUsers?.toLocaleString() || 0}</div>
+        </div>
+        <div className="p-6 rounded-2xl border border-indigo-500/20 bg-indigo-950/10">
+          <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center"><Users className="w-3 h-3 mr-1" /> All-Time Visitors</div>
+          <div className="text-3xl font-extrabold text-white mt-4 font-outfit">{monthlyMetrics?.totalActiveUsers?.toLocaleString() || 0}</div>
         </div>
       </div>
 
@@ -201,6 +223,38 @@ export default function AdminDashboardHome() {
           </table>
         </div>
       </div>
+
+      {/* Top Pages Table (GA4) */}
+      {monthlyMetrics?.topPages && monthlyMetrics.topPages.length > 0 && (
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-6">
+          <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-6 flex items-center">
+            <TrendingUp className="w-4 h-4 mr-2 text-indigo-400" />
+            Top 10 Most Visited Pages (Last 29 Days)
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 text-slate-500 font-bold uppercase tracking-wider">
+                  <th className="py-3 px-4 w-12 text-center">Rank</th>
+                  <th className="py-3 px-4">Page Path</th>
+                  <th className="py-3 px-4 w-32 text-right">Views</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyMetrics.topPages.slice(0, 10).map((page: any, idx: number) => (
+                  <tr key={idx} className="border-b border-slate-900 hover:bg-slate-900/10 text-slate-300">
+                    <td className="py-3.5 px-4 text-center font-semibold text-slate-500">{idx + 1}</td>
+                    <td className="py-3.5 px-4 font-mono text-slate-400">{page.path}</td>
+                    <td className="py-3.5 px-4 text-right font-bold text-indigo-400 font-outfit">
+                      {page.views.toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
