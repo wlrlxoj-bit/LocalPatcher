@@ -164,9 +164,12 @@ export default function AdminDashboardHome() {
       {/* Charts Section */}
       {funnelData.length > 0 && (
         <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-6">
-          <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-6">
+          <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-1">
             Patch Funnel Conversion
           </h3>
+          <p className="text-[10px] text-slate-500 mb-6 font-medium">
+            ※ 최근 30일 누적 데이터 기준이므로 이전에 제거된 광고 내역(Ad Opened)도 포함될 수 있습니다.
+          </p>
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={funnelData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
