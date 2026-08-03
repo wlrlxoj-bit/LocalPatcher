@@ -1,7 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Settings, Play, Database, HardDrive, ShieldAlert, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Settings, Play, Database, HardDrive, ShieldAlert, Loader2, ExternalLink, CheckCircle, XCircle } from 'lucide-react';
+
+type WorkflowStatus = {
+  status: string;
+  conclusion: string | null;
+  url: string | null;
+  updatedAt: string;
+};
 
 export default function AdminSystemPage() {
   const [running, setRunning] = useState<string | null>(null);
@@ -9,6 +16,54 @@ export default function AdminSystemPage() {
     'System initialization complete.',
     'Ready for manual tasks.'
   ]);
+
+  const [scraperStatus, setScraperStatus] = useState<WorkflowStatus | null>(null);
+  const [maintenanceStatus, setMaintenanceStatus] = useState<WorkflowStatus | null>(null);
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const [scraperRes, maintRes] = await Promise.all([
+          fetch('/api/admin/system/workflow-status?workflowId=scraper.yml'),
+          fetch('/api/admin/system/workflow-status?workflowId=maintenance.yml')
+        ]);
+        if (scraperRes.ok) setScraperStatus(await scraperRes.json());
+        if (maintRes.ok) setMaintenanceStatus(await maintRes.json());
+      } catch (err) {
+        console.error('Failed to fetch workflow status', err);
+      }
+    };
+    
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const StatusIndicator = ({ status }: { status: WorkflowStatus | null }) => {
+    if (!status || status.status === 'unknown') return null;
+    const inProgress = status.status === 'in_progress' || status.status === 'queued';
+    const success = status.conclusion === 'success';
+    
+    return (
+      <div className="mt-3 flex items-center space-x-3 text-xs bg-black/40 px-3 py-2 rounded-lg border border-slate-800/50 w-fit">
+        <div className="flex items-center space-x-1.5">
+          {inProgress ? (
+            <><Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" /><span className="text-amber-400 font-medium">작업 중 (In Progress...)</span></>
+          ) : success ? (
+            <><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /><span className="text-emerald-400 font-medium">완료 (Success)</span></>
+          ) : (
+            <><XCircle className="w-3.5 h-3.5 text-rose-400" /><span className="text-rose-400 font-medium">실패 (Failed)</span></>
+          )}
+        </div>
+        {status.url && (
+          <a href={status.url} target="_blank" rel="noopener noreferrer" className="flex items-center text-cyan-400 hover:text-cyan-300 transition-colors border-l border-slate-700 pl-3">
+            <ExternalLink className="w-3 h-3 mr-1" />
+            <span>상세 터미널 로그 보기</span>
+          </a>
+        )}
+      </div>
+    );
+  };
 
   const addLog = (msg: string) => setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
 
@@ -72,6 +127,7 @@ export default function AdminSystemPage() {
                   Runs the crawler to fetch the latest trainer versions from FLiNG.<br/>
                   <span className="text-slate-500">FLiNG 사이트에서 최신 트레이너 버전을 수집합니다. (GitHub Action)</span>
                 </p>
+                <StatusIndicator status={scraperStatus} />
               </div>
               <button 
                 disabled={running !== null}
@@ -95,6 +151,7 @@ export default function AdminSystemPage() {
                   Regularly backfills missing game cover images and metadata via Steam API.<br/>
                   <span className="text-slate-500">Steam API를 통해 누락된 게임 커버 이미지와 메타데이터를 정기적으로 보완합니다. (GitHub Action)</span>
                 </p>
+                <StatusIndicator status={maintenanceStatus} />
               </div>
               <button 
                 disabled={running !== null}
