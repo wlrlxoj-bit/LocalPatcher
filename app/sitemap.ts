@@ -32,6 +32,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     for (const path of staticPaths) {
       sitemapEntries.push({
         url: `${SITE_URL}/${locale}${path}`,
+        lastModified: new Date(),
         changeFrequency: 'daily',
         priority: path === '' ? 1.0 : 0.5,
       });
@@ -43,6 +44,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     for (const slug of eligibleSlugs[locale]) {
       sitemapEntries.push({
         url: `${SITE_URL}/${locale}/patcher/${slug}`,
+        lastModified: new Date(),
         changeFrequency: 'weekly',
         priority: 0.8,
       });
