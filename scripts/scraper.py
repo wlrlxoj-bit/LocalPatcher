@@ -1204,6 +1204,8 @@ def main():
             failed_pages += 1
     if failed_pages:
         print(f"[*] Batch completed with partial warnings: {failed_pages}/{min(len(posts), 20)} pages")
+        
+    sync_popular_fling_trainers(db)
     return 0
 
 
