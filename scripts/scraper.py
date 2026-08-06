@@ -1209,9 +1209,6 @@ def main():
     return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
-
 
 def sync_popular_fling_trainers(db: Client):
     """Scrapes the 'Popular Trainers' widget on FLiNG's home page and syncs is_popular and popularity_index."""
@@ -1256,4 +1253,7 @@ def sync_popular_fling_trainers(db: Client):
         
     except Exception as e:
         print(f'[-] Error syncing popular trainers: {e}')
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 
