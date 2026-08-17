@@ -4,7 +4,7 @@ const STATIC_GAME_SLUG_ALIASES: Readonly<Record<string, string>> = {
   'elden-ring-shadow-of-the-erdtree-trainer-1768067282': 'elden-ring',
 };
 
-const NUMERIC_TRAINER_SUFFIX = /-trainer-\d{6,}$/;
+const NUMERIC_TRAINER_SUFFIX = /-trainer(?:-\d{6,})?$/;
 
 /** DB 장애와 무관하게 반드시 유지해야 하는 정확한 과거 slug를 canonical slug로 변환합니다. */
 export function resolveStaticGameSlugAlias(slug: string): string | null {

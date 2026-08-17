@@ -83,6 +83,14 @@ export default async function LocalePage({
       <React.Suspense fallback={<GamesListSkeleton />}>
         <GamesFetcher locale={currentLocale} />
       </React.Suspense>
+
+      {/* SEO Content Section for Thin Content requirements */}
+      <section className="mt-24 max-w-4xl text-center px-4 md:px-0">
+        <h2 className="text-xl font-bold text-slate-200 mb-4 tracking-tight">{t.seoTitle}</h2>
+        <p className="text-sm text-slate-400 leading-relaxed text-justify md:text-center">
+          {t.seoContent}
+        </p>
+      </section>
     </div>
   );
 }

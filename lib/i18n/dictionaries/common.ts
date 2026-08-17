@@ -1,5 +1,7 @@
 export const commonDict = {
   "ko": {
+    "seoTitle": "안전하고 빠른 게임 트레이너 언어 변환 유틸리티",
+    "seoContent": "LocalPatcher는 싱글 플레이어 PC 게임 환경을 위해 다양한 게임 트레이너 파일의 언어 패치를 제공하는 플랫폼입니다. 브라우저 기반의 로컬 처리 기술을 사용하여 별도의 서버 업로드나 다운로드 대기 시간 없이, 트레이너의 영어 텍스트를 원하는 언어로 즉시 변환할 수 있습니다. 당사의 데이터베이스는 최신 인기 게임들의 옵션 문자열을 정기적으로 업데이트하여 최적의 호환성을 제공합니다. 개인정보 보호를 최우선으로 하여, 어떠한 회원 가입이나 추가 설치 프로그램 없이 모든 기능을 무료로 이용할 수 있습니다.",
     "title": "게임 트레이너 한글 패치 & 다운로드 플랫폼 | LocalPatcher",
     "subtitle": "스팀 게임 트레이너 한글 패치 플랫폼",
     "desc": "선택한 트레이너 파일을 서버에 업로드하지 않고 브라우저에서 로컬로 번역 패치하는 유틸리티입니다. 원본 및 결과 파일의 안전성은 보증하지 않습니다.",
@@ -29,6 +31,8 @@ export const commonDict = {
     "navContact": "오류 신고"
   },
   "en": {
+    "seoTitle": "Fast and Secure Game Trainer Localization Utility",
+    "seoContent": "LocalPatcher is a dedicated platform providing language patches for various PC game trainers for single-player environments. Utilizing browser-based local processing technology, you can instantly translate the English text of trainers into your preferred language without any server uploads or download wait times. Our database regularly updates option strings for the latest popular games to ensure optimal compatibility. Prioritizing privacy, all features are available for free without requiring any registration or additional software installations.",
     "title": "LocalPatcher - Trainer Localization Tool",
     "subtitle": "Local Trainer Language Patcher",
     "desc": "The selected trainer file is patched locally in your browser without being uploaded. We do not guarantee the safety of the original or resulting file.",
@@ -58,6 +62,8 @@ export const commonDict = {
     "navContact": "Report an Issue"
   },
   "ja": {
+    "seoTitle": "安全で高速なゲームトレーナー言語変換ユーティリティ",
+    "seoContent": "LocalPatcherは、シングルプレイヤーPCゲーム環境向けに様々なゲームトレーナーファイルの言語パッチを提供するプラットフォームです。ブラウザベースのローカル処理技術を使用することで、サーバーへのアップロードやダウンロードの待ち時間なしに、トレーナーの英語テキストを希望の言語に即座に変換できます。私たちのデータベースは、最新の人気ゲームのオプション文字列を定期的に更新し、最適な互換性を提供します。プライバシーを最優先とし、会員登録や追加ソフトウェアのインストールなしで、すべての機能を無料で利用できます。",
     "title": "ゲームトレーナー日本語化パッチ＆ダウンロード | LocalPatcher",
     "subtitle": "Steamゲームトレーナー日本語化プラットフォーム",
     "desc": "選択したトレーナーファイルをサーバーへアップロードせず、ブラウザ内でローカルに翻訳するツールです。元ファイルと出力ファイルの安全性は保証しません。",
@@ -87,6 +93,8 @@ export const commonDict = {
     "navContact": "問題を報告"
   },
   "de": {
+    "seoTitle": "Sicheres und schnelles Sprachkonvertierungs-Dienstprogramm für Spieltrainer",
+    "seoContent": "LocalPatcher ist eine dedizierte Plattform, die Sprachpatches für verschiedene PC-Spieltrainer für Einzelspieler-Umgebungen anbietet. Durch den Einsatz browserbasierter lokaler Verarbeitungstechnologie können Sie den englischen Text von Trainern sofort in Ihre bevorzugte Sprache übersetzen, ohne Server-Uploads oder Download-Wartezeiten. Unsere Datenbank aktualisiert regelmäßig Optionszeichenfolgen für die neuesten beliebten Spiele, um eine optimale Kompatibilität zu gewährleisten. Da der Datenschutz im Vordergrund steht, sind alle Funktionen kostenlos verfügbar, ohne dass eine Registrierung oder zusätzliche Softwareinstallationen erforderlich sind.",
     "title": "LocalPatcher - Spiele-Trainer Lokalisierungs-Tool",
     "subtitle": "Lokaler Spiele-Trainer Sprach-Patcher",
     "desc": "Die gewählte Trainer-Datei wird lokal im Browser übersetzt. Wir garantieren nicht für die Sicherheit der Datei.",
@@ -116,6 +124,8 @@ export const commonDict = {
     "navContact": "Problem melden"
   },
   "es": {
+    "seoTitle": "Utilidad de conversión de idiomas de entrenadores de juegos segura y rápida",
+    "seoContent": "LocalPatcher es una plataforma dedicada que proporciona parches de idioma para varios entrenadores de juegos de PC para entornos de un solo jugador. Utilizando tecnología de procesamiento local basada en el navegador, puede traducir instantáneamente el texto en inglés de los entrenadores a su idioma preferido sin cargas en el servidor ni tiempos de espera de descarga. Nuestra base de datos actualiza regularmente las cadenas de opciones para los últimos juegos populares para garantizar una compatibilidad óptima. Priorizando la privacidad, todas las funciones están disponibles de forma gratuita sin necesidad de registrarse ni de instalar software adicional.",
     "title": "LocalPatcher - Herramienta de Localización de Trainers",
     "subtitle": "Parcheador Local de Idioma para Trainers",
     "desc": "El archivo del trainer se parchea localmente en su navegador sin subirlo a servidores. No garantizamos la seguridad del archivo.",
