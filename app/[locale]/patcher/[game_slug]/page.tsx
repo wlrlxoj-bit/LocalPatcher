@@ -4,6 +4,7 @@ import PatcherClient from '@/components/PatcherClient';
 import SteamNews from '@/components/SteamNews';
 import SteamPlayerCount from '@/components/SteamPlayerCount';
 import SystemRequirements from '@/components/SystemRequirements';
+import PatcherUniqueContent from '@/components/PatcherUniqueContent';
 import {
   getGameBySlug,
   getTrainersForGame,
@@ -292,6 +293,14 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
           </React.Suspense>
         ) : undefined}
       />
+
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-20 w-full">
+        <PatcherUniqueContent
+          locale={currentLocale as Locale}
+          gameTitle={game.title_ko || game.title_en}
+          gameSlug={game.slug}
+        />
+      </div>
     </>
   );
 }
