@@ -86,7 +86,7 @@ export async function generateMetadata({ params }: PatcherPageProps) {
   }
   
   if (patcherData.canonicalSlug !== game_slug) {
-    permanentRedirect(`/${currentLocale}/patcher/${patcherData.canonicalSlug}`);
+    return {};
   }
 
   const { canonicalSlug, game, trainers } = patcherData;

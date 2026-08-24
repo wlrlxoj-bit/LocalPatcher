@@ -47,13 +47,35 @@ export function middleware(request: NextRequest) {
   if (pathnameIsMissingLocale) {
     const locale = getLocale(request);
     
-    // 307 Temporary Redirect to the localized path
+    // 308 Permanent Redirect to the localized path
     const url = new URL(`/${locale}${pathname === '/' ? '' : pathname}`, request.url);
     if (request.nextUrl.search) {
       url.search = request.nextUrl.search;
     }
     
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(url, 308);
+  }
+
+  // Intercept legacy -trainer slugs and static aliases in /patcher/ routes
+  const patcherMatch = pathname.match(/^\/([a-z]{2})\/patcher\/([^\/]+)$/);
+  if (patcherMatch) {
+    const [, locale, slug] = patcherMatch;
+    let canonicalSlug = slug;
+
+    // Static Aliases
+    if (slug === 'elden-ring-shadow-of-the-erdtree' || slug.startsWith('elden-ring-shadow-of-the-erdtree-')) {
+      canonicalSlug = 'elden-ring';
+    } else if (/-trainer(-\d{6,})?$/.test(slug)) {
+      canonicalSlug = slug.replace(/-trainer(-\d{6,})?$/, '');
+    }
+
+    if (canonicalSlug !== slug) {
+      const cleanUrl = new URL(`/${locale}/patcher/${canonicalSlug}`, request.url);
+      if (request.nextUrl.search) {
+        cleanUrl.search = request.nextUrl.search;
+      }
+      return NextResponse.redirect(cleanUrl, 308);
+    }
   }
 
   return NextResponse.next();
