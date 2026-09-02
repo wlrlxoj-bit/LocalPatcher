@@ -1,11 +1,17 @@
 import React from 'react';
-import { ShieldCheck, Lock, AlertTriangle, FileCheck, HelpCircle, HardDriveDownload, Cpu } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, FileCheck, HelpCircle, Cpu, Languages, ListChecks } from 'lucide-react';
 import type { Locale } from '@/lib/i18n/types';
 
 interface PatcherUniqueContentProps {
   locale: Locale;
   gameTitle: string;
-  gameSlug: string;
+  gameTitleEn: string;
+  description?: string;
+  versions: string[];
+  optionCount: number;
+  genres: string[];
+  tags: string[];
+  translatedOptionCount: number;
 }
 
 const UNIQUE_CONTENT_DATA: Record<Locale, {
@@ -283,46 +289,80 @@ const UNIQUE_CONTENT_DATA: Record<Locale, {
   }
 };
 
-export default function PatcherUniqueContent({ locale, gameTitle, gameSlug }: PatcherUniqueContentProps) {
-  const content = UNIQUE_CONTENT_DATA[locale] || UNIQUE_CONTENT_DATA.en;
+const GAME_FACT_LABELS: Record<Locale, {
+  title: string;
+  description: string;
+  versions: string;
+  options: string;
+  categories: string;
+  translation: string;
+  translated: string;
+  original: string;
+  unavailable: string;
+}> = {
+  ko: { title: '게임별 지원 정보', description: '게임 소개', versions: '지원 버전', options: '최신 버전 옵션 수', categories: '장르 및 태그', translation: '최신 버전 번역 상태', translated: '승인 번역', original: '영문 원문 제공', unavailable: '정보 없음' },
+  en: { title: 'Game-specific support details', description: 'Game overview', versions: 'Supported versions', options: 'Latest version options', categories: 'Genres and tags', translation: 'Latest version translation', translated: 'Approved translations', original: 'English source available', unavailable: 'Not available' },
+  ja: { title: 'ゲーム別サポート情報', description: 'ゲーム概要', versions: '対応バージョン', options: '最新版のオプション数', categories: 'ジャンルとタグ', translation: '最新版の翻訳状況', translated: '承認済み翻訳', original: '英語原文を提供', unavailable: '情報なし' },
+  de: { title: 'Spielspezifische Unterstützung', description: 'Spielübersicht', versions: 'Unterstützte Versionen', options: 'Optionen der neuesten Version', categories: 'Genres und Tags', translation: 'Übersetzung der neuesten Version', translated: 'Bestätigte Übersetzungen', original: 'Englischer Originaltext verfügbar', unavailable: 'Keine Angaben' },
+  es: { title: 'Compatibilidad específica del juego', description: 'Descripción del juego', versions: 'Versiones compatibles', options: 'Opciones de la última versión', categories: 'Géneros y etiquetas', translation: 'Traducción de la última versión', translated: 'Traducciones aprobadas', original: 'Texto original en inglés disponible', unavailable: 'Sin información' },
+};
 
-  // Generate Schema.org FAQPage & SoftwareApplication JSON-LD
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "SoftwareApplication",
-        "name": `LocalPatcher - ${gameTitle}`,
-        "operatingSystem": "Windows 10, Windows 11",
-        "applicationCategory": "GameApplication, UtilitiesApplication",
-        "offers": {
-          "@type": "Offer",
-          "price": "0",
-          "priceCurrency": "USD"
-        },
-        "description": `${gameTitle} Trainer Localization & In-Browser Language Patching Utility.`
-      },
-      {
-        "@type": "FAQPage",
-        "mainEntity": content.faqs.map(faq => ({
-          "@type": "Question",
-          "name": faq.q,
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": faq.a
-          }
-        }))
-      }
-    ]
-  };
+export default function PatcherUniqueContent({
+  locale,
+  gameTitle,
+  gameTitleEn,
+  description,
+  versions,
+  optionCount,
+  genres,
+  tags,
+  translatedOptionCount,
+}: PatcherUniqueContentProps) {
+  const content = UNIQUE_CONTENT_DATA[locale] || UNIQUE_CONTENT_DATA.en;
+  const labels = GAME_FACT_LABELS[locale] || GAME_FACT_LABELS.en;
+  const categories = [...new Set([...genres, ...tags])].slice(0, 12);
 
   return (
     <div className="w-full max-w-5xl mx-auto mt-16 space-y-12 text-slate-300">
-      {/* Schema.org Structured Data */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <section className="bg-slate-900/60 border border-cyan-500/20 rounded-2xl p-6 sm:p-8 shadow-xl">
+        <div className="flex items-start gap-3 mb-5">
+          <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+            <ListChecks className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-lg sm:text-xl font-bold text-slate-100 font-outfit">{gameTitle} — {labels.title}</h2>
+            {gameTitle !== gameTitleEn && <p className="text-xs text-slate-500 mt-1">English title: {gameTitleEn}</p>}
+          </div>
+        </div>
+
+        {description && (
+          <div className="mb-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">{labels.description}</h3>
+            <p className="text-sm text-slate-300 leading-relaxed">{description}</p>
+          </div>
+        )}
+
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+            <dt className="text-xs text-slate-500 mb-1">{labels.versions}</dt>
+            <dd className="text-sm text-slate-200">{versions.length > 0 ? versions.join(', ') : labels.unavailable}</dd>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+            <dt className="text-xs text-slate-500 mb-1">{labels.options}</dt>
+            <dd className="text-sm text-slate-200">{optionCount > 0 ? optionCount.toLocaleString(locale) : labels.unavailable}</dd>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+            <dt className="text-xs text-slate-500 mb-1">{labels.categories}</dt>
+            <dd className="text-sm text-slate-200">{categories.length > 0 ? categories.join(' · ') : labels.unavailable}</dd>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+            <dt className="text-xs text-slate-500 mb-1 flex items-center gap-1.5"><Languages className="w-3.5 h-3.5" />{labels.translation}</dt>
+            <dd className="text-sm text-slate-200">
+              {translatedOptionCount > 0 ? `${labels.translated}: ${translatedOptionCount.toLocaleString(locale)}` : labels.original}
+            </dd>
+          </div>
+        </dl>
+      </section>
 
       {/* 1. Security & Technology Architecture Section */}
       <section className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 sm:p-8 backdrop-blur-sm shadow-xl">

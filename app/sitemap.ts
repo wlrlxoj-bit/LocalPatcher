@@ -17,8 +17,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       console.warn(`${locale} 동적 sitemap 조회에 실패하여 운영 last-known-good snapshot을 사용합니다:`, error);
       const snapshotSlugs = patchableSnapshot.locales[locale as keyof typeof patchableSnapshot.locales] || patchableSnapshot.locales.en;
       const existingSlugs = new Set(snapshotSlugs);
+      // 스냅샷에는 제목 근거가 없으므로 숫자형 slug를 추측으로 합치지 않습니다.
+      const unavailableTitlesBySlug = new Map<string, string>();
       eligibleSlugs[locale] = [...new Set(
-        snapshotSlugs.map((slug) => canonicalizeListedGameSlug(slug, existingSlugs))
+        snapshotSlugs.map((slug) => canonicalizeListedGameSlug(slug, existingSlugs, unavailableTitlesBySlug))
       )];
     }
   }
@@ -32,7 +34,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     for (const path of staticPaths) {
       sitemapEntries.push({
         url: `${SITE_URL}/${locale}${path}`,
-        lastModified: new Date(),
         changeFrequency: 'daily',
         priority: path === '' ? 1.0 : 0.5,
       });
@@ -44,7 +45,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     for (const slug of eligibleSlugs[locale]) {
       sitemapEntries.push({
         url: `${SITE_URL}/${locale}/patcher/${slug}`,
-        lastModified: new Date(),
         changeFrequency: 'weekly',
         priority: 0.8,
       });

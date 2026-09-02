@@ -38,6 +38,8 @@ export interface Game {
   description_ja?: string;
   description_de?: string;
   description_es?: string;
+  genres?: string[] | null;
+  tags?: string[] | null;
 }
 
 // Mock database data
@@ -616,4 +618,3 @@ export const getLatestUnapprovedStatusesForTrainers = unstable_cache(async (
     return result;
   }
 }, ['unapproved-statuses'], { revalidate: 3600 });
-

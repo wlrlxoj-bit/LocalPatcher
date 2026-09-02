@@ -91,9 +91,6 @@ export async function generateMetadata({ params }: PatcherPageProps) {
 
   const { canonicalSlug, game, trainers } = patcherData;
   const enEligible = trainers.some((trainer) => trainer.option_count > 0);
-  const eligibleTrainerIds = trainers
-    .filter((trainer) => trainer.option_count > 0)
-    .map((trainer) => trainer.id);
   const latestTrainer = trainers[0];
   const metadataMappings = latestTrainer
     ? await getMappingsForTrainers([latestTrainer.id], currentLocale)
@@ -251,6 +248,26 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
   };
 
   const steamAppId = extractSteamAppId(game.cover_image_url);
+  const localizedDescription = game[`description_${currentLocale}` as keyof typeof game];
+  const description = typeof localizedDescription === 'string' && localizedDescription.trim()
+    ? localizedDescription
+    : game.description_en;
+  const latestTrainer = trainers[0];
+  const latestOptionCount = latestTrainer?.option_count;
+  const supportedOptionCount = typeof latestOptionCount === 'number' &&
+    Number.isSafeInteger(latestOptionCount) && latestOptionCount > 0
+    ? latestOptionCount
+    : 0;
+  const hasApprovedLatestMapping = latestTrainer
+    ? (mappingsMap[latestTrainer.id] || []).length > 0
+    : false;
+  // 매핑 한 행에는 최신 트레이너의 전체 번역문이 들어가므로 행 개수가 아닌 옵션 수를 표시합니다.
+  const translatedOptionCount = hasApprovedLatestMapping ? supportedOptionCount : 0;
+  const supportedVersions = [...new Set(
+    trainers
+      .map((trainer) => trainer.version_str?.trim())
+      .filter((version): version is string => Boolean(version))
+  )];
 
   return (
     <>
@@ -297,8 +314,14 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-20 w-full">
         <PatcherUniqueContent
           locale={currentLocale as Locale}
-          gameTitle={game.title_ko || game.title_en}
-          gameSlug={game.slug}
+          gameTitle={getGameTitle(game, currentLocale as Locale)}
+          gameTitleEn={game.title_en}
+          description={description}
+          versions={supportedVersions}
+          optionCount={supportedOptionCount}
+          genres={Array.isArray(game.genres) ? game.genres : []}
+          tags={Array.isArray(game.tags) ? game.tags : []}
+          translatedOptionCount={translatedOptionCount}
         />
       </div>
     </>

@@ -83,7 +83,10 @@ export async function getEligiblePatcherSlugs(locale: IndexableLocale): Promise<
     const eligibleSlugs = games.filter((game) => eligibleGameIds.has(game.id)).map((game) => game.slug);
     
     const existingSlugs = new Set(eligibleSlugs);
-    const finalSlugs = [...new Set(eligibleSlugs.map((slug) => canonicalizeListedGameSlug(slug, existingSlugs)))];
+    const titleBySlug = new Map(games.map((game) => [game.slug, game.title_en]));
+    const finalSlugs = [...new Set(
+      eligibleSlugs.map((slug) => canonicalizeListedGameSlug(slug, existingSlugs, titleBySlug))
+    )];
     
     sitemapEligibilityCache.set(locale, { value: finalSlugs, cachedAt: Date.now() });
     return finalSlugs;
