@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { cache } from 'react';
+import { unstable_cache } from 'next/cache';
 import {
   getNumericTrainerBaseSlug,
   hasSameNormalizedGameTitle,
@@ -40,6 +40,8 @@ export interface Game {
   description_es?: string;
   genres?: string[] | null;
   tags?: string[] | null;
+  is_popular?: boolean;
+  popularity_index?: number;
 }
 
 // Mock database data
@@ -340,38 +342,52 @@ export async function getGames() {
   }
 }
 
-export const getGamesWithTrainers = unstable_cache(async () => {
-  const processData = (games: any[]) => {
+type ListedGame = Omit<Game, 'description_en' | 'description_ko' | 'description_ja' | 'description_de' | 'description_es' | 'genres' | 'tags' | 'fling_url'> & {
+  trainers: Array<{ id: number; version_str: string; option_count: number }>;
+};
+
+/** DB의 선택적 언어 컬럼 유무에 관계없이 읽고, 목록·검색 필드만 반환하며 행 제한 이후도 조회합니다. */
+export const getGamesWithTrainers = unstable_cache(async (): Promise<ListedGame[]> => {
+  const processData = (games: ListedGame[]) => {
     return games.sort((a, b) => {
-      const maxA = a.trainers?.length > 0 ? Math.max(...a.trainers.map((t: any) => t.id)) : 0;
-      const maxB = b.trainers?.length > 0 ? Math.max(...b.trainers.map((t: any) => t.id)) : 0;
+      const maxA = a.trainers?.length > 0 ? Math.max(...a.trainers.map(t => t.id)) : 0;
+      const maxB = b.trainers?.length > 0 ? Math.max(...b.trainers.map(t => t.id)) : 0;
       if (maxA !== maxB) return maxB - maxA;
       return b.id - a.id;
     });
   };
 
-  if (!supabase) {
-    return processData(mockGames.map(game => ({
-      ...game,
-      trainers: mockTrainers.filter(t => t.game_id === game.id)
-    })));
-  }
-  try {
+  if (!supabase) throw new Error('게임 목록 DB가 설정되지 않았습니다.');
+  const games: ListedGame[] = [];
+  const pageSize = 500;
+  for (let offset = 0; ; ) {
     const { data, error } = await supabase
       .from('games')
-      .select('*, trainers(id, version_str, option_count)');
-    if (error || !data) throw error || new Error('No data');
-    return processData(data);
-  } catch (err) {
-    console.warn('getGamesWithTrainers failed, falling back:', err);
-    return processData(mockGames.map(game => ({
-      ...game,
-      trainers: mockTrainers.filter(t => t.game_id === game.id)
+      .select('*,trainers(id,version_str,option_count)')
+      .order('id', { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error || !data) throw new Error('게임 목록 조회에 실패했습니다.', { cause: error });
+    if (data.length === 0) break;
+    // 선택적 필드를 SQL에서 요구하지 않고, 설명 등 큰 본문은 서버에서 제거합니다.
+    games.push(...data.map((game) => ({
+      id: game.id,
+      title_en: game.title_en,
+      title_ko: game.title_ko,
+      title_ja: game.title_ja,
+      title_de: game.title_de,
+      title_es: game.title_es,
+      slug: game.slug,
+      cover_image_url: game.cover_image_url,
+      anti_cheat: game.anti_cheat,
+      is_popular: game.is_popular,
+      popularity_index: game.popularity_index,
+      trainers: game.trainers,
     })));
+    offset += data.length;
   }
+  return processData(games);
 }, ['games-with-trainers'], { revalidate: 3600 });
 
-import { unstable_cache } from 'next/cache';
 
 export const getPopularGamesWithTrainers = unstable_cache(async () => {
   if (!supabase) return [];
@@ -391,14 +407,14 @@ export const getPopularGamesWithTrainers = unstable_cache(async () => {
 }, ['popular-games'], { revalidate: 3600 });
 
 export const getGameBySlug = unstable_cache(async (slug: string) => {
-  if (!supabase) return mockGames.find(g => g.slug === slug) || null;
+  if (!supabase) throw new Error('게임 DB가 설정되지 않았습니다.');
   try {
     const { data, error } = await supabase.from('games').select('*').eq('slug', slug).maybeSingle();
     if (error) throw error;
     return data;
   } catch (err) {
     console.error('운영 게임 조회에 실패했습니다:', err);
-    return null;
+    throw new Error('운영 게임 조회에 실패했습니다.', { cause: err });
   }
 }, ['game-by-slug'], { revalidate: 3600 });
 
@@ -502,7 +518,7 @@ export function sortTrainersLatestFirst<T extends { id: number; version_str: str
 }
 
 export const getTrainersForGame = unstable_cache(async (gameId: number) => {
-  if (!supabase) return sortTrainersLatestFirst(mockTrainers.filter(t => t.game_id === gameId));
+  if (!supabase) throw new Error('트레이너 DB가 설정되지 않았습니다.');
   try {
     const { data, error } = await supabase
       .from('trainers')
@@ -512,15 +528,12 @@ export const getTrainersForGame = unstable_cache(async (gameId: number) => {
     return sortTrainersLatestFirst(data);
   } catch (err) {
     console.error('운영 트레이너 조회에 실패했습니다:', err);
-    return [];
+    throw new Error('운영 트레이너 조회에 실패했습니다.', { cause: err });
   }
 }, ['trainers-for-game'], { revalidate: 3600 });
 
 export async function getMappingsForTrainer(trainerId: number, lang: string = 'ko') {
-  if (!supabase) {
-    const mappings = mockMappings[trainerId] || [];
-    return mappings.filter(m => m.language_code === lang);
-  }
+  if (!supabase) throw new Error('번역 매핑 DB가 설정되지 않았습니다.');
   try {
     const { data, error } = await supabase
       .from('translation_mappings')
@@ -532,19 +545,13 @@ export async function getMappingsForTrainer(trainerId: number, lang: string = 'k
     return data;
   } catch (err) {
     console.error('운영 번역 매핑 조회에 실패했습니다:', err);
-    return [];
+    throw new Error('운영 번역 매핑 조회에 실패했습니다.', { cause: err });
   }
 }
 
 export const getMappingsForTrainers = unstable_cache(async (trainerIds: number[], lang: string = 'ko') => {
-  if (!supabase) {
-    const result: Record<number, any[]> = {};
-    for (const tid of trainerIds) {
-      const mappings = mockMappings[tid] || [];
-      result[tid] = mappings.filter(m => m.language_code === lang);
-    }
-    return result;
-  }
+  if (trainerIds.length === 0) return {};
+  if (!supabase) throw new Error('번역 매핑 DB가 설정되지 않았습니다.');
   try {
     const { data, error } = await supabase
       .from('translation_mappings')
@@ -568,11 +575,7 @@ export const getMappingsForTrainers = unstable_cache(async (trainerIds: number[]
     return result;
   } catch (err) {
     console.error('운영 번역 매핑 일괄 조회에 실패했습니다:', err);
-    const result: Record<number, any[]> = {};
-    for (const tid of trainerIds) {
-      result[tid] = [];
-    }
-    return result;
+    throw new Error('운영 번역 매핑 일괄 조회에 실패했습니다.', { cause: err });
   }
 }, ['mappings-for-trainers'], { revalidate: 3600 });
 

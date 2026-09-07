@@ -33,12 +33,47 @@ declare global {
   }
 }
 
-export function trackAnalyticsEvent(eventName: AnalyticsEvent, parameters?: SafeEventParameters) {
-  if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
+const MAX_PENDING_EVENTS = 40;
+const MAX_WAIT_MS = 30_000;
+const RETRY_INTERVAL_MS = 250;
+const pendingEvents: {
+  eventName: AnalyticsEvent;
+  parameters?: SafeEventParameters;
+  expiresAt: number;
+}[] = [];
+let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
-  try {
-    window.gtag('event', eventName, parameters);
-  } catch {
-    // 분석 도구 오류가 다운로드 및 번역 기능에 영향을 주지 않도록 무시합니다.
+/** 기존 GA 초기화가 끝난 뒤 대기 이벤트를 전달하며, 차단 시에는 유한 시간 후 폐기합니다. */
+function flushPendingEvents() {
+  if (retryTimer !== undefined) {
+    clearTimeout(retryTimer);
+    retryTimer = undefined;
   }
+  while (pendingEvents.length && pendingEvents[0].expiresAt <= Date.now()) {
+    pendingEvents.shift();
+  }
+  if (typeof window.gtag === 'function') {
+    for (const event of pendingEvents.splice(0)) {
+      try {
+        window.gtag('event', event.eventName, event.parameters);
+      } catch {
+        // 중복 전송을 막기 위해 실패 이벤트를 재시도하지 않습니다.
+      }
+    }
+  } else if (pendingEvents.length) {
+    retryTimer = setTimeout(flushPendingEvents, RETRY_INTERVAL_MS);
+  }
+}
+
+/** lazyOnload 전에 발생한 이벤트를 메모리에만 잠시 보관하며 GA 설정·동의 상태는 변경하지 않습니다. */
+export function trackAnalyticsEvent(eventName: AnalyticsEvent, parameters?: SafeEventParameters) {
+  if (typeof window === 'undefined') return;
+
+  if (pendingEvents.length >= MAX_PENDING_EVENTS) pendingEvents.shift();
+  pendingEvents.push({
+    eventName,
+    parameters: parameters ? { ...parameters } : undefined,
+    expiresAt: Date.now() + MAX_WAIT_MS,
+  });
+  flushPendingEvents();
 }
