@@ -73,5 +73,13 @@ export const privacyPageContent = {
 };
 
 export function getPrivacyContent(locale: Locale) {
-  return privacyPageContent[locale] || privacyPageContent.en;
+  const page = privacyPageContent[locale] || privacyPageContent.en;
+  const banner = {
+    ko: ['최종 수정일: 2026년 9월 10일', '5. 선택적 Adsterra 배너', '패처 페이지에서 제3자 광고를 허용하면 해당 탭의 세션 동안 Adsterra 배너를 불러옵니다. 허용 전에는 이 배너의 외부 요청을 보내지 않습니다. Adsterra와 광고 파트너는 광고 제공·측정에 쿠키, 기기 및 접속 정보를 사용할 수 있습니다. 허용 여부는 sessionStorage에 저장하며 광고 허용 철회 버튼으로 배너와 저장된 허용 설정을 제거할 수 있습니다. 철회는 이미 처리된 정보나 제3자 쿠키를 삭제하지 않습니다. 광고를 허용하지 않아도 모든 도구를 사용할 수 있습니다.'],
+    en: ['Last updated: September 10, 2026', '5. Optional Adsterra banner', 'Allowing third-party ads on a patcher page loads an Adsterra banner for the current tab session. This banner makes no external requests before permission. Adsterra and its partners may use cookies, device and access information for ad delivery and measurement. Permission is stored in sessionStorage. The withdraw button removes the banner and stored permission, but does not delete previously processed information or third-party cookies. All tools remain available without allowing ads.'],
+    ja: ['最終更新日：2026年9月10日', '5. 任意のAdsterraバナー', 'パッチャーページで第三者広告を許可すると、そのタブのセッション中にAdsterraバナーを読み込みます。許可前にこのバナーの外部通信は行いません。Adsterraと広告パートナーは広告配信・測定にCookie、デバイス情報、アクセス情報を使用する場合があります。許可はsessionStorageに保存され、取り消しボタンでバナーと保存済みの許可を削除できます。取り消しても処理済みの情報や第三者Cookieは削除されません。広告を許可しなくてもすべてのツールを利用できます。'],
+    de: ['Zuletzt aktualisiert: 10. September 2026', '5. Optionales Adsterra-Banner', 'Wenn Sie Drittanbieterwerbung auf einer Patcher-Seite erlauben, wird für die aktuelle Tab-Sitzung ein Adsterra-Banner geladen. Vor der Erlaubnis sendet dieses Banner keine externen Anfragen. Adsterra und seine Partner können Cookies sowie Geräte- und Zugriffsdaten für Werbung und Messungen verwenden. Die Erlaubnis wird in sessionStorage gespeichert. Über die Widerrufsschaltfläche werden Banner und gespeicherte Erlaubnis entfernt. Bereits verarbeitete Daten und Drittanbieter-Cookies werden dadurch nicht gelöscht. Alle Werkzeuge bleiben auch ohne Erlaubnis nutzbar.'],
+    es: ['Última actualización: 10 de septiembre de 2026', '5. Banner opcional de Adsterra', 'Al permitir publicidad de terceros en una página del parcheador, se carga un banner de Adsterra durante la sesión de esa pestaña. Este banner no hace solicitudes externas antes del permiso. Adsterra y sus socios pueden usar cookies y datos del dispositivo y de acceso para ofrecer y medir anuncios. El permiso se guarda en sessionStorage. El botón para retirarlo elimina el banner y el permiso guardado, pero no borra datos ya tratados ni cookies de terceros. Todas las herramientas siguen disponibles sin permitir anuncios.'],
+  }[locale];
+  return { ...page, updated: banner[0], sections: [...page.sections, [Cookie, banner[1], banner[2]]] };
 }

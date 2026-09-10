@@ -5,6 +5,7 @@ import SteamNews from '@/components/SteamNews';
 import SteamPlayerCount from '@/components/SteamPlayerCount';
 import SystemRequirements from '@/components/SystemRequirements';
 import PatcherUniqueContent from '@/components/PatcherUniqueContent';
+import AdsterraBanner from '@/components/AdsterraBanner';
 import {
   getGameBySlug,
   getTrainersForGame,
@@ -323,6 +324,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
           tags={Array.isArray(game.tags) ? game.tags : []}
           translatedOptionCount={translatedOptionCount}
         />
+        <AdsterraBanner locale={currentLocale as Locale} />
       </div>
     </>
   );
