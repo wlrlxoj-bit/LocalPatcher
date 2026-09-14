@@ -8,6 +8,7 @@ import io
 import argparse
 import subprocess
 import time
+import tempfile
 import requests
 from bs4 import BeautifulSoup
 import pefile
@@ -851,10 +852,11 @@ def fetch_steam_meta(game_title: str):
         print(f"[-] Steam search failed: {e}")
     return default_meta
 
-def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_failures=False):
+def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_failures=True, languages=None):
     """Scrapes specific trainer page, downloads binaries for ALL versions, extracts offsets, and inserts to Supabase."""
     print(f"[*] Processing: {post['title']} ({post['link']})")
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    requested_locales = set(languages or ('ko', 'ja', 'de', 'es'))
     
     try:
         response = requests.get(post['link'], headers=headers, timeout=10)
@@ -918,21 +920,27 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
             download_text = download_a.text.strip()
             print(f"[*] Version download link found: {download_url} ({download_text})")
             target_eligible = False
+            approved_locales = set()
             
             try:
                 # Download binary bytes with retries
                 file_bytes = None
+                download_failure = "empty_response"
                 for dl_attempt in range(1, 4):
                     try:
                         dl_response = requests.get(download_url, headers=headers, timeout=30)
                         if dl_response.status_code == 200:
                             file_bytes = dl_response.content
                             break
-                    except Exception:
-                        pass
+                        download_failure = f"http_{dl_response.status_code}"
+                        # 접근 거부/삭제 응답은 같은 실행에서 반복 요청하지 않는다.
+                        if dl_response.status_code in {400, 401, 403, 404, 410}:
+                            break
+                    except Exception as download_error:
+                        download_failure = type(download_error).__name__
                     time.sleep(1)
                 if not file_bytes:
-                    print(f"[-] Failed to download binary from {download_url}")
+                    print(f"[-] Failed to download binary from {download_url} reason={download_failure}")
                     if strict_download_failures:
                         had_eligible_failure = True
                     continue
@@ -962,33 +970,21 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                             had_eligible_failure = True
                         continue
                     
-                    try:
-                        with open("temp_trainer.rar", "wb") as f:
-                            f.write(file_bytes)
-                        subprocess.run([unrar_path, "e", "-y", "-inul", "temp_trainer.rar", "*.exe"], check=True)
-                        extracted_exe = None
-                        for fname in os.listdir("."):
-                            if fname.lower().endswith(".exe") and fname.lower() not in ["unrar.exe", "unrarw64.exe"]:
-                                extracted_exe = fname
+                    # 원본과 추출물을 전용 임시 폴더에 격리해 작업 폴더의 실행 파일을 보호한다.
+                    unrar_path = os.path.abspath(unrar_path)
+                    with tempfile.TemporaryDirectory(prefix="localpatcher-rar-") as extraction_dir:
+                        archive_path = os.path.join(extraction_dir, "source.rar")
+                        with open(archive_path, "wb") as archive_file:
+                            archive_file.write(file_bytes)
+                        subprocess.run(
+                            [unrar_path, "e", "-y", "-inul", archive_path, "*.exe"],
+                            cwd=extraction_dir, check=True, timeout=60,
+                        )
+                        for fname in os.listdir(extraction_dir):
+                            if fname.lower().endswith(".exe"):
+                                with open(os.path.join(extraction_dir, fname), "rb") as extracted_file:
+                                    exe_bytes = extracted_file.read()
                                 break
-                        if extracted_exe:
-                            with open(extracted_exe, "rb") as f:
-                                exe_bytes = f.read()
-                            os.remove(extracted_exe)
-                        else:
-                            print("[-] Extracted executable not found.")
-                    except Exception as e:
-                        print(f"[-] RAR extraction failed: {e}")
-                    finally:
-                        if os.path.exists("temp_trainer.rar"):
-                            os.remove("temp_trainer.rar")
-                        # Clean up any leftover extracted exe files in the current directory
-                        for fname in os.listdir("."):
-                            if fname.lower().endswith(".exe") and fname.lower() not in ["unrar.exe", "unrarw64.exe"]:
-                                try:
-                                    os.remove(fname)
-                                except Exception:
-                                    pass
                 else:
                     exe_bytes = file_bytes
                     
@@ -1013,7 +1009,7 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                         mapping.get('language_code') for mapping in (mappings_res.data or [])
                         if mapping.get('is_approved')
                     }
-                    if {'ko', 'ja', 'de', 'es'}.issubset(approved_locales) and not force:
+                    if requested_locales.issubset(approved_locales) and not force:
                         print(f"    [*] Skip/Protect: Trainer ID {trainer_id} has approved translation mappings. Skipping overwrite.")
                         approved_skips += 1
                         continue
@@ -1077,6 +1073,8 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                     'ko': process_translation_block, 'ja': process_translation_block_ja,
                     'de': process_translation_block_de, 'es': process_translation_block_es
                 }.items():
+                    if language_code not in requested_locales or (language_code in approved_locales and not force):
+                        continue
                     validation = None
                     for attempt in range(1, 4):
                         try:
@@ -1111,7 +1109,7 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                     if outcome.value in {"rejected", "db_error"}:
                         trainer_ok = False
                 
-                print(f"[+] Successfully registered new trainer ID: {trainer_id} for Game ID: {game_id}!")
+                print(f"[번역 결과] trainer={trainer_id} game={game_id} success={trainer_ok}")
                 any_registered = any_registered or trainer_ok
                 if not trainer_ok:
                     had_eligible_failure = True
@@ -1136,6 +1134,8 @@ def main():
     parser.add_argument("--force", action="store_true", help="Force re-processing and overwriting of existing trainers")
     parser.add_argument("--url", type=str, help="Pinpoint scrape a single target FLiNG trainer URL")
     parser.add_argument("--provider", choices=["azure", "openai_paid"], default="azure")
+    parser.add_argument("--languages", nargs="+", choices=["ko", "ja", "de", "es"],
+                        default=["ko", "ja", "de", "es"])
     parser.add_argument("--confirm-paid", action="store_true", help="OpenAI 유료 호출을 명시적으로 승인")
     args = parser.parse_args()
     if args.provider == "openai_paid" and not args.confirm_paid:
@@ -1188,6 +1188,7 @@ def main():
             db,
             force=args.force,
             strict_download_failures=True,
+            languages=args.languages,
         )
         return 0 if succeeded else 1
 
@@ -1200,13 +1201,13 @@ def main():
     # 최근 20개의 신작/업데이트 피드를 수집하도록 범위를 대폭 확장 (4위 이하 누락 방지)
     failed_pages = 0
     for post in posts[:20]:
-        if not scrape_and_patch_trainer(post, db, force=args.force):
+        if not scrape_and_patch_trainer(post, db, force=args.force, languages=args.languages):
             failed_pages += 1
     if failed_pages:
         print(f"[*] Batch completed with partial warnings: {failed_pages}/{min(len(posts), 20)} pages")
         
     sync_popular_fling_trainers(db)
-    return 0
+    return 1 if failed_pages else 0
 
 
 
