@@ -9,6 +9,7 @@ import argparse
 import subprocess
 import time
 import tempfile
+from urllib.parse import parse_qs, quote, urlparse
 import requests
 from bs4 import BeautifulSoup
 import pefile
@@ -852,6 +853,46 @@ def fetch_steam_meta(game_title: str):
         print(f"[-] Steam search failed: {e}")
     return default_meta
 
+def official_archive_from_redirect(response):
+    """공식 전달 서버가 명시한 공개 ZIP 경로만 반환한다. 임의 경로 추측은 하지 않는다."""
+    history = list(getattr(response, 'history', []))
+    if not history:
+        return None
+    for step in history:
+        parsed = urlparse(step.url)
+        if parsed.scheme != 'https' or parsed.netloc != 'flingtrainer.com':
+            return None
+    for step in history:
+        parsed = urlparse(step.url)
+        if parsed.path != '/download-trainer.php':
+            continue
+        values = parse_qs(parsed.query).get('path', [])
+        if len(values) != 1:
+            continue
+        path = values[0]
+        if not re.fullmatch(r'/wp-content/uploads/\d{4}/\d{2}/[^/\\%?#\x00-\x1f]+\.zip', path):
+            continue
+        if '..' in path:
+            continue
+        return 'https://flingtrainer.com' + quote(path, safe='/.-_')
+    return None
+
+
+def recover_official_archive(response, headers):
+    """전달된 EXE가 거부되면 서버가 제공한 ZIP을 확인한다. 재리디렉션과 비ZIP은 거부한다."""
+    if response.status_code != 403:
+        return response
+    archive_url = official_archive_from_redirect(response)
+    if not archive_url:
+        return response
+    archive = requests.get(archive_url, headers=headers, timeout=30, allow_redirects=False)
+    if (archive.status_code == 200 and archive.content.startswith(b'PK\x03\x04')
+            and zipfile.is_zipfile(io.BytesIO(archive.content))):
+        print('[*] Official archive recovered from download redirect.')
+        return archive
+    return response
+
+
 def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_failures=True, languages=None):
     """Scrapes specific trainer page, downloads binaries for ALL versions, extracts offsets, and inserts to Supabase."""
     print(f"[*] Processing: {post['title']} ({post['link']})")
@@ -929,6 +970,7 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                 for dl_attempt in range(1, 4):
                     try:
                         dl_response = requests.get(download_url, headers=headers, timeout=30)
+                        dl_response = recover_official_archive(dl_response, headers)
                         if dl_response.status_code == 200:
                             file_bytes = dl_response.content
                             break
