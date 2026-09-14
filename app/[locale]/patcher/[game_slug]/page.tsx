@@ -196,7 +196,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
 
   // 3. Pre-fetch mappings for all trainers of this game in a single batch query
   const mappingsMap = await getMappingsForTrainers(trainers.map(t => t.id), currentLocale);
-  const unapprovedStatusMap = currentLocale === 'ko' || currentLocale === 'ja'
+  const unapprovedStatusMap = currentLocale !== 'en'
     ? await getLatestUnapprovedStatusesForTrainers(trainers.map(t => t.id), currentLocale)
     : {};
 
@@ -223,29 +223,6 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
     'screenshot': game.cover_image_url,
     'softwareVersion': trainers[0]?.version_str || '1.0',
     'downloadUrl': `${SITE_URL}/${currentLocale}/patcher/${patcherData?.canonicalSlug ?? game.slug}`,
-  };
-
-  const faqJsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    'mainEntity': [
-      {
-        '@type': 'Question',
-        'name': pt.jsonLdFaq1Q.replace('{gameTitle}', game.title_ko || game.title_en).replace('{gameTitleEn}', game.title_en),
-        'acceptedAnswer': {
-          '@type': 'Answer',
-          'text': pt.jsonLdFaq1A
-        }
-      },
-      {
-        '@type': 'Question',
-        'name': pt.jsonLdFaq2Q.replace('{gameTitle}', game.title_ko || game.title_en).replace('{gameTitleEn}', game.title_en),
-        'acceptedAnswer': {
-          '@type': 'Answer',
-          'text': pt.jsonLdFaq2A
-        }
-      }
-    ]
   };
 
   const steamAppId = extractSteamAppId(game.cover_image_url);
@@ -276,10 +253,6 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
-      />
 
       <PatcherClient
         game={game}
@@ -295,6 +268,20 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
         popularGames={popularGames}
         relatedGames={relatedGames}
         locale={currentLocale as Locale}
+        gameInfoSlot={(
+        <PatcherUniqueContent
+          locale={currentLocale as Locale}
+          gameTitle={getGameTitle(game, currentLocale as Locale)}
+          gameTitleEn={game.title_en}
+          description={description}
+          versions={supportedVersions}
+          optionCount={supportedOptionCount}
+          genres={Array.isArray(game.genres) ? game.genres : []}
+          tags={Array.isArray(game.tags) ? game.tags : []}
+          sourceUrl={game.fling_url}
+          translatedOptionCount={translatedOptionCount}
+        />
+        )}
         steamNewsSlot={steamAppId ? (
           <React.Suspense fallback={<div className="h-64 animate-pulse bg-slate-800/50 rounded-xl border border-slate-700/50" />}>
             <SteamNews steamAppId={steamAppId} locale={currentLocale as Locale} />
@@ -313,17 +300,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
       />
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-20 w-full">
-        <PatcherUniqueContent
-          locale={currentLocale as Locale}
-          gameTitle={getGameTitle(game, currentLocale as Locale)}
-          gameTitleEn={game.title_en}
-          description={description}
-          versions={supportedVersions}
-          optionCount={supportedOptionCount}
-          genres={Array.isArray(game.genres) ? game.genres : []}
-          tags={Array.isArray(game.tags) ? game.tags : []}
-          translatedOptionCount={translatedOptionCount}
-        />
+
         <AdsterraBanner locale={currentLocale as Locale} />
       </div>
     </>

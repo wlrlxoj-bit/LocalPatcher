@@ -8,6 +8,18 @@ const sitemapUrl = new URL('../app/sitemap.ts', import.meta.url);
 const localeHomeUrl = new URL('../app/[locale]/page.tsx', import.meta.url);
 const contentEligibilityUrl = new URL('../lib/content-eligibility.ts', import.meta.url);
 
+test('게임 정보는 서버 슬롯으로 전달하고 두 언어 화면에서 각각 한 번 표시한다', async () => {
+  const page = await readFile(patcherPageUrl, 'utf8');
+  const client = await readFile(new URL('../components/PatcherClient.tsx', import.meta.url), 'utf8');
+  assert.equal((page.match(/<PatcherUniqueContent/g) || []).length, 1);
+  assert.match(page, /gameInfoSlot=\{\(/);
+  assert.equal((client.match(/\{gameInfoSlot\}/g) || []).length, 2);
+  assert.doesNotMatch(client, /PatcherUniqueContent|pt\.faqA1|pt\.faqA2/);
+  assert.doesNotMatch(client, /SafetyAndUsageGuideSection/);
+  assert.match(client, /unapprovedStatus === 'pending' \? pt\.autoVerifyInProgress : pt\.translationUnavailable/);
+  assert.match(client, /unapprovedStatus === 'pending' \? pt\.autoVerifyInProgressDesc : pt\.translationUnavailableDesc/);
+});
+
 test('패처 metadata 소스는 5개 언어의 index/follow와 자기 canonical 계약을 유지한다', async () => {
   const source = await readFile(patcherPageUrl, 'utf8');
 
@@ -72,7 +84,8 @@ test('구조화 데이터와 sitemap 변경 시각 신호가 중복되거나 실
     readFile(sitemapUrl, 'utf8'),
   ]);
 
-  assert.equal((pageSource.match(/type="application\/ld\+json"/g) || []).length, 2);
+  assert.equal((pageSource.match(/type="application\/ld\+json"/g) || []).length, 1);
+  assert.doesNotMatch(pageSource, /FAQPage/);
   assert.doesNotMatch(uniqueContentSource, /application\/ld\+json/);
   assert.doesNotMatch(sitemapSource, /lastModified:\s*new Date\s*\(/);
 });

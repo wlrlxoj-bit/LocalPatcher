@@ -52,6 +52,7 @@ interface PatcherClientProps {
   locale: Locale;
   popularGames?: any[];
   relatedGames?: any[];
+  gameInfoSlot?: React.ReactNode;
   steamNewsSlot?: React.ReactNode;
   playerCountSlot?: React.ReactNode;
   systemReqSlot?: React.ReactNode;
@@ -417,6 +418,7 @@ export default function PatcherClient({
   locale,
   popularGames = [],
   relatedGames = [],
+  gameInfoSlot,
   steamNewsSlot,
   playerCountSlot,
   systemReqSlot,
@@ -430,9 +432,6 @@ export default function PatcherClient({
     sortedTrainers.length > 0 ? sortedTrainers[0].id : 0
   );
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [isDescExpanded, setIsDescExpanded] = useState(false);
-  
-  const gameDescription = (game as any)[`description_${locale}`] || game.description_en || '';
 
   const patcherViewTrackedRef = useRef(false);
   const patcherSectionRef = useRef<HTMLDivElement>(null);
@@ -588,7 +587,8 @@ export default function PatcherClient({
           </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-8 w-full items-start">
+        {gameInfoSlot}
+      <div className="flex flex-col lg:flex-row gap-8 w-full items-start">
           <div className="flex-1 w-full min-w-0 flex flex-col">
             {/* Secondary Clean Card for original FLiNG download */}
         <div className="relative rounded-xl border border-slate-800 bg-slate-900/30 p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 mb-8 shadow-md">
@@ -742,20 +742,6 @@ export default function PatcherClient({
             
             {playerCountSlot}
 
-            {gameDescription && (
-              <div className="mb-3">
-                <div 
-                  className={`text-sm text-slate-300 leading-relaxed overflow-hidden transition-all duration-300 ${isDescExpanded ? '' : 'line-clamp-3'}`}
-                  dangerouslySetInnerHTML={{ __html: gameDescription }}
-                />
-                <button 
-                  onClick={() => setIsDescExpanded(!isDescExpanded)}
-                  className="mt-1 text-xs font-semibold text-cyan-400 hover:text-cyan-300 focus:outline-none flex items-center gap-1"
-                >
-                  {isDescExpanded ? pt.showLess : pt.showMore}
-                </button>
-              </div>
-            )}
             
           </div>
         </div>
@@ -794,6 +780,7 @@ export default function PatcherClient({
         </div>
       </div>
 
+      {gameInfoSlot}
       <div className="flex flex-col lg:flex-row gap-8 w-full items-start">
         <div className="flex-1 w-full min-w-0 flex flex-col">
           {/* Main Patcher Area */}
@@ -833,10 +820,10 @@ export default function PatcherClient({
                     <AlertTriangle className="w-8 h-8 shrink-0 text-amber-400 mt-0.5" />
                     <div>
                       <h3 className="font-bold text-lg text-white mb-2 font-outfit">
-                        {isTranslationRejected ? pt.autoVerifyFailed : pt.autoVerifyInProgress}
+                        {isTranslationRejected ? pt.autoVerifyFailed : unapprovedStatus === 'pending' ? pt.autoVerifyInProgress : pt.translationUnavailable}
                       </h3>
                       <p className="text-sm leading-relaxed text-amber-100/80">
-                        {isTranslationRejected ? pt.autoVerifyFailedDesc : pt.autoVerifyInProgressDesc}
+                        {isTranslationRejected ? pt.autoVerifyFailedDesc : unapprovedStatus === 'pending' ? pt.autoVerifyInProgressDesc : pt.translationUnavailableDesc}
                       </p>
                     </div>
                   </div>
@@ -989,7 +976,6 @@ export default function PatcherClient({
                 </section>
 
                 <PartnerStoreWidget game={game} locale={locale} t={t} trainerId={selectedTrainerId} />
-                <SafetyAndUsageGuideSection game={game} locale={locale} />
                 <AdSenseUnit locale={locale} slot={bottomAdSlot} />
                 {/* Related Trainers Grid */}
                 {relatedGames && relatedGames.length > 0 && (
@@ -1056,66 +1042,6 @@ export default function PatcherClient({
         )}
       </div>
     </div>
-  );
-}
-
-function SafetyAndUsageGuideSection({ game, locale }: { game: Game; locale: Locale }) {
-  const pt = getPatcherDict(locale as Locale);
-
-  return (
-    <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900/40 p-6 md:p-8 backdrop-blur-md relative overflow-hidden shadow-xl" aria-labelledby="safety-guide-heading">
-      <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
-      
-      <h3 id="safety-guide-heading" className="text-base md:text-lg font-bold text-white font-outfit mb-4 flex items-center gap-2">
-        <span className="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
-        {pt.guideHeaderFull.replace('{gameTitle}', getGameTitle(game, locale as Locale))}
-      </h3>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-300 leading-relaxed mb-6">
-        <div className="p-4 rounded-xl border border-slate-800/80 bg-slate-950/40">
-          <h4 className="font-bold text-cyan-300 text-sm mb-2">
-            {pt.guideLocalPatchTitle}
-          </h4>
-          <p className="text-slate-400">
-            {pt.guideLocalPatchDesc}
-          </p>
-        </div>
-
-        <div className="p-4 rounded-xl border border-slate-800/80 bg-slate-950/40">
-          <h4 className="font-bold text-amber-300 text-sm mb-2">
-            {pt.guideOfflineTitle}
-          </h4>
-          <p className="text-slate-400">
-            {pt.guideOfflineDesc}
-          </p>
-        </div>
-      </div>
-
-      <div className="border-t border-slate-800/60 pt-6">
-        <h4 className="font-bold text-slate-200 text-sm mb-4">
-          {pt.faqSectionTitle}
-        </h4>
-        <div className="space-y-4 text-xs">
-          <div className="p-3.5 rounded-lg bg-slate-950/30 border border-slate-800/50">
-            <p className="font-semibold text-slate-200 mb-1">
-              {pt.faqQ1}
-            </p>
-            <p className="text-slate-400">
-              {pt.faqA1}
-            </p>
-          </div>
-
-          <div className="p-3.5 rounded-lg bg-slate-950/30 border border-slate-800/50">
-            <p className="font-semibold text-slate-200 mb-1">
-              {pt.faqQ2}
-            </p>
-            <p className="text-slate-400">
-              {pt.faqA2}
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
   );
 }
 
