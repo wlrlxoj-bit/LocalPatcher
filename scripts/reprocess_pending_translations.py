@@ -95,6 +95,8 @@ def main():
                         help="ko/ja 매핑 누락을 검사할 최근 트레이너 수 (최대 1000)")
     parser.add_argument("--offset", type=int, default=None,
                         help="실패 대상에 막힌 후속 대상을 명시적으로 선택할 시작 위치")
+    parser.add_argument("--provider", choices=["gemini", "azure", "openai_paid"],
+                        default=os.getenv("TRANSLATION_PROVIDER", "gemini"))
     args = parser.parse_args()
     if not 1 <= args.limit <= 100 or not 1 <= args.scan_limit <= 1000 or (args.offset is not None and args.offset < 0):
         parser.error("limit은 1~100, scan-limit은 1~1000, offset은 0 이상이어야 합니다")
@@ -133,7 +135,7 @@ def main():
             sys.executable,
             os.path.join(os.path.dirname(__file__), "scraper.py"),
             "--provider",
-            "azure",
+            args.provider,
             "--url",
             target,
         ]

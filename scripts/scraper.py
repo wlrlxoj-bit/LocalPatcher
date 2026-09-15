@@ -36,12 +36,36 @@ SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
 # Use Service Role Key for writing to DB securely in backend workflows, fallback to Anon Key
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_SECRET_KEY") or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
 
+def environment_nonnegative_int(name, default):
+    """잘못된 실행 환경 값이 전체 자동화를 중단시키지 않도록 안전한 상한을 반환한다."""
+    try:
+        return max(0, int(os.environ.get(name, str(default))))
+    except ValueError:
+        return default
+
+
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MONTHLY_MAX_CHARS = environment_nonnegative_int("GEMINI_MONTHLY_MAX_CHARS", 0)
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 AZURE_TRANSLATOR_KEY = os.environ.get("AZURE_TRANSLATOR_KEY")
 AZURE_TRANSLATOR_REGION = os.environ.get("AZURE_TRANSLATOR_REGION")
 AZURE_TRANSLATOR_ENDPOINT = (os.environ.get("AZURE_TRANSLATOR_ENDPOINT") or "https://api.cognitive.microsofttranslator.com").rstrip("/")
-TRANSLATION_PROVIDER = "azure"
+TRANSLATION_PROVIDER = "gemini"
+
+
+# Gemini가 형식 검증 또는 API 호출에서 실패했을 때만 제한적으로 쓸 GPT 예산이다.
+# 실행 환경의 Secrets나 워크플로 설정만으로 상한을 조절한다.
+OPENAI_FALLBACK_MAX_REQUESTS = environment_nonnegative_int("OPENAI_FALLBACK_MAX_REQUESTS", 8)
+OPENAI_FALLBACK_MAX_CHARS = environment_nonnegative_int("OPENAI_FALLBACK_MAX_CHARS", 12000)
+OPENAI_FALLBACK_MONTHLY_MAX_CHARS = environment_nonnegative_int("OPENAI_FALLBACK_MONTHLY_MAX_CHARS", 0)
+OPENAI_AUTOMATION_FALLBACK_ENABLED = os.environ.get(
+    "OPENAI_AUTOMATION_FALLBACK_ENABLED", "true"
+).strip().lower() == "true"
+openai_fallback_requests = 0
+openai_fallback_chars = 0
+last_llm_provider = None
+translation_usage_db = None
 
 class TranslationQuotaError(RuntimeError):
     pass
@@ -217,20 +241,35 @@ def _parse_indexed_translations(text_response, expected_count):
 
 
 def _call_gemini(lines_to_translate, prompt, _temperature):
+    if not GEMINI_API_KEY:
+        raise RuntimeError("Gemini API 환경 변수가 설정되지 않았습니다")
+    reservation_id = _reserve_automation_usage(
+        "gemini", sum(len(line) for line in lines_to_translate), GEMINI_MONTHLY_MAX_CHARS,
+    )
+    request_started = False
     print("[*] Gemini API에 일괄 번역을 요청합니다...")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"responseMimeType": "application/json"}
     }
-    res = requests.post(url, json=payload, timeout=15)
-    if res.status_code != 200:
-        raise RuntimeError(f"Gemini API가 HTTP {res.status_code}을 반환했습니다: {res.text[:500]}")
-    text_response = res.json()["candidates"][0]["content"]["parts"][0]["text"]
-    return _parse_indexed_translations(text_response, len(lines_to_translate))
+    try:
+        request_started = True
+        res = requests.post(url, json=payload, timeout=15)
+        if res.status_code != 200:
+            raise RuntimeError(f"Gemini API가 HTTP {res.status_code}을 반환했습니다")
+        try:
+            text_response = res.json()["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise RuntimeError("Gemini API 응답 형식이 올바르지 않습니다") from exc
+        return _parse_indexed_translations(text_response, len(lines_to_translate))
+    finally:
+        _finalize_automation_usage(reservation_id, consumed=request_started)
 
 
 def _call_openai(lines_to_translate, prompt, temperature):
+    if not OPENAI_API_KEY:
+        raise RuntimeError("OpenAI API 환경 변수가 설정되지 않았습니다")
     print("[*] OpenAI API(gpt-4.1-mini)에 일괄 번역을 요청합니다...")
     headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
     payload = {
@@ -246,9 +285,78 @@ def _call_openai(lines_to_translate, prompt, temperature):
     if res.status_code in (403, 429):
         raise TranslationQuotaError(f"OpenAI 유료 번역 할당량 중단: HTTP {res.status_code}")
     if res.status_code != 200:
-        raise RuntimeError(f"OpenAI API가 HTTP {res.status_code}을 반환했습니다: {res.text[:500]}")
+        raise RuntimeError(f"OpenAI API가 HTTP {res.status_code}을 반환했습니다")
     text_response = res.json()["choices"][0]["message"]["content"]
     return _parse_indexed_translations(text_response, len(lines_to_translate))
+
+
+def openai_automation_fallback_available():
+    """Gemini 실패 시 사용할 GPT 보조 경로의 공유 월 예산 준비 상태를 확인한다."""
+    return bool(
+        OPENAI_AUTOMATION_FALLBACK_ENABLED
+        and OPENAI_FALLBACK_MONTHLY_MAX_CHARS > 0
+        and OPENAI_API_KEY
+        and translation_usage_db is not None
+    )
+
+
+def _reserve_automation_usage(provider, characters, monthly_max_chars):
+    """공유 월 사용량을 원자적으로 예약한다. RPC를 사용할 수 없으면 비용 호출을 막는다."""
+    if monthly_max_chars <= 0 or translation_usage_db is None:
+        raise TranslationQuotaError(f"{provider} 자동 번역 월 예산이 설정되지 않았습니다")
+    try:
+        configured = translation_usage_db.rpc("configure_translation_usage_limit", {
+            "p_provider": provider,
+            "p_hard_limit_characters": monthly_max_chars,
+        }).execute().data
+        if configured is not True:
+            raise TranslationQuotaError(f"{provider} 월 예산을 설정할 수 없습니다")
+        reservation = translation_usage_db.rpc("reserve_translation_usage", {
+            "p_provider": provider,
+            "p_characters": characters,
+        }).execute().data
+    except TranslationQuotaError:
+        raise
+    except Exception as exc:
+        raise TranslationQuotaError(f"{provider} 공유 월 예산을 확인할 수 없습니다") from exc
+    if not isinstance(reservation, str) or not reservation:
+        raise TranslationQuotaError(f"{provider} 월 예산을 초과했습니다")
+    return reservation
+
+
+def _finalize_automation_usage(reservation_id, consumed):
+    try:
+        completed = translation_usage_db.rpc("finalize_translation_usage", {
+            "p_reservation_id": reservation_id,
+            "p_consumed": consumed,
+        }).execute().data
+        if completed is not True:
+            raise RuntimeError("reservation finalize rejected")
+    except Exception as exc:
+        raise TranslationQuotaError("자동 번역 공유 월 예산 확정에 실패했습니다") from exc
+
+
+def _call_openai_fallback(lines_to_translate, prompt, temperature):
+    """자동 보조 GPT 호출은 실행 상한과 Supabase 월 예산 예약을 모두 통과해야 한다."""
+    global openai_fallback_requests, openai_fallback_chars
+    request_chars = sum(len(line) for line in lines_to_translate)
+    if openai_fallback_requests >= OPENAI_FALLBACK_MAX_REQUESTS:
+        raise TranslationQuotaError("OpenAI 보조 번역 요청 상한에 도달했습니다")
+    if openai_fallback_chars + request_chars > OPENAI_FALLBACK_MAX_CHARS:
+        raise TranslationQuotaError("OpenAI 보조 번역 문자 상한에 도달했습니다")
+    if not openai_automation_fallback_available():
+        raise TranslationQuotaError("OpenAI 자동 보조 번역 월 예산이 설정되지 않았습니다")
+    reservation_id = _reserve_automation_usage(
+        "openai_paid", request_chars, OPENAI_FALLBACK_MONTHLY_MAX_CHARS,
+    )
+    openai_fallback_requests += 1
+    openai_fallback_chars += request_chars
+    request_started = False
+    try:
+        request_started = True
+        return _call_openai(lines_to_translate, prompt, temperature)
+    finally:
+        _finalize_automation_usage(reservation_id, consumed=request_started)
 
 def _call_azure(lines_to_translate, _prompt, _temperature):
     """Azure Translator F0 기본 경로. 항목 25개·유니코드 5000자 이내 배치만 호출한다."""
@@ -301,11 +409,12 @@ def _chunk_translation_items(items, max_items=25, max_chars=5000):
 
 
 def _translate_via_llm_with_fallback(lines_to_translate, language, example_translation, providers):
-    """일괄 번역을 재시도하고, 실패한 줄은 위치를 보존해 개별 번역한다."""
+    """기본 번역기 1회 후 실패할 때만 보조 번역기 1회를 실행한다."""
+    global last_llm_provider
     if not lines_to_translate:
         return []
     if not providers:
-        return list(lines_to_translate)
+        raise RuntimeError("사용 가능한 자동 번역 제공자가 없습니다")
     chunks = _chunk_translation_items(lines_to_translate)
     if len(chunks) > 1:
         translated = []
@@ -319,22 +428,22 @@ def _translate_via_llm_with_fallback(lines_to_translate, language, example_trans
 
     language_label = "한국어" if language == "Korean" else "일본어"
     last_error = "번역 제공자가 성공적으로 응답하지 않았습니다"
-    for attempt in range(1, 5):
-        extra_prompt = "" if attempt == 1 else (
-            f"\nIMPORTANT: The previous output was invalid. Return exactly these {len(lines_to_translate)} "
-            "indexed keys with string values and no other keys."
-        )
-        prompt = _build_llm_prompt(lines_to_translate, language, example_translation, extra_prompt)
-        for provider_name, provider in providers:
-            try:
-                return provider(lines_to_translate, prompt, 0.7 if attempt == 1 else 0.1)
-            except Exception as exc:
-                if isinstance(exc, TranslationQuotaError):
+    prompt = _build_llm_prompt(lines_to_translate, language, example_translation)
+    for provider_name, provider in providers:
+        try:
+            result = provider(lines_to_translate, prompt, 0.7)
+            last_llm_provider = provider_name
+            return result
+        except Exception as exc:
+            if isinstance(exc, TranslationQuotaError):
+                # Gemini의 월 예산/예약 실패도 GPT 보조 번역을 시도해야 한다.
+                # 반면 GPT 보조 경로의 예산 실패는 더 비싼 재시도를 만들 수 있으므로
+                # 이 실행을 실패로 끝낸다. 제공자 표시는 translation_providers()의
+                # 고정 계약이며, 외부 응답 내용은 로그에 기록하지 않는다.
+                if provider_name != "Gemini":
                     raise
-                last_error = str(exc)
-                print(f"[-] {provider_name} {language_label} 일괄 번역 {attempt}/4회 실패: {last_error}")
-        if attempt < 4:
-            time.sleep(1)
+            last_error = str(exc)
+            print(f"[-] {provider_name} {language_label} 일괄 번역 실패: {type(exc).__name__}")
 
     raise RuntimeError(f"{language_label} 일괄 번역 실패: {last_error}")
 
@@ -348,19 +457,33 @@ def _split_option_for_translation(line):
     return prefix + delimiter, label
 
 
-def translate_via_llm(lines_to_translate):
-    providers = [("Azure", _call_azure)] if TRANSLATION_PROVIDER == "azure" else [("OpenAI Paid", _call_openai)]
+def translation_providers(prefer_openai_fallback=False):
+    """선택된 기본 번역기와 Gemini 실패 시 1회만 쓸 GPT 보조 번역기를 결정한다."""
+    if TRANSLATION_PROVIDER == "gemini":
+        if prefer_openai_fallback:
+            return [("OpenAI Paid Fallback", _call_openai_fallback)] if openai_automation_fallback_available() else []
+        providers = [("Gemini", _call_gemini)]
+        if openai_automation_fallback_available():
+            providers.append(("OpenAI Paid Fallback", _call_openai_fallback))
+        return providers
+    if TRANSLATION_PROVIDER == "azure":
+        return [("Azure", _call_azure)]
+    return [("OpenAI Paid", _call_openai)]
+
+
+def translate_via_llm(lines_to_translate, prefer_openai_fallback=False):
+    providers = translation_providers(prefer_openai_fallback)
     return _translate_via_llm_with_fallback(lines_to_translate, "Korean", "무한 체력", providers)
 
-def translate_via_llm_de(lines_to_translate):
-    providers = [("Azure", _call_azure)] if TRANSLATION_PROVIDER == "azure" else [("OpenAI Paid", _call_openai)]
+def translate_via_llm_de(lines_to_translate, prefer_openai_fallback=False):
+    providers = translation_providers(prefer_openai_fallback)
     return _translate_via_llm_with_fallback(lines_to_translate, "German", "Unendliche Gesundheit", providers)
 
-def translate_via_llm_es(lines_to_translate):
-    providers = [("Azure", _call_azure)] if TRANSLATION_PROVIDER == "azure" else [("OpenAI Paid", _call_openai)]
+def translate_via_llm_es(lines_to_translate, prefer_openai_fallback=False):
+    providers = translation_providers(prefer_openai_fallback)
     return _translate_via_llm_with_fallback(lines_to_translate, "Spanish", "Salud Infinita", providers)
 
-def process_translation_block_de(text: str, db: Client) -> str:
+def process_translation_block_de(text: str, db: Client, prefer_openai_fallback=False) -> str:
     lines = text.split("\n")
     dict_results = []
     lines_needing_llm = []
@@ -375,7 +498,7 @@ def process_translation_block_de(text: str, db: Client) -> str:
             dict_results.append(None)
             lines_needing_llm.append(parts[1])
             
-    llm_results = translate_via_llm_de(lines_needing_llm) if lines_needing_llm else []
+    llm_results = translate_via_llm_de(lines_needing_llm, prefer_openai_fallback) if lines_needing_llm else []
     translated_lines = []
     llm_index = 0
     for idx, line in enumerate(lines):
@@ -398,7 +521,7 @@ def process_translation_block_de(text: str, db: Client) -> str:
         translated_lines.append(trans_line)
     return "\n".join(translated_lines)
 
-def process_translation_block_es(text: str, db: Client) -> str:
+def process_translation_block_es(text: str, db: Client, prefer_openai_fallback=False) -> str:
     lines = text.split("\n")
     dict_results = []
     lines_needing_llm = []
@@ -413,7 +536,7 @@ def process_translation_block_es(text: str, db: Client) -> str:
             dict_results.append(None)
             lines_needing_llm.append(parts[1])
             
-    llm_results = translate_via_llm_es(lines_needing_llm) if lines_needing_llm else []
+    llm_results = translate_via_llm_es(lines_needing_llm, prefer_openai_fallback) if lines_needing_llm else []
     translated_lines = []
     llm_index = 0
     for idx, line in enumerate(lines):
@@ -472,7 +595,7 @@ def translate_line(line: str):
     # Return None to indicate it requires LLM translation
     return None
 
-def process_translation_block(text: str, db: Client) -> str:
+def process_translation_block(text: str, db: Client, prefer_openai_fallback=False) -> str:
     """Splits a multi-line options string, translates each line (Dictionary + LLM Fallback), and pads with spaces."""
     lines = text.split("\n")
     dict_results = []
@@ -498,7 +621,7 @@ def process_translation_block(text: str, db: Client) -> str:
     # Second Pass: Perform batch LLM translation if keys are set
     llm_results = []
     if lines_needing_llm:
-        llm_results = translate_via_llm(lines_needing_llm)
+        llm_results = translate_via_llm(lines_needing_llm, prefer_openai_fallback)
 
     # Third Pass: Assemble and apply Space Padding to synchronize lengths
     translated_lines = []
@@ -615,12 +738,12 @@ def _translate_via_llm_ja_legacy(lines_to_translate):
 
     return {}
 
-def translate_via_llm_ja(lines_to_translate):
+def translate_via_llm_ja(lines_to_translate, prefer_openai_fallback=False):
     """모든 원문 줄의 위치를 보존하면서 일본어로 번역한다."""
-    providers = [("Azure", _call_azure)] if TRANSLATION_PROVIDER == "azure" else [("OpenAI Paid", _call_openai)]
+    providers = translation_providers(prefer_openai_fallback)
     return _translate_via_llm_with_fallback(lines_to_translate, "Japanese", "無限体力", providers)
 
-def process_translation_block_ja(text: str, db: Client) -> str:
+def process_translation_block_ja(text: str, db: Client, prefer_openai_fallback=False) -> str:
     """Splits a multi-line options string, translates each line to Japanese (Dictionary + LLM Fallback), and pads with spaces."""
     lines = text.split("\n")
     dict_results = []
@@ -644,7 +767,7 @@ def process_translation_block_ja(text: str, db: Client) -> str:
 
     llm_results = []
     if lines_needing_llm:
-        llm_results = translate_via_llm_ja(lines_needing_llm)
+        llm_results = translate_via_llm_ja(lines_needing_llm, prefer_openai_fallback)
 
     translated_lines = []
     llm_index = 0
@@ -895,6 +1018,8 @@ def recover_official_archive(response, headers):
 
 def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_failures=True, languages=None):
     """Scrapes specific trainer page, downloads binaries for ALL versions, extracts offsets, and inserts to Supabase."""
+    global last_llm_provider, translation_usage_db
+    translation_usage_db = db
     print(f"[*] Processing: {post['title']} ({post['link']})")
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     requested_locales = set(languages or ('ko', 'ja', 'de', 'es'))
@@ -1118,9 +1243,18 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                     if language_code not in requested_locales or (language_code in approved_locales and not force):
                         continue
                     validation = None
-                    for attempt in range(1, 4):
+                    last_llm_provider = None
+                    for attempt in range(1, 3):
+                        prefer_openai_fallback = (
+                            TRANSLATION_PROVIDER == "gemini"
+                            and attempt == 2
+                            and last_llm_provider == "Gemini"
+                        )
                         try:
-                            translated_text = translator(mapping_details['original_text'], db)
+                            translated_text = translator(
+                                mapping_details['original_text'], db,
+                                prefer_openai_fallback=prefer_openai_fallback,
+                            )
                         except Exception as locale_error:
                             print(f"[locale-failed] trainer={trainer_id} locale={language_code} error={type(locale_error).__name__}")
                             validation = None
@@ -1130,7 +1264,10 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                             'encoding': mapping_details['encoding'], 'original_text': clean_orig_text,
                             'translated_text': translated_text.replace('\x00', '').replace('\u0000', ''),
                             'max_char_len': mapping_details['max_char_len'], 'language_code': language_code,
-                            'translation_provider': TRANSLATION_PROVIDER
+                            'translation_provider': (
+                                'openai_paid' if last_llm_provider == 'OpenAI Paid Fallback'
+                                else TRANSLATION_PROVIDER
+                            )
                         }
                         validation = validate_translation(
                             binary=exe_bytes, expected_sha256=original_file_hash,
@@ -1143,6 +1280,14 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                         if validation.ok or any(issue.structural for issue in validation.issues):
                             break
                         print(f"[validation-retry] trainer={trainer_id} locale={language_code} attempt={attempt} codes={','.join(validation.codes)}")
+                        # Gemini 결과가 전체 검증에서만 실패했을 때에만 GPT를 한 번 보조 호출한다.
+                        if not (
+                            TRANSLATION_PROVIDER == "gemini"
+                            and attempt == 1
+                            and last_llm_provider == "Gemini"
+                        ):
+                            validation = None
+                            break
                     if validation is None:
                         trainer_ok = False
                         continue
@@ -1175,7 +1320,10 @@ def main():
     parser = argparse.ArgumentParser(description="FLiNG Trainer Scraper Pipeline")
     parser.add_argument("--force", action="store_true", help="Force re-processing and overwriting of existing trainers")
     parser.add_argument("--url", type=str, help="Pinpoint scrape a single target FLiNG trainer URL")
-    parser.add_argument("--provider", choices=["azure", "openai_paid"], default="azure")
+    parser.add_argument(
+        "--provider", choices=["gemini", "azure", "openai_paid"], default="gemini",
+        help="기본 번역기. gemini는 API/JSON 실패와 검증 실패 때만 GPT 보조 번역을 1회 사용합니다.",
+    )
     parser.add_argument("--languages", nargs="+", choices=["ko", "ja", "de", "es"],
                         default=["ko", "ja", "de", "es"])
     parser.add_argument("--confirm-paid", action="store_true", help="OpenAI 유료 호출을 명시적으로 승인")

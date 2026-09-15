@@ -37,11 +37,18 @@ jobs:
         AZURE_TRANSLATOR_KEY: ${{ secrets.AZURE_TRANSLATOR_KEY }}
         AZURE_TRANSLATOR_REGION: ${{ secrets.AZURE_TRANSLATOR_REGION }}
         AZURE_TRANSLATOR_ENDPOINT: ${{ secrets.AZURE_TRANSLATOR_ENDPOINT }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        GEMINI_MODEL: gemini-2.5-flash
+        GEMINI_MONTHLY_MAX_CHARS: ${{ vars.GEMINI_MONTHLY_MAX_CHARS }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        OPENAI_FALLBACK_MONTHLY_MAX_CHARS: ${{ vars.OPENAI_FALLBACK_MONTHLY_MAX_CHARS }}
+        OPENAI_FALLBACK_MAX_REQUESTS: ${{ vars.OPENAI_FALLBACK_MAX_REQUESTS || '8' }}
+        OPENAI_FALLBACK_MAX_CHARS: ${{ vars.OPENAI_FALLBACK_MAX_CHARS || '12000' }}
       run: |
         if [ -n "${{ github.event.inputs.target_url }}" ]; then
-          python scripts/scraper.py --provider azure --url "${{ github.event.inputs.target_url }}"
+          python scripts/scraper.py --provider gemini --url "${{ github.event.inputs.target_url }}"
         else
-          python scripts/scraper.py --provider azure
+          python scripts/scraper.py --provider gemini
         fi
 
   reprocess-pending:
@@ -70,4 +77,11 @@ jobs:
         AZURE_TRANSLATOR_KEY: ${{ secrets.AZURE_TRANSLATOR_KEY }}
         AZURE_TRANSLATOR_REGION: ${{ secrets.AZURE_TRANSLATOR_REGION }}
         AZURE_TRANSLATOR_ENDPOINT: ${{ secrets.AZURE_TRANSLATOR_ENDPOINT }}
-      run: python scripts/reprocess_pending_translations.py --apply
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        GEMINI_MODEL: gemini-2.5-flash
+        GEMINI_MONTHLY_MAX_CHARS: ${{ vars.GEMINI_MONTHLY_MAX_CHARS }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        OPENAI_FALLBACK_MONTHLY_MAX_CHARS: ${{ vars.OPENAI_FALLBACK_MONTHLY_MAX_CHARS }}
+        OPENAI_FALLBACK_MAX_REQUESTS: ${{ vars.OPENAI_FALLBACK_MAX_REQUESTS || '8' }}
+        OPENAI_FALLBACK_MAX_CHARS: ${{ vars.OPENAI_FALLBACK_MAX_CHARS || '12000' }}
+      run: python scripts/reprocess_pending_translations.py --apply --provider gemini
