@@ -3,6 +3,7 @@ import { createPreviewHash } from './hash';
 import { TranslationError } from './errors';
 import { loadTranslationSource } from './source';
 import { translateWithAzure } from './azure';
+import { translateWithGemini } from './gemini';
 import { translateWithOpenAIPaid } from './openai-paid';
 import { countUnicodeCharacters, createBatches, validateItems, type TargetLanguage, type TranslationProvider, type TranslationResult } from './types';
 import { createHash } from 'node:crypto';
@@ -67,7 +68,13 @@ export async function runTranslation(input: { provider: TranslationProvider; tra
       if (error || typeof reservation !== 'string') throw new TranslationError('quota', '월간 번역 사용 한도를 초과했습니다.');
       reservationId = reservation;
     }
-    const translated = missing.length ? (input.provider === 'azure' ? await translateWithAzure(missing, input.targetLanguage) : await translateWithOpenAIPaid(missing, input.targetLanguage)) : [];
+    const translated = missing.length
+      ? input.provider === 'azure'
+        ? await translateWithAzure(missing, input.targetLanguage)
+        : input.provider === 'gemini'
+          ? await translateWithGemini(missing, input.targetLanguage)
+          : await translateWithOpenAIPaid(missing, input.targetLanguage)
+      : [];
     if (reservationId) {
       const { data: consumed, error: consumeError } = await source.client.rpc('finalize_translation_usage', { p_reservation_id: reservationId, p_consumed: true });
       if (consumeError || consumed !== true) throw new TranslationError('unavailable', '번역 사용량 확정에 실패했습니다.');

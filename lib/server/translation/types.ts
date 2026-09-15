@@ -1,6 +1,7 @@
 import 'server-only';
 
-export type TranslationProvider = 'azure' | 'openai_paid';
+export type TranslationProvider = 'azure' | 'openai_paid' | 'gemini';
+export const TRANSLATION_PROVIDERS = ['azure', 'openai_paid', 'gemini'] as const;
 export const SUPPORTED_TARGET_LANGUAGES = ['ko', 'ja', 'de', 'fr', 'es', 'pt', 'zh-Hans', 'zh-Hant'] as const;
 export type TargetLanguage = typeof SUPPORTED_TARGET_LANGUAGES[number];
 export type TranslationItem = {
@@ -35,6 +36,10 @@ export const MAX_JOB_CHARACTERS = 50_000;
 
 export function isTargetLanguage(value: unknown): value is TargetLanguage {
   return typeof value === 'string' && SUPPORTED_TARGET_LANGUAGES.includes(value as TargetLanguage);
+}
+
+export function isTranslationProvider(value: unknown): value is TranslationProvider {
+  return typeof value === 'string' && TRANSLATION_PROVIDERS.includes(value as TranslationProvider);
 }
 
 export function countUnicodeCharacters(value: string) {

@@ -16,7 +16,7 @@
 `POST /api/admin/translations/preview`
 
 ```json
-{ "provider": "azure", "trainerId": 123, "targetLanguage": "ja" }
+{ "provider": "gemini", "trainerId": 123, "targetLanguage": "ja" }
 ```
 
 공급자를 호출하지 않고 `previewHash`, 전체 슬롯의 `items`, `batchCount`, `quota`, `sourceSlots`를 반환한다.
@@ -34,7 +34,19 @@
 }
 ```
 
-`openai_paid`는 `paidConsent: true`가 필수다. 성공 응답은 `{id,status,result,idempotent}` 형태를 유지한다.
+`openai_paid`는 `paidConsent: true`가 필수다. Gemini와 OpenAI 유료 공급자는 월 문자 한도가 설정되기 전까지 실행할 수 없다. 성공 응답은 `{id,status,result,idempotent}` 형태를 유지한다.
+
+## 월 한도
+
+`GET /api/admin/translations/usage?provider=gemini`은 현재 달의 확정·예약·한도 값을 반환한다.
+
+`PATCH /api/admin/translations/usage`은 관리자 세션에서 현재 달의 공급자 문자 한도를 설정한다.
+
+```json
+{ "provider": "gemini", "hardLimitCharacters": 100000 }
+```
+
+한도는 이미 확정 또는 예약된 문자 수보다 낮게 설정할 수 없다. Gemini와 OpenAI 유료 공급자의 새 달 기본값은 0이므로, 월별로 명시적인 한도 설정이 필요하다.
 
 ## 승인
 
