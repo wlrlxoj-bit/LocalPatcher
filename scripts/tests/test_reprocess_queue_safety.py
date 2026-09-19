@@ -1,10 +1,15 @@
 """자동 재시도 폭주를 막는 외부 호출 없는 계약 테스트."""
 
+import argparse
+import ast
+import os
 import pathlib
+import subprocess
 import sys
 import unittest
 from types import SimpleNamespace
 from urllib.parse import urlparse
+from unittest import mock
 
 
 TESTS_DIR = pathlib.Path(__file__).resolve().parent
@@ -26,14 +31,14 @@ class ReprocessQueueSafetyTests(unittest.TestCase):
         self.assertEqual(classify(1, "unclassified failure"), "failed")
         self.assertEqual(classify(0, ""), "success")
 
-    def test_due_claims_are_grouped_by_url_and_invalid_sources_are_separated(self):
+    def test_due_claims_keep_each_trainer_locale_independent_and_separate_invalid_sources(self):
         class Db:
             def rpc(self, name, payload):
                 self.name, self.payload = name, payload
                 rows = [
                     {"trainer_id": 1, "language_code": "ko", "fling_url": "https://flingtrainer.com/a"},
-                    {"trainer_id": 1, "language_code": "ja", "fling_url": "https://flingtrainer.com/a"},
-                    {"trainer_id": 2, "language_code": "de", "fling_url": None},
+                    {"trainer_id": 2, "language_code": "ja", "fling_url": "https://flingtrainer.com/a"},
+                    {"trainer_id": 3, "language_code": "de", "fling_url": None},
                 ]
                 return SimpleNamespace(execute=lambda: SimpleNamespace(data=rows))
 
@@ -45,8 +50,58 @@ class ReprocessQueueSafetyTests(unittest.TestCase):
         targets, missing = claim(db, 4)
         self.assertEqual(db.name, "claim_due_translation_retries")
         self.assertEqual(db.payload, {"p_limit": 4})
-        self.assertEqual(targets, {"https://flingtrainer.com/a": [(1, "ko"), (1, "ja")]})
-        self.assertEqual(missing, [(2, "de")])
+        # 같은 FLiNG 게시물이라도 claim한 trainer/locale 한 건씩만 하위 작업에
+        # 전달해야 한다. URL 단위로 합치면 한 작업이 다른 대기 항목까지 처리한다.
+        self.assertEqual(targets, [
+            ("https://flingtrainer.com/a", 1, "ko"),
+            ("https://flingtrainer.com/a", 2, "ja"),
+        ])
+        self.assertEqual(missing, [(3, "de")])
+
+    def test_main_starts_one_child_per_trainer_locale_for_same_url(self):
+        """동일 URL claim도 trainer/locale별로 정확히 한 번씩만 실행한다."""
+        script = pathlib.Path(__file__).resolve().parents[1] / "reprocess_pending_translations.py"
+        module = ast.parse(script.read_text(encoding="utf-8"))
+        functions = [node for node in module.body if isinstance(node, ast.FunctionDef)]
+        commands = []
+        fake_db = object()
+        scope = {
+            "argparse": argparse,
+            "os": os,
+            "subprocess": subprocess,
+            "sys": sys,
+            "__file__": str(script),
+            "urlparse": urlparse,
+            "TARGET_LOCALES": ("ko", "ja", "de", "es"),
+            "create_client": lambda endpoint, key: fake_db,
+        }
+        exec(compile(ast.Module(body=functions, type_ignores=[]), str(script), "exec"), scope)
+        scope["claim_due_retry_targets"] = lambda db, limit: ([
+            ("https://flingtrainer.com/a", 1, "ko"),
+            ("https://flingtrainer.com/a", 2, "ja"),
+        ], [])
+
+        def fake_run(command, **kwargs):
+            commands.append((command, kwargs))
+            return SimpleNamespace(returncode=0, stdout="")
+
+        with mock.patch.dict(os.environ, {
+            "NEXT_PUBLIC_SUPABASE_URL": "https://example.supabase.co",
+            "SUPABASE_SERVICE_ROLE_KEY": "test-only",
+        }, clear=True), mock.patch.object(
+            sys, "argv", ["reprocess_pending_translations.py", "--apply", "--limit", "4"]
+        ), mock.patch.object(subprocess, "run", side_effect=fake_run):
+            self.assertEqual(scope["main"](), 0)
+
+        self.assertEqual([command for command, _ in commands], [
+            [sys.executable, str(script.parent / "scraper.py"), "--provider", "gemini",
+             "--url", "https://flingtrainer.com/a", "--languages", "ko", "--trainer-id", "1"],
+            [sys.executable, str(script.parent / "scraper.py"), "--provider", "gemini",
+             "--url", "https://flingtrainer.com/a", "--languages", "ja", "--trainer-id", "2"],
+        ])
+        self.assertTrue(all(kwargs == {
+            "check": False, "capture_output": True, "text": True
+        } for _, kwargs in commands))
 
     def test_reprocessor_uses_all_four_locales_and_never_runs_on_schedule(self):
         scripts = pathlib.Path(__file__).resolve().parents[1]

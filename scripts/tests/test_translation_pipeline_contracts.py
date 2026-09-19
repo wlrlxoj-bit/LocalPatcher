@@ -1,4 +1,5 @@
 import ast
+import hashlib
 import pathlib
 import sys
 import unittest
@@ -6,7 +7,7 @@ import unittest
 
 SCRIPTS = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
-from translation_validation import is_option_candidate, parse_option_line
+from translation_validation import is_option_candidate, parse_option_line, validate_translation
 
 
 def load_functions(filename, names, namespace=None):
@@ -83,26 +84,51 @@ class TranslationChunkTests(unittest.TestCase):
                 self.assertEqual(label, "Infinite Health")
                 self.assertEqual(prefix + "번역", source_line.replace("Infinite Health", "번역"))
 
-    def test_malformed_option_fails_closed_but_header_is_preserved(self):
+    def test_unparseable_option_is_preserved_for_downstream_fail_closed_validation(self):
         import re
         source = (SCRIPTS / "scraper.py").read_text(encoding="utf-8")
         module = ast.parse(source)
         functions = [
             node for node in module.body
             if isinstance(node, ast.FunctionDef)
-            and node.name == "translate_line"
+            and node.name in {"translate_line", "translate_line_ja"}
         ]
         scope = {
             "re": re,
             "parse_option_line": parse_option_line,
             "is_option_candidate": is_option_candidate,
             "db_dictionary_ko": {},
+            "db_dictionary_ja": {},
             "COMMON_TRANSLATIONS": {},
         }
         exec(compile(ast.Module(body=functions, type_ignores=[]), "scraper.py", "exec"), scope)
-        with self.assertRaises(RuntimeError):
-            scope["translate_line"]("Ctrl + Shift + F12 = Infinite Health")
+        # 번역 단계는 특이 단축키 후보를 보존한다. 저장 직전 검증이
+        # SOURCE_OPTION_PARSE_FAILED로 초안을 거절하므로 크롤러 전체를 중단하지 않는다.
+        unparseable_option = "Ctrl + Shift + F12 = Infinite Health"
+        self.assertTrue(is_option_candidate(unparseable_option))
+        for translator in (scope["translate_line"], scope["translate_line_ja"]):
+            with self.subTest(translator=translator.__name__):
+                self.assertEqual(translator(unparseable_option), unparseable_option)
         self.assertEqual(scope["translate_line"]("Trainer Options"), "Trainer Options")
+
+        binary = bytearray(512)
+        binary[:2] = b"MZ"
+        binary = bytes(binary)
+        validation = validate_translation(
+            binary=binary,
+            expected_sha256=hashlib.sha256(binary).hexdigest(),
+            expected_size=len(binary),
+            text_section=(64, 128),
+            offset=256,
+            max_char_len=100,
+            encoding="UTF-16LE",
+            original_text=unparseable_option,
+            translated_text=unparseable_option,
+            option_count=1,
+            language_code="ko",
+        )
+        self.assertFalse(validation.ok)
+        self.assertIn("SOURCE_OPTION_PARSE_FAILED", validation.codes)
 
 
 class FakeDb:

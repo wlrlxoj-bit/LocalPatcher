@@ -62,11 +62,12 @@ class MissingMappingRecoveryTests(unittest.TestCase):
              "translation_mappings": [{"language_code": "ko"}, {"language_code": "ja"}]},
         ]
         urls, failures, details = self.discover(rows)
-        self.assertEqual(len(urls), 2)
+        self.assertEqual(len(urls), 3)
         self.assertEqual(failures, 0)
         self.assertEqual(details[0]["missing"], ["de", "es", "ja", "ko"])
         self.assertEqual(details[1]["missing"], ["de", "es", "ja"])
-        self.assertEqual(len(details), 2)
+        self.assertEqual(details[2]["missing"], ["de", "es"])
+        self.assertEqual(len(details), 3)
 
     def test_duplicate_game_is_one_target_and_missing_source_is_counted(self):
         rows = [{"id": i, "games": {"slug": "same", "fling_url": "https://flingtrainer.com/a"},

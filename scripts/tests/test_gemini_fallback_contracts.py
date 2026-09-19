@@ -110,6 +110,7 @@ class GeminiFallbackContracts(unittest.TestCase):
         caller = load_function("_call_gemini", {
             "GEMINI_API_KEY": "configured",
             "GEMINI_MODEL": "gemini-2.5-flash",
+            "GEMINI_MONTHLY_MAX_CHARS": 1000,
             "TranslationQuotaError": QuotaError,
             "_reserve_automation_usage": lambda *_args: (_ for _ in ()).throw(QuotaError("budget")),
             "_finalize_automation_usage": lambda *_args, **_kwargs: None,
@@ -137,6 +138,7 @@ class GeminiFallbackContracts(unittest.TestCase):
         caller = load_function("_call_gemini", {
             "GEMINI_API_KEY": "configured",
             "GEMINI_MODEL": "gemini-2.5-flash",
+            "GEMINI_MONTHLY_MAX_CHARS": 1000,
             "_reserve_automation_usage": lambda *_args: "reservation-1",
             "_finalize_automation_usage": lambda reservation, consumed: calls.append((reservation, consumed)),
             "requests": Requests(),
