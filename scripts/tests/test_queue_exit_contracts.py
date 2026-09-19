@@ -31,6 +31,20 @@ class QueueExitContractTests(unittest.TestCase):
         self.assertFalse(page_result(True, 0, True))
         self.assertTrue(page_result(False, 2, False))
 
+    def test_rar_archives_are_neutral_skips_not_batch_failures(self):
+        is_rar_archive = load_function("scraper.py", "is_rar_archive")
+        page_result = load_function("scraper.py", "page_result")
+
+        self.assertTrue(is_rar_archive("https://example.com/trainer.rar"))
+        self.assertTrue(is_rar_archive("https://example.com/download", b"Rar!\x1a\x07"))
+        self.assertFalse(is_rar_archive("https://example.com/trainer.zip", b"PK\x03\x04"))
+        # RAR만 있는 게시물은 지원 형식 작업이 아니라 중립 건너뜀으로 종료한다.
+        self.assertTrue(page_result(False, 0, False, archive_only_skip=True))
+        # RAR과 정상 ZIP/EXE가 함께 있어 지원 형식 등록이 성공하면 성공을 유지한다.
+        self.assertTrue(page_result(True, 0, False))
+        # ZIP/EXE 같은 지원 형식의 실제 처리 실패는 기존처럼 실패여야 한다.
+        self.assertFalse(page_result(False, 0, True))
+
     def test_ja_mapping_requires_http_source(self):
         from urllib.parse import urlparse
 

@@ -6,9 +6,7 @@ import hashlib
 import zipfile
 import io
 import argparse
-import subprocess
 import time
-import tempfile
 from urllib.parse import parse_qs, quote, urlparse
 import requests
 from bs4 import BeautifulSoup
@@ -1063,6 +1061,12 @@ def recover_official_archive(response, headers):
     return response
 
 
+def is_rar_archive(download_url, file_bytes=None):
+    """지원하지 않는 RAR 보관본을 URL 또는 응답 매직 바이트로 판별한다."""
+    clean_url = (download_url or "").split("?", 1)[0].lower()
+    return clean_url.endswith(".rar") or bool(file_bytes and file_bytes.startswith(b"Rar!"))
+
+
 def scrape_and_patch_trainer(
     post,
     db: Client,
@@ -1139,6 +1143,8 @@ def scrape_and_patch_trainer(
         any_registered = False
         approved_skips = 0
         had_eligible_failure = False
+        rar_skips = 0
+        actionable_downloads = 0
         # Now process each version download link
         for download_a in unique_downloads:
             download_url = download_a['href']
@@ -1146,6 +1152,14 @@ def scrape_and_patch_trainer(
             print(f"[*] Version download link found: {download_url} ({download_text})")
             target_eligible = False
             approved_locales = set()
+
+            # RAR은 GitHub 실행 환경에서 안전하게 열 수 있는 형식이 아니다. 구형
+            # 보관본은 다운로드/번역 후보에서 제외하며, RAR만 있는 페이지는 아래에서
+            # 명시적인 중립 건너뜀으로만 처리한다.
+            if is_rar_archive(download_url):
+                print(f"[ARCHIVE_RAR_SKIPPED] url={download_url} source=url")
+                rar_skips += 1
+                continue
             
             try:
                 # Download binary bytes with retries
@@ -1173,43 +1187,21 @@ def scrape_and_patch_trainer(
                     
                 file_bytes = dl_response.content
                 exe_bytes = None
+
+                if is_rar_archive(download_url, file_bytes):
+                    print(f"[ARCHIVE_RAR_SKIPPED] url={download_url} source=magic_bytes")
+                    rar_skips += 1
+                    continue
+
+                actionable_downloads += 1
                 
-                # Unzip/unrar if packaged
+                # ZIP만 열어 실행 파일을 추출한다. RAR은 위에서 안전하게 제외했다.
                 if download_url.endswith('.zip') or file_bytes[:2] == b'PK':
                     print("[*] Unzipping package to extract executable...")
                     with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
                         for name in z.namelist():
                             if name.endswith('.exe'):
                                 exe_bytes = z.read(name)
-                                break
-                elif file_bytes.startswith(b'Rar!') or download_url.endswith('.rar'):
-                    print("[*] Unraring package to extract executable...")
-                    unrar_path = None
-                    if os.path.exists("UnRAR.exe"):
-                        unrar_path = "UnRAR.exe"
-                    elif os.path.exists("../UnRAR.exe"):
-                        unrar_path = "../UnRAR.exe"
-                    
-                    if not unrar_path:
-                        print("[-] Warning: UnRAR.exe not found. Skipping trainer.")
-                        if strict_download_failures:
-                            had_eligible_failure = True
-                        continue
-                    
-                    # 원본과 추출물을 전용 임시 폴더에 격리해 작업 폴더의 실행 파일을 보호한다.
-                    unrar_path = os.path.abspath(unrar_path)
-                    with tempfile.TemporaryDirectory(prefix="localpatcher-rar-") as extraction_dir:
-                        archive_path = os.path.join(extraction_dir, "source.rar")
-                        with open(archive_path, "wb") as archive_file:
-                            archive_file.write(file_bytes)
-                        subprocess.run(
-                            [unrar_path, "e", "-y", "-inul", archive_path, "*.exe"],
-                            cwd=extraction_dir, check=True, timeout=60,
-                        )
-                        for fname in os.listdir(extraction_dir):
-                            if fname.lower().endswith(".exe"):
-                                with open(os.path.join(extraction_dir, fname), "rb") as extracted_file:
-                                    exe_bytes = extracted_file.read()
                                 break
                 else:
                     exe_bytes = file_bytes
@@ -1397,13 +1389,26 @@ def scrape_and_patch_trainer(
                 if target_eligible or strict_download_failures:
                     had_eligible_failure = True
                 
-        return page_result(any_registered, approved_skips, had_eligible_failure)
+        archive_only_skip = rar_skips > 0 and actionable_downloads == 0
+        if archive_only_skip:
+            print("[ARCHIVE_ONLY_PAGE_SKIPPED] no supported executable archive was available")
+        return page_result(
+            any_registered, approved_skips, had_eligible_failure,
+            archive_only_skip=archive_only_skip,
+        )
     except Exception as e:
         print(f"[-] Error processing page: {e}")
         return False
 
-def page_result(any_registered: bool, approved_skips: int, had_eligible_failure: bool) -> bool:
-    """여러 다운로드 중 하나라도 처리 대상 실패가 있으면 페이지 전체를 실패로 반환한다."""
+def page_result(
+    any_registered: bool,
+    approved_skips: int,
+    had_eligible_failure: bool,
+    archive_only_skip: bool = False,
+) -> bool:
+    """RAR만 있던 페이지는 중립 건너뜀으로, 지원 형식 실패는 실패로 반환한다."""
+    if archive_only_skip:
+        return not had_eligible_failure
     return (any_registered or approved_skips > 0) and not had_eligible_failure
 
 def main():
