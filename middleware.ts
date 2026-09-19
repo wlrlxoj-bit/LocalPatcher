@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 const locales = ['en', 'ko', 'ja', 'de', 'es'];
-const defaultLocale = 'en'; // Global default for unsupported languages
+// LocalPatcher는 한국어를 기본 진입점으로 사용한다. 영어 원문은 FLiNG가 기준이며
+// LocalPatcher의 대량 영어 URL을 기본 경로로 다시 만들지 않는다.
+const defaultLocale = 'ko';
 
 function getLocale(request: NextRequest): string {
   const acceptLanguage = request.headers.get('accept-language');

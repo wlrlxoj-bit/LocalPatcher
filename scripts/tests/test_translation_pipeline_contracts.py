@@ -159,12 +159,13 @@ class PendingPaginationTests(unittest.TestCase):
 
 
 class WorkflowContractTests(unittest.TestCase):
-    def test_pending_job_runs_after_crawl_failure(self):
+    def test_ready_job_is_bounded_and_runs_only_for_scheduled_crawls(self):
         workflow = (SCRIPTS.parent / ".github" / "workflows" / "scraper.yml").read_text(encoding="utf-8")
         self.assertIn("crawl:", workflow)
-        self.assertIn("reprocess-pending:", workflow)
-        self.assertIn("needs: crawl", workflow)
-        self.assertIn("if: ${{ !cancelled() }}", workflow)
+        self.assertIn("cron: '0 */3 * * *'", workflow)
+        self.assertIn("reprocess-ready:", workflow)
+        self.assertIn("github.event_name == 'schedule'", workflow)
+        self.assertIn("--limit 4", workflow)
 
 
 if __name__ == "__main__":

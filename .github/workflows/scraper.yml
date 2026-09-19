@@ -51,9 +51,12 @@ jobs:
           python scripts/scraper.py --provider gemini
         fi
 
-  reprocess-pending:
+  reprocess-ready:
     needs: crawl
-    if: ${{ !cancelled() }}
+    # 수동 단일 수집에는 섞지 않는다. 예약 수집이 성공한 경우에만 DB가 claim한
+    # due/ready 항목을 작은 배치로 처리한다.
+    # 새 수집 일부가 실패해도 기존 due retry가 영구 정지하면 안 된다.
+    if: ${{ always() && !cancelled() && github.event_name == 'schedule' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -70,13 +73,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests beautifulsoup4 pefile supabase python-dotenv
 
-    - name: Reprocess pending translations safely
+    - name: Reprocess due translation retries
       env:
         NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
         SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        AZURE_TRANSLATOR_KEY: ${{ secrets.AZURE_TRANSLATOR_KEY }}
-        AZURE_TRANSLATOR_REGION: ${{ secrets.AZURE_TRANSLATOR_REGION }}
-        AZURE_TRANSLATOR_ENDPOINT: ${{ secrets.AZURE_TRANSLATOR_ENDPOINT }}
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         GEMINI_MODEL: gemini-2.5-flash
         GEMINI_MONTHLY_MAX_CHARS: ${{ vars.GEMINI_MONTHLY_MAX_CHARS }}
@@ -84,4 +84,4 @@ jobs:
         OPENAI_FALLBACK_MONTHLY_MAX_CHARS: ${{ vars.OPENAI_FALLBACK_MONTHLY_MAX_CHARS }}
         OPENAI_FALLBACK_MAX_REQUESTS: ${{ vars.OPENAI_FALLBACK_MAX_REQUESTS || '8' }}
         OPENAI_FALLBACK_MAX_CHARS: ${{ vars.OPENAI_FALLBACK_MAX_CHARS || '12000' }}
-      run: python scripts/reprocess_pending_translations.py --apply --provider gemini
+      run: python scripts/reprocess_pending_translations.py --apply --provider gemini --limit 4

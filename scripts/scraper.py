@@ -70,6 +70,53 @@ translation_usage_db = None
 class TranslationQuotaError(RuntimeError):
     pass
 
+
+def retry_failure_policy(exc):
+    """재시도 가능한 공급자 장애와 영구 번역 실패를 안전한 코드로 분리한다."""
+    if isinstance(exc, TranslationQuotaError):
+        return "deferred", "TRANSLATION_QUOTA", 86400
+    if isinstance(exc, (requests.Timeout, requests.ConnectionError)):
+        return "deferred", "TRANSLATION_API_TEMPORARY", 1800
+    message = str(exc)
+    if isinstance(exc, RuntimeError) and any(token in message for token in ("HTTP 429", "HTTP 500", "HTTP 502", "HTTP 503", "HTTP 504")):
+        return "deferred", "TRANSLATION_API_TEMPORARY", 1800
+    return "blocked", "TRANSLATION_PERMANENT", 0
+
+
+def schedule_translation_retry(db, trainer_id, language_code, state, failure_code, delay_seconds):
+    """service_role RPC로 재시도 상태를 저장하고 비밀 없는 결과 코드만 남긴다."""
+    try:
+        result = db.rpc("schedule_translation_retry", {
+            "p_trainer_id": trainer_id,
+            "p_language_code": language_code,
+            "p_state": state,
+            "p_failure_code": failure_code,
+            "p_delay_seconds": delay_seconds,
+        }).execute()
+        if result.data is True:
+            print(f"[RETRY_QUEUED] trainer={trainer_id} locale={language_code} state={state} code={failure_code}")
+            return True
+    except Exception:
+        pass
+    print("[RETRY_QUEUE_WRITE_FAILED]")
+    return False
+
+
+def complete_translation_retry(db, trainer_id, language_code):
+    """검증·저장이 완료된 언어의 재시도 큐 항목을 제거한다."""
+    try:
+        result = db.rpc("complete_translation_retry", {
+            "p_trainer_id": trainer_id,
+            "p_language_code": language_code,
+        }).execute()
+        if result.data is True:
+            print(f"[RETRY_COMPLETED] trainer={trainer_id} locale={language_code}")
+            return True
+    except Exception:
+        pass
+    print("[RETRY_QUEUE_WRITE_FAILED]")
+    return False
+
 # Dictionary of common trainer translations for cost-free instant translation mapping
 COMMON_TRANSLATIONS = {
     "infinite health": "무한 체력",
@@ -1016,8 +1063,20 @@ def recover_official_archive(response, headers):
     return response
 
 
-def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_failures=True, languages=None):
-    """Scrapes specific trainer page, downloads binaries for ALL versions, extracts offsets, and inserts to Supabase."""
+def scrape_and_patch_trainer(
+    post,
+    db: Client,
+    force=False,
+    strict_download_failures=True,
+    languages=None,
+    reprocess_existing_unapproved=True,
+    target_trainer_id=None,
+):
+    """FLiNG 원본을 수집한다.
+
+    예약 실행은 이미 존재하는 미승인 번역을 다시 LLM에 보내지 않는다. 수동 URL
+    실행만 기존 동작대로 이를 재처리해, 신규 바이너리/업데이트와 재시도 비용을 분리한다.
+    """
     global last_llm_provider, translation_usage_db
     translation_usage_db = db
     print(f"[*] Processing: {post['title']} ({post['link']})")
@@ -1170,6 +1229,11 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                 trainer_res = db.table('trainers').select('id').eq('original_file_hash', original_file_hash).execute()
                 if trainer_res.data:
                     trainer_id = trainer_res.data[0]['id']
+                    # 재시도 큐는 (trainer, 언어) 단위다. 같은 FLiNG 게시물의 다른
+                    # 다운로드까지 다시 번역하면 큐 한 건이 비용 폭주로 번질 수 있다.
+                    if target_trainer_id is not None and trainer_id != target_trainer_id:
+                        print(f"[RETRY_TRAINER_MISMATCH_SKIPPED] trainer={trainer_id}")
+                        continue
                     # Check if it has any translation mappings
                     mappings_res = db.table('translation_mappings').select('id,is_approved,language_code').eq('trainer_id', trainer_id).execute()
                     approved_locales = {
@@ -1178,6 +1242,12 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                     }
                     if requested_locales.issubset(approved_locales) and not force:
                         print(f"    [*] Skip/Protect: Trainer ID {trainer_id} has approved translation mappings. Skipping overwrite.")
+                        approved_skips += 1
+                        continue
+                    if not reprocess_existing_unapproved and not force:
+                        # 같은 바이너리의 pending/rejected 매핑은 전용 ready 큐를 통해서만
+                        # 재시도한다. 예약 수집이 매 3시간마다 비용을 태우면 안 된다.
+                        print(f"[SCHEDULED_EXISTING_PENDING_SKIPPED] trainer={trainer_id}")
                         approved_skips += 1
                         continue
                     target_eligible = True
@@ -1243,6 +1313,7 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                     if language_code not in requested_locales or (language_code in approved_locales and not force):
                         continue
                     validation = None
+                    retry_recorded = False
                     last_llm_provider = None
                     for attempt in range(1, 3):
                         prefer_openai_fallback = (
@@ -1256,6 +1327,12 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                                 prefer_openai_fallback=prefer_openai_fallback,
                             )
                         except Exception as locale_error:
+                            retry_state, failure_code, delay_seconds = retry_failure_policy(locale_error)
+                            schedule_translation_retry(
+                                db, trainer_id, language_code, retry_state,
+                                failure_code, delay_seconds,
+                            )
+                            retry_recorded = True
                             print(f"[locale-failed] trainer={trainer_id} locale={language_code} error={type(locale_error).__name__}")
                             validation = None
                             break
@@ -1289,11 +1366,25 @@ def scrape_and_patch_trainer(post, db: Client, force=False, strict_download_fail
                             validation = None
                             break
                     if validation is None:
+                        if not retry_recorded:
+                            schedule_translation_retry(
+                                db, trainer_id, language_code, "blocked", "VALIDATION_FAILED", 0,
+                            )
                         trainer_ok = False
                         continue
                     outcome = save_validated_draft(db, mapping=mapping, validation=validation)
                     print(f"[save-outcome] trainer={trainer_id} locale={language_code} status={outcome.value}")
-                    if outcome.value in {"rejected", "db_error"}:
+                    if outcome.value in {"approved", "preserved"}:
+                        complete_translation_retry(db, trainer_id, language_code)
+                    elif outcome.value == "rejected":
+                        schedule_translation_retry(
+                            db, trainer_id, language_code, "blocked", "VALIDATION_REJECTED", 0,
+                        )
+                        trainer_ok = False
+                    elif outcome.value == "db_error":
+                        schedule_translation_retry(
+                            db, trainer_id, language_code, "deferred", "TRANSLATION_DB_TEMPORARY", 1800,
+                        )
                         trainer_ok = False
                 
                 print(f"[번역 결과] trainer={trainer_id} game={game_id} success={trainer_ok}")
@@ -1320,6 +1411,8 @@ def main():
     parser = argparse.ArgumentParser(description="FLiNG Trainer Scraper Pipeline")
     parser.add_argument("--force", action="store_true", help="Force re-processing and overwriting of existing trainers")
     parser.add_argument("--url", type=str, help="Pinpoint scrape a single target FLiNG trainer URL")
+    parser.add_argument("--trainer-id", type=int,
+                        help="재시도 큐가 claim한 단일 trainer만 처리한다")
     parser.add_argument(
         "--provider", choices=["gemini", "azure", "openai_paid"], default="gemini",
         help="기본 번역기. gemini는 API/JSON 실패와 검증 실패 때만 GPT 보조 번역을 1회 사용합니다.",
@@ -1379,6 +1472,7 @@ def main():
             force=args.force,
             strict_download_failures=True,
             languages=args.languages,
+            target_trainer_id=args.trainer_id,
         )
         return 0 if succeeded else 1
 
@@ -1388,10 +1482,17 @@ def main():
         print("[-] No new updates found.")
         return 1
         
-    # 최근 20개의 신작/업데이트 피드를 수집하도록 범위를 대폭 확장 (4위 이하 누락 방지)
+    # 예약 실행은 신규 바이너리/업데이트만 번역한다. 기존 pending/rejected는
+    # 위의 reprocess_existing_unapproved=False 경로에서 LLM 호출 없이 건너뛴다.
     failed_pages = 0
     for post in posts[:20]:
-        if not scrape_and_patch_trainer(post, db, force=args.force, languages=args.languages):
+        if not scrape_and_patch_trainer(
+            post,
+            db,
+            force=args.force,
+            languages=args.languages,
+            reprocess_existing_unapproved=False,
+        ):
             failed_pages += 1
     if failed_pages:
         print(f"[*] Batch completed with partial warnings: {failed_pages}/{min(len(posts), 20)} pages")

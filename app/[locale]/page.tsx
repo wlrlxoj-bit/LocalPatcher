@@ -6,26 +6,31 @@ import { ShieldCheck, Zap, Info } from 'lucide-react';
 import GamesListSkeleton from '@/components/GamesListSkeleton';
 import PatcherLinkDirectory from '@/components/PatcherLinkDirectory';
 import { canonicalizeListedGameSlug } from '@/lib/game-slug-aliases';
+import { getEligiblePatcherSlugs } from '@/lib/content-eligibility';
 
 export const revalidate = 3600;
 
 async function GamesFetcher({ locale }: { locale: Locale }) {
   const gamesData = await getGamesWithTrainers();
-  const games = gamesData.map(({ trainers, ...game }) => {
-    void trainers;
-    return game;
-  });
+  const eligibleSlugs = new Set(await getEligiblePatcherSlugs(locale));
   const directoryCandidates = gamesData
     .filter(g => g.trainers?.some((trainer: { option_count: number }) => trainer.option_count > 0));
   const existingSlugs = new Set(directoryCandidates.map(game => game.slug));
   const titleBySlug = new Map(directoryCandidates.map(game => [game.slug, game.title_en]));
-  const gameBySlug = new Map(directoryCandidates.map(game => [game.slug, game]));
-  const directoryGames = [...new Map(directoryCandidates.map(game => {
+  const eligibleGamesData = directoryCandidates.filter((game) =>
+    eligibleSlugs.has(canonicalizeListedGameSlug(game.slug, existingSlugs, titleBySlug))
+  );
+  const games = eligibleGamesData.map(({ trainers, ...game }) => {
+    void trainers;
+    return game;
+  });
+  const gameBySlug = new Map(eligibleGamesData.map(game => [game.slug, game]));
+  const directoryGames = [...new Map(eligibleGamesData.map(game => {
     const canonicalSlug = canonicalizeListedGameSlug(game.slug, existingSlugs, titleBySlug);
     const canonicalGame = gameBySlug.get(canonicalSlug) || game;
     return [canonicalSlug, { ...canonicalGame, slug: canonicalSlug }] as const;
   })).values()];
-  const trainersList = gamesData
+  const trainersList = eligibleGamesData
     .filter(g => g.trainers && g.trainers.length > 0)
     .map(g => ({
       id: g.trainers[0].id,

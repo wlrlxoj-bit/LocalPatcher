@@ -1,27 +1,20 @@
 import { MetadataRoute } from 'next';
-import { SITE_URL, SUPPORTED_LOCALES } from '@/lib/site';
-import { getEligiblePatcherSlugs } from '@/lib/content-eligibility';
-import patchableSnapshot from '@/data/patchable-game-slugs.json';
-import { canonicalizeListedGameSlug } from '@/lib/game-slug-aliases';
+import { SITE_URL } from '@/lib/site';
+import { AUTO_LOCALIZATION_LOCALES, getEligiblePatcherSlugs } from '@/lib/content-eligibility';
 
 export const revalidate = 86400;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const locales = SUPPORTED_LOCALES;
+  const locales = AUTO_LOCALIZATION_LOCALES;
   
   const eligibleSlugs = {} as Record<(typeof locales)[number], string[]>;
   for (const locale of locales) {
     try {
       eligibleSlugs[locale] = await getEligiblePatcherSlugs(locale);
     } catch (error) {
-      console.warn(`${locale} 동적 sitemap 조회에 실패하여 운영 last-known-good snapshot을 사용합니다:`, error);
-      const snapshotSlugs = patchableSnapshot.locales[locale as keyof typeof patchableSnapshot.locales] || patchableSnapshot.locales.en;
-      const existingSlugs = new Set(snapshotSlugs);
-      // 스냅샷에는 제목 근거가 없으므로 숫자형 slug를 추측으로 합치지 않습니다.
-      const unavailableTitlesBySlug = new Map<string, string>();
-      eligibleSlugs[locale] = [...new Set(
-        snapshotSlugs.map((slug) => canonicalizeListedGameSlug(slug, existingSlugs, unavailableTitlesBySlug))
-      )];
+      // DB 장애 중에는 과거 snapshot을 재방출하지 않습니다. 미완성 페이지 유입을 막기 위한 fail-closed입니다.
+      console.warn(`${locale} 동적 sitemap 조회에 실패하여 빈 목록으로 처리합니다:`, error);
+      eligibleSlugs[locale] = [];
     }
   }
 

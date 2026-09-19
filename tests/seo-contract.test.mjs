@@ -20,17 +20,15 @@ test('게임 정보는 서버 슬롯으로 전달하고 두 언어 화면에서 
   assert.match(client, /unapprovedStatus === 'pending' \? pt\.autoVerifyInProgressDesc : pt\.translationUnavailableDesc/);
 });
 
-test('패처 metadata 소스는 5개 언어의 index/follow와 자기 canonical 계약을 유지한다', async () => {
+test('패처 metadata는 4개 현지화 언어의 승인·완전 번역만 index와 hreflang에 넣는다', async () => {
   const source = await readFile(patcherPageUrl, 'utf8');
 
-  assert.match(source, /const indexEligible = enEligible/);
+  assert.match(source, /const indexEligible = await isPatcherIndexEligible\(game\.id, currentLocale\)/);
+  assert.match(source, /AUTO_LOCALIZATION_LOCALES\.map/);
   assert.match(source, /robots:\s*indexEligible\s*\?\s*\{\s*index:\s*true,\s*follow:\s*true\s*\}/s);
   assert.match(source, /canonical:\s*`\/\$\{currentLocale\}\/patcher\/\$\{canonicalSlug\}`/);
-
-  for (const locale of ['en', 'ko', 'ja', 'de', 'es']) {
-    assert.ok(source.includes(`${locale}: \`/${locale}/patcher/\${canonicalSlug}\``));
-  }
-  assert.match(source, /'x-default':\s*`\/en\/patcher\/\$\{canonicalSlug\}`/);
+  assert.doesNotMatch(source, /en: `\/en\/patcher\/\$\{canonicalSlug\}`/);
+  assert.match(source, /alternateLanguages\['x-default'\] = alternateLanguages\.ko/);
 });
 
 test('정상 패처의 상위 SEO 경계는 noindex 헤더나 robots 차단을 만들지 않는다', async () => {
@@ -72,7 +70,7 @@ test('정상 패처의 상위 SEO 경계는 noindex 헤더나 robots 차단을 �
   assert.match(robotsSource, /allow:\s*['"]\/['"]/);
 
   const patcherSource = await readFile(patcherPageUrl, 'utf8');
-  assert.match(patcherSource, /const indexEligible = enEligible/);
+  assert.match(patcherSource, /const indexEligible = await isPatcherIndexEligible\(game\.id, currentLocale\)/);
   assert.match(patcherSource, /robots:\s*indexEligible\s*\?\s*\{\s*index:\s*true,\s*follow:\s*true\s*\}\s*:\s*\{\s*index:\s*false,\s*follow:\s*true\s*\}/s);
   assert.equal((patcherSource.match(/index:\s*false/g) || []).length, 1, '비자격 patcher 분기 외 index:false가 없어야 합니다.');
 });
@@ -90,15 +88,15 @@ test('구조화 데이터와 sitemap 변경 시각 신호가 중복되거나 실
   assert.doesNotMatch(sitemapSource, /lastModified:\s*new Date\s*\(/);
 });
 
-test('sitemap은 기존 URL 생성 루프를 유지하고 홈 링크는 별도로 canonicalize·중복 제거한다', async () => {
+test('sitemap은 승인된 URL 생성 루프를 유지하고 홈 링크는 별도로 canonicalize·중복 제거한다', async () => {
   const [sitemapSource, localeHomeSource] = await Promise.all([
     readFile(sitemapUrl, 'utf8'),
     readFile(localeHomeUrl, 'utf8'),
   ]);
 
   assert.match(sitemapSource, /getEligiblePatcherSlugs\(locale\)/);
-  assert.match(sitemapSource, /canonicalizeListedGameSlug\(slug, existingSlugs, unavailableTitlesBySlug\)/);
-  assert.match(sitemapSource, /\[\.\.\.new Set\(/);
+  assert.match(sitemapSource, /const locales = AUTO_LOCALIZATION_LOCALES/);
+  assert.doesNotMatch(sitemapSource, /patchableSnapshot|last-known-good/);
   assert.match(sitemapSource, /for \(const locale of locales\)[\s\S]*for \(const slug of eligibleSlugs\[locale\]\)/);
   assert.match(sitemapSource, /url:\s*`\$\{SITE_URL\}\/\$\{locale\}\/patcher\/\$\{slug\}`/);
 
@@ -142,7 +140,7 @@ test('sitemap과 홈 디렉터리는 제목이 같은 숫자형 별칭만 동일
   assert.match(eligibilitySource, /const titleBySlug = new Map\(games\.map\(\(game\) => \[game\.slug, game\.title_en\]\)\)/);
   assert.match(eligibilitySource, /canonicalizeListedGameSlug\(slug, existingSlugs, titleBySlug\)/);
   assert.match(localeHomeSource, /canonicalizeListedGameSlug\(game\.slug, existingSlugs, titleBySlug\)/);
-  assert.match(sitemapSource, /const unavailableTitlesBySlug = new Map<string, string>\(\)/);
+  assert.doesNotMatch(sitemapSource, /patchableSnapshot|unavailableTitlesBySlug/);
 
   const canonicalizeFixture = (slug, existingSlugs, titleBySlug) => {
     const numericBase = /-trainer(?:-\d{6,})?$/.test(slug)

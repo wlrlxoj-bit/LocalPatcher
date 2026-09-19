@@ -20,18 +20,18 @@ import { Locale, getGameTitle, getPatcherDict } from '@/lib/i18n/index';
 import { translateGenre } from '@/lib/i18n/genres';
 import { SITE_URL } from '@/lib/site';
 import { extractSteamAppId } from '@/lib/steam';
+import { AUTO_LOCALIZATION_LOCALES, getEligiblePatcherSlugs, isPatcherIndexEligible } from '@/lib/content-eligibility';
 
 export const revalidate = 3600; // 1 hour ISR cache
 
 export async function generateStaticParams() {
-  const locales = ['ko', 'en', 'ja', 'de', 'es'];
-  const popularGames = await getPopularGamesWithTrainers();
-  
+  const eligibleSlugsByLocale = await Promise.all(
+    AUTO_LOCALIZATION_LOCALES.map(async (locale) => ({ locale, slugs: await getEligiblePatcherSlugs(locale) }))
+  );
   const params: { locale: string; game_slug: string }[] = [];
-  
-  for (const locale of locales) {
-    for (const game of popularGames) {
-      params.push({ locale, game_slug: game.slug });
+  for (const { locale, slugs } of eligibleSlugsByLocale) {
+    for (const gameSlug of slugs) {
+      params.push({ locale, game_slug: gameSlug });
     }
   }
   
@@ -91,26 +91,19 @@ export async function generateMetadata({ params }: PatcherPageProps) {
   }
 
   const { canonicalSlug, game, trainers } = patcherData;
-  const enEligible = trainers.some((trainer) => trainer.option_count > 0);
-  const latestTrainer = trainers[0];
-  const metadataMappings = latestTrainer
-    ? await getMappingsForTrainers([latestTrainer.id], currentLocale)
-    : {};
-  const hasApprovedTranslation = latestTrainer
-    ? (metadataMappings[latestTrainer.id] || []).length > 0
-    : false;
-
-  // 영어나 다국어 번역 여부에 관계없이 트레이너(옵션)가 존재하면 무조건 색인(Index)을 허용합니다.
-  const indexEligible = enEligible;
-
-  const alternateLanguages: Record<string, string> = {
-    en: `/en/patcher/${canonicalSlug}`,
-    'x-default': `/en/patcher/${canonicalSlug}`,
-    ko: `/ko/patcher/${canonicalSlug}`,
-    ja: `/ja/patcher/${canonicalSlug}`,
-    de: `/de/patcher/${canonicalSlug}`,
-    es: `/es/patcher/${canonicalSlug}`,
-  };
+  const indexEligible = await isPatcherIndexEligible(game.id, currentLocale);
+  // metadata의 '승인됨' 표기도 실제 색인 자격과 같은 최신·완전 매핑 기준을 사용합니다.
+  const hasApprovedTranslation = indexEligible;
+  const eligibleLocales = await Promise.all(AUTO_LOCALIZATION_LOCALES.map(async (candidate) => ({
+    candidate,
+    eligible: await isPatcherIndexEligible(game.id, candidate),
+  })));
+  const alternateLanguages: Record<string, string> = Object.fromEntries(eligibleLocales
+    .filter(({ eligible }) => eligible)
+    .map(({ candidate }) => [candidate, `/${candidate}/patcher/${canonicalSlug}`]));
+  if (alternateLanguages.ko) {
+    alternateLanguages['x-default'] = alternateLanguages.ko;
+  }
 
   const versionsStr = trainers && trainers.length > 0
     ? trainers.map(t => t.version_str).join(', ')
@@ -205,8 +198,16 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
   // 4. Build JSON-LD structured data for SoftwareApplication
   const pt = getPatcherDict(currentLocale as Locale);
 
-  const popularGames = await getPopularGamesWithTrainers();
-  const relatedGames = await getRelatedGames(game.id);
+  const [popularCandidates, relatedCandidates] = await Promise.all([
+    getPopularGamesWithTrainers(),
+    getRelatedGames(game.id),
+  ]);
+  const popularGames = (await Promise.all(popularCandidates.map(async (candidate) =>
+    (await isPatcherIndexEligible(candidate.id, currentLocale)) ? candidate : null
+  ))).filter((candidate): candidate is (typeof popularCandidates)[number] => candidate !== null);
+  const relatedGames = (await Promise.all(relatedCandidates.map(async (candidate) =>
+    (await isPatcherIndexEligible(candidate.id, currentLocale)) ? candidate : null
+  ))).filter((candidate): candidate is (typeof relatedCandidates)[number] => candidate !== null);
 
   const jsonLd = {
     '@context': 'https://schema.org',

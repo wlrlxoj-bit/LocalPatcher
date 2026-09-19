@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Shield, Globe, Menu, X } from 'lucide-react';
 import { getCommonDict, getPatcherDict, Locale } from '@/lib/i18n';
-import { SUPPORTED_LOCALES } from '@/lib/site';
+import { PUBLIC_LOCALIZATION_LOCALES } from '@/lib/site';
 
 interface HeaderProps {
   locale: Locale;
@@ -25,7 +25,7 @@ export default function Header({ locale }: HeaderProps) {
     es: { about: 'Acerca de', editorial: 'Política Editorial', contact: 'Reportar Problema' },
   }[locale] || { about: 'About', editorial: 'Editorial Policy', contact: 'Report an Issue' };
 
-  const handleLanguageChange = (newLocale: Locale) => {
+  const handleLanguageChange = (newLocale: (typeof PUBLIC_LOCALIZATION_LOCALES)[number]) => {
     setIsLangDropdownOpen(false);
     const segments = pathname.split('/');
     if (segments.length > 1) {
@@ -110,7 +110,7 @@ export default function Header({ locale }: HeaderProps) {
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setIsLangDropdownOpen(false)}></div>
                 <div className="absolute right-0 mt-2 w-36 rounded-lg border border-slate-800 bg-slate-900 shadow-xl p-1.5 text-xs text-slate-400 z-20">
-                  {SUPPORTED_LOCALES.map((loc) => (
+                  {PUBLIC_LOCALIZATION_LOCALES.map((loc) => (
                     <button
                       key={loc}
                       onClick={() => handleLanguageChange(loc)}

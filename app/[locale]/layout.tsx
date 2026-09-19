@@ -3,7 +3,7 @@ import Header from '@/layouts/Header';
 import Footer from '@/layouts/Footer';
 import '@/app/globals.css';
 import Script from 'next/script';
-import { SITE_URL } from '@/lib/site';
+import { PUBLIC_LOCALIZATION_LOCALES, SITE_URL } from '@/lib/site';
 import type { Locale } from '@/lib/i18n/index';
 import { getLayoutMetadata } from '@/lib/i18n/index';
 import Providers from '@/components/ProgressBar';
@@ -29,11 +29,10 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
       canonical: `/${currentLocale}`,
       languages: {
         'ko': '/ko',
-        'en': '/en',
         'ja': '/ja',
         'de': '/de',
         'es': '/es',
-        'x-default': '/en',
+        'x-default': '/ko',
       },
     },
     openGraph: {
@@ -56,7 +55,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
 }
 
 export function generateStaticParams() {
-  return [{ locale: 'ko' }, { locale: 'en' }, { locale: 'ja' }, { locale: 'de' }, { locale: 'es' }];
+  return PUBLIC_LOCALIZATION_LOCALES.map((locale) => ({ locale }));
 }
 
 export default async function LocaleLayout({

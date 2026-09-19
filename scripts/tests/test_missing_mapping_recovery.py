@@ -37,20 +37,22 @@ class RecentDb:
 
 
 class MissingMappingRecoveryTests(unittest.TestCase):
-    def test_automatic_batches_rotate_past_twenty_failed_targets(self):
+    def test_explicit_batches_do_not_rotate_by_time(self):
         select, = load_functions("reprocess_pending_translations.py", ["select_target_batch"])
         targets = list(range(45))
-        batches = [select(targets, 20, now=slot * 10800)[0] for slot in range(3)]
-        self.assertEqual([len(batch) for batch in batches], [20, 20, 5])
-        self.assertEqual([item for batch in batches for item in batch], targets)
+        self.assertEqual(select(targets, 20, now=0)[0], list(range(20)))
+        self.assertEqual(select(targets, 20, now=10_800)[0], list(range(20)))
         self.assertEqual(select(targets, 20, offset=20)[0], list(range(20, 40)))
 
     def discover(self, rows, scan_limit=100):
         discover, = load_functions("reprocess_pending_translations.py",
-                                  ["discover_missing_mapping_urls"], {"urlparse": urlparse})
+                                  ["discover_missing_mapping_urls"], {
+                                      "urlparse": urlparse,
+                                      "TARGET_LOCALES": ("ko", "ja", "de", "es"),
+                                  })
         return discover(RecentDb(rows), scan_limit)
 
-    def test_zero_rows_and_single_missing_locale_are_found_but_de_es_not_expanded(self):
+    def test_zero_rows_and_single_missing_locale_are_found_for_all_target_locales(self):
         rows = [
             {"id": 3, "games": {"slug": "zero", "fling_url": "https://flingtrainer.com/a"},
              "translation_mappings": []},
@@ -62,8 +64,8 @@ class MissingMappingRecoveryTests(unittest.TestCase):
         urls, failures, details = self.discover(rows)
         self.assertEqual(len(urls), 2)
         self.assertEqual(failures, 0)
-        self.assertEqual(details[0]["missing"], ["ja", "ko"])
-        self.assertEqual(details[1]["missing"], ["ja"])
+        self.assertEqual(details[0]["missing"], ["de", "es", "ja", "ko"])
+        self.assertEqual(details[1]["missing"], ["de", "es", "ja"])
         self.assertEqual(len(details), 2)
 
     def test_duplicate_game_is_one_target_and_missing_source_is_counted(self):
@@ -93,16 +95,19 @@ class MissingMappingRecoveryTests(unittest.TestCase):
                                               force=False, url=None, languages=["ko", "ja"]),
         )
         outcomes = iter([True, False, True])
+        calls = []
         main, = load_functions("scraper.py", ["main"], {
             "argparse": SimpleNamespace(ArgumentParser=lambda **k: fake_parser),
             "SUPABASE_URL": "test", "SUPABASE_KEY": "test",
             "create_client": lambda *a: DictionaryDb(), "Client": object,
             "db_dictionary_ko": {}, "db_dictionary_ja": {},
             "fetch_recent_trainers": lambda: [{}, {}, {}],
-            "scrape_and_patch_trainer": lambda *a, **k: next(outcomes),
+            "scrape_and_patch_trainer": lambda *a, **k: (calls.append(k), next(outcomes))[1],
             "sync_popular_fling_trainers": lambda db: None,
         })
         self.assertEqual(main(), 1)
+        self.assertEqual(len(calls), 3)
+        self.assertTrue(all(call["reprocess_existing_unapproved"] is False for call in calls))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getGameTitle, type Locale } from '@/lib/i18n';
 import type { Game } from '@/lib/supabase';
+import { isAutoLocalizationLocale } from '@/lib/content-eligibility';
 
 interface PatcherLinkDirectoryProps {
   games: Game[];
@@ -20,6 +21,8 @@ const LABELS: Record<Locale, { summary: string; count: string }> = {
  * 카드와 이미지는 반복하지 않고 텍스트 링크만 사용해 문서 크기 증가를 제한한다.
  */
 export default function PatcherLinkDirectory({ games, locale }: PatcherLinkDirectoryProps) {
+  // 영어 원문은 FLiNG를 기준으로 하므로 LocalPatcher 내부 대량 디렉터리에 노출하지 않습니다.
+  if (!isAutoLocalizationLocale(locale)) return null;
   const labels = LABELS[locale];
 
   return (
