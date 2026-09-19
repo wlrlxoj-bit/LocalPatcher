@@ -39,7 +39,7 @@ on conflict (trainer_id, language_code) do nothing;
 insert into public.translation_retry_queue (
   trainer_id, language_code, state, next_retry_at, last_failure_code
 )
-select distinct mapping.trainer_id, mapping.language_code, 'blocked', null, 'LEGACY_REJECTED'
+select distinct mapping.trainer_id, mapping.language_code, 'blocked', null::timestamptz, 'LEGACY_REJECTED'
   from public.translation_mappings mapping
  where mapping.is_approved = false
    and mapping.translation_status = 'rejected'
