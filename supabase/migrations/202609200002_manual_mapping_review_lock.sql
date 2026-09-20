@@ -55,8 +55,10 @@ begin
   else
     encoded_length := pg_catalog.octet_length(pg_catalog.convert_to(p_translated_text, 'UTF16')) - 2;
   end if;
-  if encoded_length > target.max_char_len::bigint
-     * case when target.encoding = 'UTF-16LE' then 2 else 1 end then
+  if encoded_length > (
+    target.max_char_len::bigint
+    * (case when target.encoding = 'UTF-16LE' then 2 else 1 end)
+  ) then
     return jsonb_build_object('outcome', 'invalid_input');
   end if;
 

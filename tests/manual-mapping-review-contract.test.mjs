@@ -148,7 +148,10 @@ test('수동 저장 RPC는 DB에서도 슬롯 인코딩과 정확한 바이트 �
   assert.match(save, /target\.encoding not in \('ASCII', 'UTF-8', 'UTF-16LE'\)/);
   assert.match(save, /pg_catalog\.convert_to\(p_translated_text, 'UTF8'\)/);
   assert.match(save, /pg_catalog\.convert_to\(p_translated_text, 'UTF16'\)\) - 2/);
-  assert.match(save, /target\.max_char_len::bigint\s*\* case when target\.encoding = 'UTF-16LE' then 2 else 1 end/);
+  assert.match(
+    save,
+    /encoded_length\s*>\s*\(\s*target\.max_char_len::bigint\s*\*\s*\(case when target\.encoding = 'UTF-16LE' then 2 else 1 end\)\s*\) then/,
+  );
   assert.match(save, /encoded_length <> pg_catalog\.char_length\(p_translated_text\)/);
 });
 
