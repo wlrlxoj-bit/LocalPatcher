@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
-import { Languages, Search, Save, Loader2, Gamepad2, FileText } from 'lucide-react';
+import { Languages, Search, Save, Loader2, Gamepad2, CheckCircle2 } from 'lucide-react';
 import TranslationJobPanel from '@/components/admin/translation/TranslationJobPanel';
 
 interface Game {
@@ -23,6 +22,9 @@ interface Mapping {
   original_text: string;
   translated_text: string;
   max_char_len: number;
+  is_approved: boolean;
+  translation_status: string | null;
+  translation_provider: string | null;
 }
 
 export default function AdminTranslationsPage() {
@@ -35,33 +37,38 @@ export default function AdminTranslationsPage() {
   
   const [mappings, setMappings] = useState<Mapping[]>([]);
   const [mappingEdits, setMappingEdits] = useState<Record<number, string>>({});
+  const [mappingMessages, setMappingMessages] = useState<Record<number, string>>({});
+  const [mappingBusy, setMappingBusy] = useState<Record<number, boolean>>({});
   
   const [loading, setLoading] = useState(false);
   const [mappingsLoading, setMappingsLoading] = useState(false);
 
   useEffect(() => {
-    fetchGames();
+    let cancelled = false;
+    async function loadGames() {
+      try {
+        const response = await fetch('/api/admin/translations/catalog', { cache: 'no-store' });
+        const payload = await response.json() as { games?: Game[]; error?: string };
+        if (!response.ok) throw new Error(payload.error || 'games_read_failed');
+        if (!cancelled) setGames(payload.games || []);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    void loadGames();
+    return () => { cancelled = true; };
   }, []);
 
-  const fetchGames = async () => {
-    if (!supabase) return;
-    try {
-      const { data } = await supabase.from('games').select('id, title_en, title_ko').order('title_en', { ascending: true });
-      setGames(data || []);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   const handleGameSelect = async (gameId: number) => {
-    if (!supabase) return;
     setSelectedGameId(gameId);
     setSelectedTrainerId(null);
     setMappings([]);
     setLoading(true);
     try {
-      const { data } = await supabase.from('trainers').select('id, version_str').eq('game_id', gameId).order('version_str', { ascending: false });
-      setTrainers(data || []);
+      const response = await fetch(`/api/admin/translations/trainers?gameId=${encodeURIComponent(String(gameId))}`, { cache: 'no-store' });
+      const payload = await response.json() as { trainers?: Trainer[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || 'trainers_read_failed');
+      setTrainers(payload.trainers || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -70,12 +77,15 @@ export default function AdminTranslationsPage() {
   };
 
   const handleTrainerSelect = async (trainerId: number) => {
-    if (!supabase) return;
     setSelectedTrainerId(trainerId);
     setMappingsLoading(true);
     try {
-      const { data } = await supabase.from('translation_mappings').select('*').eq('trainer_id', trainerId).order('offset_dec', { ascending: true });
-      setMappings(data || []);
+      const response = await fetch(`/api/admin/translations/mappings?trainerId=${encodeURIComponent(String(trainerId))}`, { cache: 'no-store' });
+      const payload = await response.json() as { mappings?: Mapping[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || 'mappings_read_failed');
+      const data = payload.mappings || [];
+      setMappings(data);
+      setMappingMessages({});
       
       const edits: Record<number, string> = {};
       (data || []).forEach(m => { edits[m.id] = m.translated_text; });
@@ -88,13 +98,41 @@ export default function AdminTranslationsPage() {
   };
 
   const saveMapping = async (id: number) => {
-    if (!supabase) return;
+    setMappingBusy((current) => ({ ...current, [id]: true }));
+    setMappingMessages((current) => ({ ...current, [id]: '' }));
     try {
-      await supabase.from('translation_mappings').update({ translated_text: mappingEdits[id] }).eq('id', id);
-      alert('Saved');
+      const response = await fetch(`/api/admin/translations/mappings/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ translatedText: mappingEdits[id] }),
+      });
+      const payload = await response.json() as { mapping?: Mapping; error?: string };
+      if (!response.ok || !payload.mapping) throw new Error(payload.error || 'mapping_update_failed');
+      setMappings((current) => current.map((mapping) => mapping.id === id ? payload.mapping! : mapping));
+      setMappingEdits((current) => ({ ...current, [id]: payload.mapping!.translated_text }));
+      setMappingMessages((current) => ({ ...current, [id]: '검수 대기 중 — 승인 전에는 페이지 색인 대상이 아닙니다.' }));
     } catch (err) {
       console.error(err);
-      alert('Error saving');
+      setMappingMessages((current) => ({ ...current, [id]: '저장하지 못했습니다. 내용을 새로고침해 다시 확인하세요.' }));
+    } finally {
+      setMappingBusy((current) => ({ ...current, [id]: false }));
+    }
+  };
+
+  const approveManualMapping = async (id: number) => {
+    setMappingBusy((current) => ({ ...current, [id]: true }));
+    setMappingMessages((current) => ({ ...current, [id]: '' }));
+    try {
+      const response = await fetch(`/api/admin/translations/mappings/${id}/approve`, { method: 'POST' });
+      const payload = await response.json() as { mapping?: Mapping; error?: string };
+      if (!response.ok || !payload.mapping) throw new Error(payload.error || 'mapping_approval_failed');
+      setMappings((current) => current.map((mapping) => mapping.id === id ? payload.mapping! : mapping));
+      setMappingMessages((current) => ({ ...current, [id]: '승인 완료 — 공개 및 색인 자격에 반영됩니다.' }));
+    } catch (err) {
+      console.error(err);
+      setMappingMessages((current) => ({ ...current, [id]: '승인하지 못했습니다. 이미 변경되었는지 새로고침해 확인하세요.' }));
+    } finally {
+      setMappingBusy((current) => ({ ...current, [id]: false }));
     }
   };
 
@@ -176,6 +214,12 @@ export default function AdminTranslationsPage() {
                             <span>Offset: {m.offset_dec} ({m.encoding})</span>
                             <span>Max: {m.max_char_len}</span>
                           </div>
+                          <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                            {m.is_approved ? <span className="rounded bg-emerald-500/15 px-2 py-1 font-bold text-emerald-300">승인 완료</span>
+                              : m.translation_provider === 'manual' && m.translation_status === 'pending' ? <span className="rounded bg-amber-500/15 px-2 py-1 font-bold text-amber-200">검수 대기 중</span>
+                                : <span className="rounded bg-slate-700/70 px-2 py-1 text-slate-300">자동 번역 검증 및 재시도 중</span>}
+                            {mappingMessages[m.id] && <span role="status" className="text-slate-400">{mappingMessages[m.id]}</span>}
+                          </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                               <div className="text-[9px] font-bold text-slate-500 uppercase mb-1">Original Text</div>
@@ -186,9 +230,14 @@ export default function AdminTranslationsPage() {
                             <div>
                               <div className="flex justify-between items-center mb-1">
                                 <div className="text-[9px] font-bold text-cyan-500 uppercase">Translated Text</div>
-                                <button onClick={() => saveMapping(m.id)} className="text-[9px] text-cyan-400 hover:text-white bg-cyan-500/10 px-2 py-0.5 rounded flex items-center">
-                                  <Save className="w-3 h-3 mr-1" /> Save
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  {m.translation_provider === 'manual' && m.translation_status === 'pending' && !m.is_approved && <button type="button" onClick={() => approveManualMapping(m.id)} disabled={mappingBusy[m.id]} className="text-[9px] text-emerald-300 hover:text-white bg-emerald-500/10 px-2 py-0.5 rounded flex items-center disabled:opacity-50">
+                                    <CheckCircle2 className="w-3 h-3 mr-1" /> {mappingBusy[m.id] ? '처리 중' : '승인'}
+                                  </button>}
+                                  <button type="button" onClick={() => saveMapping(m.id)} disabled={mappingBusy[m.id]} className="text-[9px] text-cyan-400 hover:text-white bg-cyan-500/10 px-2 py-0.5 rounded flex items-center disabled:opacity-50">
+                                    <Save className="w-3 h-3 mr-1" /> {mappingBusy[m.id] ? '저장 중' : '저장 후 검수 대기'}
+                                  </button>
+                                </div>
                               </div>
                               <textarea
                                 value={mappingEdits[m.id] || ''}

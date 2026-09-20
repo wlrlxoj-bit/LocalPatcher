@@ -23,6 +23,23 @@ sys.stdout.reconfigure(encoding='utf-8')
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env.local'), override=True)
 
+# 이 스크립트는 현재 운영 번역 큐를 우회하는 과거 복구 도구다. 기본 실행으로
+# 운영 DB/번역 공급자를 건드리지 않도록, 서버 운영자가 명시적으로 승인한 경우만 허용한다.
+LEGACY_RECOVERY_ACK_ENV = "LEGACY_RECOVERY_OPERATOR_ACKNOWLEDGEMENT"
+LEGACY_RECOVERY_ACK_VALUE = "I_UNDERSTAND_LEGACY_RECOVERY_WRITES_PRODUCTION"
+
+
+def require_legacy_recovery_operator_acknowledgement():
+    """운영 DB를 변경할 레거시 복구 실행을 명시적으로 차단 또는 허용한다."""
+    if os.environ.get(LEGACY_RECOVERY_ACK_ENV) == LEGACY_RECOVERY_ACK_VALUE:
+        return
+    print(
+        "[LEGACY_RECOVERY_BLOCKED] 이 도구는 Gemini→GPT 재시도 큐와 검증 절차를 우회합니다. "
+        "기본 실행은 DB 쓰기, 삭제, 번역 API 호출을 하지 않습니다. 서버 운영자가 필요성을 검토한 뒤 "
+        f"{LEGACY_RECOVERY_ACK_ENV}={LEGACY_RECOVERY_ACK_VALUE} 를 서버 환경에만 설정해야 실행할 수 있습니다."
+    )
+    raise SystemExit(2)
+
 # Environment variables setup
 SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
@@ -718,6 +735,8 @@ def main():
     parser.add_argument("--delay", type=float, default=1.0, help="Rate limit delay in seconds between downloads")
     parser.add_argument("--force", action="store_true", help="Force re-processing and overwriting of existing trainers")
     args = parser.parse_args()
+
+    require_legacy_recovery_operator_acknowledgement()
     
     if not SUPABASE_URL or not SUPABASE_KEY:
         print("[-] Supabase environment credentials not configured.")

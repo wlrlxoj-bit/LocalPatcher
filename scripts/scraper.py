@@ -1217,6 +1217,9 @@ def scrape_and_patch_trainer(
                 
                 # Check if trainer version already exists in DB
                 trainer_res = db.table('trainers').select('id').eq('original_file_hash', original_file_hash).execute()
+                approved_locales = set()
+                manual_review_locales = set()
+                effective_force = force
                 if trainer_res.data:
                     trainer_id = trainer_res.data[0]['id']
                     # 재시도 큐는 (trainer, 언어) 단위다. 같은 FLiNG 게시물의 다른
@@ -1225,23 +1228,32 @@ def scrape_and_patch_trainer(
                         print(f"[RETRY_TRAINER_MISMATCH_SKIPPED] trainer={trainer_id}")
                         continue
                     # Check if it has any translation mappings
-                    mappings_res = db.table('translation_mappings').select('id,is_approved,language_code').eq('trainer_id', trainer_id).execute()
+                    mappings_res = db.table('translation_mappings').select('id,is_approved,language_code,translation_provider,translation_status').eq('trainer_id', trainer_id).execute()
                     approved_locales = {
                         mapping.get('language_code') for mapping in (mappings_res.data or [])
                         if mapping.get('is_approved')
                     }
-                    if requested_locales.issubset(approved_locales) and not force:
+                    # 관리자 수동 수정본은 `pending + manual`로 보관된다. 이는 자동 재시도
+                    # 대상이 아니며, --force라도 전체 trainer 삭제로 덮어쓰지 않는다.
+                    manual_review_locales = {
+                        mapping.get('language_code') for mapping in (mappings_res.data or [])
+                        if mapping.get('translation_provider') == 'manual'
+                        and mapping.get('translation_status') == 'pending'
+                    }
+                    protected_locales = approved_locales | manual_review_locales
+                    effective_force = force and not manual_review_locales
+                    if requested_locales.issubset(protected_locales) and not effective_force:
                         print(f"    [*] Skip/Protect: Trainer ID {trainer_id} has approved translation mappings. Skipping overwrite.")
                         approved_skips += 1
                         continue
-                    if not reprocess_existing_unapproved and not force:
+                    if not reprocess_existing_unapproved and not effective_force:
                         # 같은 바이너리의 pending/rejected 매핑은 전용 ready 큐를 통해서만
                         # 재시도한다. 예약 수집이 매 3시간마다 비용을 태우면 안 된다.
                         print(f"[SCHEDULED_EXISTING_PENDING_SKIPPED] trainer={trainer_id}")
                         approved_skips += 1
                         continue
                     target_eligible = True
-                    if force:
+                    if effective_force:
                         print(f"    [*] Force mode: deleting existing mappings and trainer ID {trainer_id} to overwrite...")
                         db.table('translation_mappings').delete().eq('trainer_id', trainer_id).execute()
                         db.table('trainers').delete().eq('id', trainer_id).execute()
@@ -1300,7 +1312,7 @@ def scrape_and_patch_trainer(
                     'ko': process_translation_block, 'ja': process_translation_block_ja,
                     'de': process_translation_block_de, 'es': process_translation_block_es
                 }.items():
-                    if language_code not in requested_locales or (language_code in approved_locales and not force):
+                    if language_code not in requested_locales or language_code in manual_review_locales or (language_code in approved_locales and not effective_force):
                         continue
                     validation = None
                     retry_recorded = False

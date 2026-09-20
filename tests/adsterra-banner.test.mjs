@@ -96,8 +96,9 @@ test('동의한 세션은 mount 후 복구되며 저장소 차단 시에도 허�
   assert.equal(elements(h.render(), 'iframe').length, 0);
 });
 
-test('패처 페이지는 고유 정보 뒤에 배너 하나만 넣는다', () => {
+test('패처 페이지는 색인 자격이 있는 경우에만 고유 정보 뒤에 배너 하나를 넣는다', () => {
   const page = readFileSync(new URL('../app/[locale]/patcher/[game_slug]/page.tsx', import.meta.url), 'utf8');
   assert.equal((page.match(/<AdsterraBanner\s/g) || []).length, 1);
   assert.ok(page.indexOf('<PatcherUniqueContent') < page.indexOf('<AdsterraBanner'));
+  assert.match(page, /\{indexEligible && <AdsterraBanner locale=\{currentLocale as Locale\} \/>\}/);
 });

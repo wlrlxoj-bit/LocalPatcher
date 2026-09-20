@@ -6,6 +6,7 @@ import os
 import sys
 import re
 import json
+import argparse
 import requests
 from urllib.parse import urlparse
 sys.stdout.reconfigure(encoding='utf-8')
@@ -16,12 +17,26 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env.local'), overrid
 from supabase import create_client
 from openai import OpenAI
 
-db = create_client(
-    os.environ['NEXT_PUBLIC_SUPABASE_URL'],
-    os.environ['NEXT_PUBLIC_SUPABASE_ANON_KEY']
-)
+# 이 스크립트는 현재 운영 번역 큐를 우회하는 과거 복구 도구다. 기본 실행으로
+# 운영 DB/번역 공급자를 건드리지 않도록, 서버 운영자가 명시적으로 승인한 경우만 허용한다.
+LEGACY_RECOVERY_ACK_ENV = "LEGACY_RECOVERY_OPERATOR_ACKNOWLEDGEMENT"
+LEGACY_RECOVERY_ACK_VALUE = "I_UNDERSTAND_LEGACY_RECOVERY_WRITES_PRODUCTION"
 
-client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
+
+def require_legacy_recovery_operator_acknowledgement():
+    """운영 DB를 변경할 레거시 복구 실행을 명시적으로 차단 또는 허용한다."""
+    if os.environ.get(LEGACY_RECOVERY_ACK_ENV) == LEGACY_RECOVERY_ACK_VALUE:
+        return
+    print(
+        "[LEGACY_RECOVERY_BLOCKED] 이 도구는 Gemini→GPT 재시도 큐와 검증 절차를 우회합니다. "
+        "기본 실행은 DB 쓰기, 삭제, 번역 API 호출을 하지 않습니다. 서버 운영자가 필요성을 검토한 뒤 "
+        f"{LEGACY_RECOVERY_ACK_ENV}={LEGACY_RECOVERY_ACK_VALUE} 를 서버 환경에만 설정해야 실행할 수 있습니다."
+    )
+    raise SystemExit(2)
+
+# 기본 차단 실행에서는 자격 증명을 읽거나 외부 클라이언트를 만들지 않는다.
+db = None
+client = None
 
 # List of allowed abbreviations/words that do NOT indicate a translation leak in explanations
 ALLOWED_WORDS = {
@@ -193,6 +208,16 @@ def translate_block_to_ja(text: str, ja_dict: dict) -> str:
     return "\n".join(translated_lines)
 
 def main():
+    argparse.ArgumentParser(
+        description="레거시 일본어 매핑 복구 도구 (명시적 서버 운영자 승인 필요)"
+    ).parse_args()
+    require_legacy_recovery_operator_acknowledgement()
+    global db, client
+    db = create_client(
+        os.environ['NEXT_PUBLIC_SUPABASE_URL'],
+        os.environ['NEXT_PUBLIC_SUPABASE_ANON_KEY']
+    )
+    client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
     failures = 0
     ja_dict = load_ja_dictionary()
     

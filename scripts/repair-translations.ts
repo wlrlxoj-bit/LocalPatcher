@@ -51,6 +51,19 @@ const paidConfirmed = process.argv.includes('--confirm-paid');
 if (providerArg === 'openai_paid' && !paidConfirmed) throw new Error('openai_paid 사용에는 --confirm-paid가 필요합니다.');
 if (providerArg !== 'azure' && providerArg !== 'openai_paid') throw new Error('지원하지 않는 번역 공급자입니다.');
 
+// 이 스크립트는 현재 운영 번역 큐를 우회하는 과거 복구 도구다. 기본 실행으로
+// 운영 DB/번역 공급자를 건드리지 않도록, 서버 운영자가 명시적으로 승인한 경우만 허용한다.
+const LEGACY_RECOVERY_ACK_ENV = 'LEGACY_RECOVERY_OPERATOR_ACKNOWLEDGEMENT';
+const LEGACY_RECOVERY_ACK_VALUE = 'I_UNDERSTAND_LEGACY_RECOVERY_WRITES_PRODUCTION';
+
+function requireLegacyRecoveryOperatorAcknowledgement(): void {
+  if (process.env[LEGACY_RECOVERY_ACK_ENV] === LEGACY_RECOVERY_ACK_VALUE) return;
+  throw new Error(
+    `[LEGACY_RECOVERY_BLOCKED] 이 도구는 Gemini→GPT 재시도 큐와 검증 절차를 우회합니다. 기본 실행은 DB 쓰기, 삭제, 번역 API 호출을 하지 않습니다. ` +
+    `서버 운영자가 필요성을 검토한 뒤 ${LEGACY_RECOVERY_ACK_ENV}=${LEGACY_RECOVERY_ACK_VALUE} 를 서버 환경에만 설정해야 실행할 수 있습니다.`,
+  );
+}
+
 class TranslationQuotaError extends Error {}
 
 // ─────────────────────────────────────────────
@@ -251,6 +264,7 @@ async function translateViaConfiguredProvider(lines: string[], lang: string, tem
 // 메인 실행 함수
 // ─────────────────────────────────────────────
 async function main(): Promise<void> {
+  requireLegacyRecoveryOperatorAcknowledgement();
   console.log('🚀 번역 데이터 복구 스크립트 실행 시작');
   console.log(`📅 실행 시각: ${new Date().toISOString()}`);
 

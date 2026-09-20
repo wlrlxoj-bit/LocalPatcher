@@ -14,13 +14,19 @@ import {
   resolveGameSlugAlias,
   getPopularGamesWithTrainers,
   getRelatedGames,
-  sortTrainersLatestFirst,
 } from '@/lib/supabase';
 import { Locale, getGameTitle, getPatcherDict } from '@/lib/i18n/index';
 import { translateGenre } from '@/lib/i18n/genres';
 import { SITE_URL } from '@/lib/site';
 import { extractSteamAppId } from '@/lib/steam';
-import { AUTO_LOCALIZATION_LOCALES, getEligiblePatcherSlugs, isPatcherIndexEligible } from '@/lib/content-eligibility';
+import {
+  AUTO_LOCALIZATION_LOCALES,
+  ELDEN_RING_CANONICAL_SLUG,
+  ELDEN_RING_SOURCE_SLUG,
+  getEligiblePatcherSlugs,
+  getPatcherTrainers,
+  isPatcherIndexEligible,
+} from '@/lib/content-eligibility';
 
 export const revalidate = 3600; // 1 hour ISR cache
 
@@ -44,8 +50,6 @@ interface PatcherPageProps {
   }>;
 }
 
-const ELDEN_RING_SOURCE_SLUG = 'elden-ring-shadow-of-the-erdtree-trainer-1768067282';
-
 async function getCanonicalPatcherData(requestedSlug: string) {
   const aliasSlug = await resolveGameSlugAlias(requestedSlug);
   let canonicalSlug = aliasSlug ?? requestedSlug;
@@ -63,14 +67,11 @@ async function getCanonicalPatcherData(requestedSlug: string) {
   if (!game) return null;
 
   let trainers = await getTrainersForGame(game.id);
-  if (canonicalSlug === 'elden-ring') {
+  if (game.slug === ELDEN_RING_CANONICAL_SLUG) {
     const sourceGame = await getGameBySlug(ELDEN_RING_SOURCE_SLUG);
     if (sourceGame && sourceGame.id !== game.id) {
       const sourceTrainers = await getTrainersForGame(sourceGame.id);
-      const trainersById = new Map(
-        [...trainers, ...sourceTrainers].map((trainer) => [trainer.id, trainer])
-      );
-      trainers = sortTrainersLatestFirst([...trainersById.values()]);
+      trainers = getPatcherTrainers(game, [game, sourceGame], [...trainers, ...sourceTrainers]);
     }
   }
 
@@ -186,6 +187,9 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
   if (!trainers || trainers.length === 0) {
     notFound();
   }
+  // metadata와 본문 외부 노출 판단을 같은 최신·완전 승인 기준으로 맞춘다.
+  // 대기/실패 번역 페이지는 사용자에게 남기되 구조화 데이터·광고 대상에서는 제외한다.
+  const indexEligible = await isPatcherIndexEligible(game.id, currentLocale);
 
   // 3. Pre-fetch mappings for all trainers of this game in a single batch query
   const mappingsMap = await getMappingsForTrainers(trainers.map(t => t.id), currentLocale);
@@ -250,10 +254,12 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      {indexEligible && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      )}
 
       <PatcherClient
         game={game}
@@ -266,6 +272,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
         }))}
         mappingsMap={mappingsMap}
         unapprovedStatusMap={unapprovedStatusMap}
+        showAds={indexEligible}
         popularGames={popularGames}
         relatedGames={relatedGames}
         locale={currentLocale as Locale}
@@ -302,7 +309,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-20 w-full">
 
-        <AdsterraBanner locale={currentLocale as Locale} />
+        {indexEligible && <AdsterraBanner locale={currentLocale as Locale} />}
       </div>
     </>
   );

@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 import { BookOpen, Search, Save, Trash2, Plus, Loader2 } from 'lucide-react';
 
 interface DictItem {
@@ -23,16 +22,14 @@ export default function AdminDictionaryPage() {
     fetchDictionary();
   }, []);
 
-  const fetchDictionary = async () => {
-    if (!supabase) return;
+  async function fetchDictionary() {
     setDictLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('common_dictionary')
-        .select('*')
-        .order('english_term', { ascending: true });
-      if (error) throw error;
-      setDictItems(data || []);
+      const response = await fetch('/api/admin/dictionary', { cache: 'no-store' });
+      const payload = await response.json() as { items?: DictItem[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || 'dictionary_read_failed');
+      const data = payload.items || [];
+      setDictItems(data);
 
       const initialEdits: Record<number, string> = {};
       (data || []).forEach(item => {
@@ -44,37 +41,37 @@ export default function AdminDictionaryPage() {
     } finally {
       setDictLoading(false);
     }
-  };
+  }
 
   const handleAddDictItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supabase || !newEngTerm.trim() || !newKorTrans.trim()) return;
+    if (!newEngTerm.trim() || !newKorTrans.trim()) return;
     try {
-      const { error } = await supabase
-        .from('common_dictionary')
-        .insert({
-          english_term: newEngTerm.trim().toLowerCase(),
-          korean_translation: newKorTrans.trim()
-        });
-      if (error) throw error;
+      const response = await fetch('/api/admin/dictionary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ englishTerm: newEngTerm, koreanTranslation: newKorTrans }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || 'dictionary_create_failed');
       setNewEngTerm('');
       setNewKorTrans('');
       await fetchDictionary();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error adding term:', err);
-      alert(err.message || 'Failed to add term.');
+      alert(err instanceof Error ? err.message : 'Failed to add term.');
     }
   };
 
   const handleUpdateDictItem = async (id: number) => {
-    if (!supabase) return;
     const newText = dictEdits[id];
     try {
-      const { error } = await supabase
-        .from('common_dictionary')
-        .update({ korean_translation: newText })
-        .eq('id', id);
-      if (error) throw error;
+      const response = await fetch(`/api/admin/dictionary/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ koreanTranslation: newText }),
+      });
+      if (!response.ok) throw new Error('dictionary_update_failed');
       await fetchDictionary();
     } catch (err) {
       console.error('Error updating term:', err);
@@ -83,14 +80,10 @@ export default function AdminDictionaryPage() {
   };
 
   const handleDeleteDictItem = async (id: number) => {
-    if (!supabase) return;
     if (!confirm('Are you sure you want to delete this term?')) return;
     try {
-      const { error } = await supabase
-        .from('common_dictionary')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
+      const response = await fetch(`/api/admin/dictionary/${id}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('dictionary_delete_failed');
       await fetchDictionary();
     } catch (err) {
       console.error('Error deleting term:', err);

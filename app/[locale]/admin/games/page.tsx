@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 import { Flame, Search, Save, Loader2 } from 'lucide-react';
 
 interface Game {
@@ -24,38 +23,46 @@ export default function AdminGamesPage() {
   const [editIndexVal, setEditIndexVal] = useState(0);
 
   useEffect(() => {
-    fetchGamesForPopular();
+    let cancelled = false;
+    async function loadGames() {
+      setPopularLoading(true);
+      try {
+        const response = await fetch('/api/admin/games', { cache: 'no-store' });
+        const payload = await response.json() as { games?: Game[]; error?: string };
+        if (!response.ok) throw new Error(payload.error || 'games_read_failed');
+        if (!cancelled) setGames(payload.games || []);
+      } catch (err) {
+        console.error('Error fetching games:', err);
+      } finally {
+        if (!cancelled) setPopularLoading(false);
+      }
+    }
+    void loadGames();
+    return () => { cancelled = true; };
   }, []);
 
-  const fetchGamesForPopular = async () => {
-    if (!supabase) return;
+  async function fetchGamesForPopular() {
     setPopularLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('games')
-        .select('*')
-        .order('id', { ascending: false });
-      if (error) throw error;
-      setGames(data || []);
+      const response = await fetch('/api/admin/games', { cache: 'no-store' });
+      const payload = await response.json() as { games?: Game[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || 'games_read_failed');
+      setGames(payload.games || []);
     } catch (err) {
       console.error('Error fetching games:', err);
     } finally {
       setPopularLoading(false);
     }
-  };
+  }
 
   const savePopularStatus = async (gameId: number, isPopular: boolean, index: number) => {
-    if (!supabase) return;
     try {
-      const { error } = await supabase
-        .from('games')
-        .update({
-          is_popular: isPopular,
-          popularity_index: index
-        })
-        .eq('id', gameId);
-      
-      if (error) throw error;
+      const response = await fetch(`/api/admin/games/${gameId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPopular, popularityIndex: index }),
+      });
+      if (!response.ok) throw new Error('games_update_failed');
       
       await fetchGamesForPopular();
       setEditingGameId(null);

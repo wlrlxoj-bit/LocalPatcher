@@ -49,6 +49,8 @@ interface PatcherClientProps {
   // Map of trainerId -> mapping data
   mappingsMap: Record<number, Mapping[]>;
   unapprovedStatusMap: Record<number, UnapprovedTranslationStatus | null>;
+  /** 서버 SEO 자격 판정과 같은 값입니다. 대기·미승인 페이지는 광고 네트워크를 렌더하지 않습니다. */
+  showAds: boolean;
   locale: Locale;
   popularGames?: any[];
   relatedGames?: any[];
@@ -81,6 +83,11 @@ interface PricesResponse {
     humble: PriceData | null;
     gog: PriceData | null;
   };
+}
+
+/** 서버가 확정한 색인 자격이 없는 페이지에서는 광고 네트워크를 전혀 렌더하지 않습니다. */
+export function shouldRenderPatcherAds(showAds: boolean): boolean {
+  return showAds;
 }
 
 function PartnerStoreWidget({ game, locale, t, trainerId }: PartnerStoreWidgetProps) {
@@ -415,6 +422,7 @@ export default function PatcherClient({
   trainers,
   mappingsMap,
   unapprovedStatusMap,
+  showAds,
   locale,
   popularGames = [],
   relatedGames = [],
@@ -657,10 +665,10 @@ export default function PatcherClient({
             </table>
           </div>
         </div>
-        <AdSenseUnit locale={locale} slot={midAdSlot} />
-        <PartnerStoreWidget game={game} locale={locale} t={t} trainerId={selectedTrainerId} />
+        {shouldRenderPatcherAds(showAds) && <AdSenseUnit locale={locale} slot={midAdSlot} />}
+        {shouldRenderPatcherAds(showAds) && <PartnerStoreWidget game={game} locale={locale} t={t} trainerId={selectedTrainerId} />}
         
-            <AdSenseUnit locale={locale} slot={bottomAdSlot} />
+            {shouldRenderPatcherAds(showAds) && <AdSenseUnit locale={locale} slot={bottomAdSlot} />}
 
             {/* Popular Trainers Grid */}
             {popularGames.length > 0 && (
@@ -941,7 +949,7 @@ export default function PatcherClient({
                   </div>
                 </div>
 
-                <AdSenseUnit locale={locale} slot={midAdSlot} />
+                {shouldRenderPatcherAds(showAds) && <AdSenseUnit locale={locale} slot={midAdSlot} />}
 
                 <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-5" aria-labelledby="trainer-preview-heading">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -975,8 +983,8 @@ export default function PatcherClient({
                   )}
                 </section>
 
-                <PartnerStoreWidget game={game} locale={locale} t={t} trainerId={selectedTrainerId} />
-                <AdSenseUnit locale={locale} slot={bottomAdSlot} />
+                {shouldRenderPatcherAds(showAds) && <PartnerStoreWidget game={game} locale={locale} t={t} trainerId={selectedTrainerId} />}
+                {shouldRenderPatcherAds(showAds) && <AdSenseUnit locale={locale} slot={bottomAdSlot} />}
                 {/* Related Trainers Grid */}
                 {relatedGames && relatedGames.length > 0 && (
                   <section className="mt-12" aria-labelledby="related-trainers-heading">

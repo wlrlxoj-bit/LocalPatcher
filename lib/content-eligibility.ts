@@ -6,12 +6,23 @@ import { PUBLIC_LOCALIZATION_LOCALES } from '@/lib/site';
 /** 자동 현지화와 검색 노출을 허용하는 언어입니다. 영문 원문은 FLiNG로 연결합니다. */
 export const AUTO_LOCALIZATION_LOCALES = PUBLIC_LOCALIZATION_LOCALES;
 export type IndexableLocale = (typeof AUTO_LOCALIZATION_LOCALES)[number];
+export const ELDEN_RING_CANONICAL_SLUG = 'elden-ring';
+export const ELDEN_RING_SOURCE_SLUG = 'elden-ring-shadow-of-the-erdtree-trainer-1768067282';
 
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 100;
 const ID_CHUNK_SIZE = 500;
+// translation_validation.py의 OPTION_RE와 같은 단축키 문법을 사용한다. 숫자가
+// 설명 문장에 포함된 경우를 옵션으로 오인하지 않고, `Ctrl + Num 1 -`, `Num + :`처럼
+// modifier·Num 특수 키·구분자 앞 공백이 있는 승인 원문도 유효한 옵션으로 센다.
+const OPTION_KEY_PATTERN = String.raw`(?:Num(?:Pad)?[ \t]*(?:[0-9]|Plus|Minus|Decimal|Divide|Multiply|[+\-./*])|F(?:[1-9]|1[0-9]|2[0-4])|Ctrl|Alt|Shift|Home|End|Insert|Delete|PageUp|PageDown|Up|Down|Left|Right|Arrow(?:Up|Down|Left|Right)|Bracket(?:Left|Right)|[\[\]]|[A-Z0-9+\-=.,/])`;
+const OPTION_LABEL_PATTERN = new RegExp(
+  String.raw`^[ \t]*${OPTION_KEY_PATTERN}(?:[ \t]*\+[ \t]*${OPTION_KEY_PATTERN})*[ \t]*(?=(?:->|—|–|→|-|:)[ \t]*\S)`,
+  'gim',
+);
 
 type TrainerRow = { id: number; game_id: number; option_count: number; version_str: string };
+type GameIdentity = { id: number; slug: string };
 type MappingRow = {
   trainer_id: number;
   original_text: string | null;
@@ -23,7 +34,8 @@ export function isAutoLocalizationLocale(locale: string): locale is IndexableLoc
   return AUTO_LOCALIZATION_LOCALES.includes(locale as IndexableLocale);
 }
 
-function hasCompleteApprovedMappings(rows: MappingRow[], optionCount: number): boolean {
+/** 승인된 원문이 번역 검증기와 같은 수의 실제 옵션을 포함하는지 확인합니다. */
+export function hasCompleteApprovedMappings(rows: MappingRow[], optionCount: number): boolean {
   if (rows.length === 0 || !rows.every((row) => row.is_approved &&
     typeof row.original_text === 'string' && row.original_text.trim().length > 0 &&
     typeof row.translated_text === 'string' && row.translated_text.trim().length > 0
@@ -32,7 +44,10 @@ function hasCompleteApprovedMappings(rows: MappingRow[], optionCount: number): b
   // 한 슬롯에 전체 옵션 블록을 저장하는 최신 형식과, 슬롯을 나눈 과거 형식 모두를
   // 허용하되 승인된 원문에서 실제 옵션 수를 확인한다. 일부 슬롯만 승인된 페이지는
   // sitemap/index에 들어갈 수 없다.
-  const optionLabels = rows.flatMap((row) => row.original_text!.match(/(?:^|\n)\s*(?:Num\s*)?\d+\s*[:.)-]/g) || []);
+  const optionLabels = rows.flatMap((row) => {
+    OPTION_LABEL_PATTERN.lastIndex = 0;
+    return row.original_text!.match(OPTION_LABEL_PATTERN) || [];
+  });
   return optionLabels.length >= optionCount;
 }
 
@@ -63,15 +78,31 @@ async function readLocaleMappings(trainerIds: number[], locale: IndexableLocale)
   return rows;
 }
 
-function latestTrainerByGame(trainers: TrainerRow[]): Map<number, TrainerRow> {
-  const grouped = new Map<number, TrainerRow[]>();
-  for (const trainer of trainers) {
-    grouped.set(trainer.game_id, [...(grouped.get(trainer.game_id) || []), trainer]);
+/**
+ * 실제 패처 화면과 같은 트레이너 집합에서 최신 항목을 고릅니다.
+ * 엘든 링은 레거시 source slug의 트레이너를 함께 비교하므로, 그 source의 더 새 버전이
+ * 미승인 상태이면 canonical 엘든 링 페이지도 색인되지 않습니다.
+ */
+export function getPatcherTrainers(
+  game: GameIdentity,
+  games: GameIdentity[],
+  trainers: TrainerRow[],
+): TrainerRow[] {
+  const trainerGameIds = new Set([game.id]);
+  if (game.slug === ELDEN_RING_CANONICAL_SLUG) {
+    const sourceGame = games.find((candidate) => candidate.slug === ELDEN_RING_SOURCE_SLUG);
+    if (sourceGame && sourceGame.id !== game.id) trainerGameIds.add(sourceGame.id);
   }
-  return new Map([...grouped.entries()].map(([gameId, gameTrainers]) => [
-    gameId,
-    sortTrainersLatestFirst(gameTrainers)[0],
-  ]));
+  return sortTrainersLatestFirst(trainers.filter((trainer) => trainerGameIds.has(trainer.game_id)));
+}
+
+/** 실제 패처 화면과 같은 병합 집합의 최신 트레이너를 반환합니다. */
+export function getLatestPatcherTrainer(
+  game: GameIdentity,
+  games: GameIdentity[],
+  trainers: TrainerRow[],
+): TrainerRow | undefined {
+  return getPatcherTrainers(game, games, trainers)[0];
 }
 
 /**
@@ -81,12 +112,29 @@ function latestTrainerByGame(trainers: TrainerRow[]): Map<number, TrainerRow> {
 export const isPatcherIndexEligible = cache(async (gameId: number, locale: string): Promise<boolean> => {
   if (!isAutoLocalizationLocale(locale) || !supabase) return false;
   try {
+    const { data: gameRows, error: gameError } = await supabase
+      .from('games')
+      .select('id,slug')
+      .eq('id', gameId);
+    if (gameError || !gameRows || gameRows.length !== 1) {
+      throw gameError || new Error('색인 대상 게임을 조회하지 못했습니다.');
+    }
+    const game = gameRows[0] as GameIdentity;
+    const games = [game];
+    if (game.slug === ELDEN_RING_CANONICAL_SLUG) {
+      const { data: sourceRows, error: sourceError } = await supabase
+        .from('games')
+        .select('id,slug')
+        .eq('slug', ELDEN_RING_SOURCE_SLUG);
+      if (sourceError) throw sourceError;
+      if (sourceRows?.length === 1) games.push(sourceRows[0] as GameIdentity);
+    }
     const { data, error } = await supabase
       .from('trainers')
       .select('id,game_id,option_count,version_str')
-      .eq('game_id', gameId);
+      .in('game_id', games.map((candidate) => candidate.id));
     if (error || !data) throw error || new Error('최신 트레이너를 조회하지 못했습니다.');
-    const latestTrainer = sortTrainersLatestFirst(data as TrainerRow[])[0];
+    const latestTrainer = getLatestPatcherTrainer(game, games, data as TrainerRow[]);
     if (!latestTrainer || latestTrainer.option_count <= 0) return false;
     return hasCompleteApprovedMappings(await readLocaleMappings([latestTrainer.id], locale), latestTrainer.option_count);
   } catch (error) {
@@ -111,15 +159,25 @@ export async function getEligiblePatcherSlugs(locale: string): Promise<string[]>
         await client.from('trainers').select('id,game_id,option_count,version_str').order('id').range(from, to)
       ),
     ]);
-    const latestByGame = latestTrainerByGame(trainers);
-    const latestTrainers = [...latestByGame.values()].filter((trainer) => trainer.option_count > 0);
+    const gameIdentities = games.map(({ id, slug }) => ({ id, slug }));
+    const latestTrainers = games
+      .map((game) => getLatestPatcherTrainer(game, gameIdentities, trainers))
+      .filter((trainer): trainer is TrainerRow => Boolean(trainer && trainer.option_count > 0));
     const mappingsByTrainer = new Map<number, MappingRow[]>();
     for (const mapping of await readLocaleMappings(latestTrainers.map((trainer) => trainer.id), locale)) {
       mappingsByTrainer.set(mapping.trainer_id, [...(mappingsByTrainer.get(mapping.trainer_id) || []), mapping]);
     }
-    const eligibleGameIds = new Set(latestTrainers
-      .filter((trainer) => hasCompleteApprovedMappings(mappingsByTrainer.get(trainer.id) || [], trainer.option_count))
-      .map((trainer) => trainer.game_id));
+    const latestTrainerByGameId = new Map(games.map((game) => [
+      game.id,
+      getLatestPatcherTrainer(game, gameIdentities, trainers),
+    ]));
+    const eligibleGameIds = new Set(games
+      .filter((game) => {
+        const trainer = latestTrainerByGameId.get(game.id);
+        return Boolean(trainer && trainer.option_count > 0 &&
+          hasCompleteApprovedMappings(mappingsByTrainer.get(trainer.id) || [], trainer.option_count));
+      })
+      .map((game) => game.id));
     const eligibleSlugs = games.filter((game) => eligibleGameIds.has(game.id)).map((game) => game.slug);
     const existingSlugs = new Set(eligibleSlugs);
     const titleBySlug = new Map(games.map((game) => [game.slug, game.title_en]));
