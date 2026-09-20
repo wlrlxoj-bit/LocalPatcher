@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import type { Locale } from '@/lib/i18n/types';
 
 const consentKey = 'localpatcher:adsterra-consent:v1';
+/**
+ * 제3자 광고의 전역 중단 스위치입니다. 설정이 없으면 항상 꺼진 상태로 시작합니다.
+ * 공개 환경 변수로 번들에 포함되므로, 설정을 바꾼 뒤에는 새 배포가 필요합니다.
+ */
+export const adsterraEnabledByDefault = process.env.NEXT_PUBLIC_ADSTERRA_ENABLED === 'true';
 const copy = {
   ko: { label: '광고', notice: '허용하면 Adsterra와 광고 파트너가 광고 제공·측정을 위해 쿠키, 기기 및 접속 정보를 처리할 수 있습니다. 허용하지 않아도 모든 도구를 사용할 수 있습니다.', allow: '이 세션에서 제3자 광고 허용', revoke: '광고 허용 철회', privacy: '개인정보처리방침' },
   en: { label: 'Advertisement', notice: 'If you allow ads, Adsterra and its partners may process cookies, device and access information for ad delivery and measurement. All tools remain available without allowing ads.', allow: 'Allow third-party ads for this session', revoke: 'Withdraw ad permission', privacy: 'Privacy policy' },
@@ -17,7 +22,13 @@ const copy = {
 const bannerDocument = `<!doctype html><html><head><meta name="viewport" content="width=300,initial-scale=1"><style>html,body{margin:0;padding:0;width:300px;height:250px;overflow:hidden}</style></head><body><script>atOptions={'key':'a5c2200df69026fe35b21b2a9ec505c1','format':'iframe','height':250,'width':300,'params':{}};</script><script src="https://www.highrevenueformat.com/a5c2200df69026fe35b21b2a9ec505c1/invoke.js"></script></body></html>`;
 
 /** 명시적 세션 동의 후에만 외부 배너를 생성하고, 철회 시 문서를 제거합니다. */
-export default function AdsterraBanner({ locale }: { locale: Locale }) {
+export interface AdsterraBannerProps {
+  locale: Locale;
+  /** 서버가 전달하는 운영 중단 스위치입니다. 생략하면 공개 환경 변수만 사용합니다. */
+  enabled?: boolean;
+}
+
+export default function AdsterraBanner({ locale, enabled = adsterraEnabledByDefault }: AdsterraBannerProps) {
   const t = copy[locale] || copy.en;
   const [allowed, setAllowed] = useState(false);
   const [scale, setScale] = useState(1);
@@ -47,6 +58,9 @@ export default function AdsterraBanner({ locale }: { locale: Locale }) {
       else sessionStorage.removeItem(consentKey);
     } catch { /* 저장 불가 환경에서도 현재 화면의 허용·철회는 작동합니다. */ }
   }
+
+  // 중단 스위치가 꺼진 경우에는 동의 UI·iframe 모두 만들지 않아 외부 요청 경로가 없습니다.
+  if (!enabled) return null;
 
   return <aside aria-label={t.label} className="mt-8 rounded-xl border border-slate-800 p-4 text-center">
     <p className="text-xs text-slate-500">{t.label}</p>

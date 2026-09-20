@@ -309,7 +309,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-20 w-full">
 
-        {indexEligible && <AdsterraBanner locale={currentLocale as Locale} />}
+        {indexEligible && <AdsterraBanner locale={currentLocale as Locale} enabled={process.env.ADSTERRA_ENABLED === 'true'} />}
       </div>
     </>
   );

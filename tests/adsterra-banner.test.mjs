@@ -10,7 +10,7 @@ const compiled = ts.transpileModule(source, { compilerOptions: {
 } }).outputText;
 
 // 실제 컴포넌트를 실행하고 hook·저장소·프레임 타이밍만 격리합니다. 광고 네트워크는 호출하지 않습니다.
-function harness({ saved = false, blocked = false } = {}) {
+function harness({ saved = false, blocked = false, enabled = true } = {}) {
   const state = [];
   const effects = [];
   let index = 0;
@@ -20,6 +20,7 @@ function harness({ saved = false, blocked = false } = {}) {
   const jsx = (type, props) => ({ type, props });
   vm.runInNewContext(compiled, {
     exports,
+    process: { env: {} },
     requestAnimationFrame: callback => { callback(); return 1; }, cancelAnimationFrame() {},
     sessionStorage: {
       getItem: key => { if (blocked) throw Error('blocked'); return storage.get(key); },
@@ -38,7 +39,7 @@ function harness({ saved = false, blocked = false } = {}) {
   });
   return {
     storage,
-    render(locale = 'ko') { index = 0; return exports.default({ locale }); },
+    render(locale = 'ko') { index = 0; return exports.default({ locale, enabled }); },
     mount() { effects.splice(0).forEach(effect => effect()); mounted = true; },
   };
 }
@@ -59,6 +60,13 @@ test('기본 렌더링은 모든 언어에서 외부 리소스 없이 허용 설
     assert.equal(elements(tree, 'a')[0].props.href, `/${locale}/privacy`);
     assert.equal(elements(tree, 'button').length, 1);
   }
+});
+
+test('운영 중단 스위치가 꺼져 있으면 동의 UI와 외부 광고 요청 경로를 만들지 않는다', () => {
+  const tree = harness({ enabled: false }).render();
+  assert.equal(tree, null);
+  assert.match(source, /NEXT_PUBLIC_ADSTERRA_ENABLED === 'true'/);
+  assert.match(source, /if \(!enabled\) return null/);
 });
 
 test('허용 후 발급 배너 하나만 생성하고 철회하면 iframe과 세션 동의를 제거한다', () => {
@@ -100,5 +108,5 @@ test('패처 페이지는 색인 자격이 있는 경우에만 고유 정보 뒤
   const page = readFileSync(new URL('../app/[locale]/patcher/[game_slug]/page.tsx', import.meta.url), 'utf8');
   assert.equal((page.match(/<AdsterraBanner\s/g) || []).length, 1);
   assert.ok(page.indexOf('<PatcherUniqueContent') < page.indexOf('<AdsterraBanner'));
-  assert.match(page, /\{indexEligible && <AdsterraBanner locale=\{currentLocale as Locale\} \/>\}/);
+  assert.match(page, /\{indexEligible && <AdsterraBanner locale=\{currentLocale as Locale\} enabled=\{process\.env\.ADSTERRA_ENABLED === 'true'\} \/>\}/);
 });

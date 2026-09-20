@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ChevronLeft, ArrowRight, AlertTriangle, Share2 } from 'lucide-react';
-import { Locale, getCommonDict, getPatcherDict, getGameTitle } from '@/lib/i18n';
+import { Locale, getCommonDict, getGamesDict, getPatcherDict, getGameTitle } from '@/lib/i18n';
 import DropZone from '@/components/DropZone';
 import GameCard from '@/components/GameCard';
 import AdSenseUnit from '@/components/AdSenseUnit';
@@ -268,6 +268,7 @@ function PartnerStoreWidget({ game, locale, t, trainerId }: PartnerStoreWidgetPr
     {
       key: 'steam' as const,
       name: 'Steam Store',
+      affiliate: false,
       ...getStoreDisplayDetails('steam', steamUrl),
       badge: <span className="text-xs text-slate-500 mt-1 block">{t.steamBadge}</span>,
       normalBorder: 'border-slate-800/80 bg-slate-900/25 hover:bg-slate-900/40 hover:border-slate-700',
@@ -278,6 +279,7 @@ function PartnerStoreWidget({ game, locale, t, trainerId }: PartnerStoreWidgetPr
     {
       key: 'gmg' as const,
       name: 'Green Man Gaming',
+      affiliate: false,
       ...getStoreDisplayDetails('gmg', gmgUrl),
       badge: <span className="text-xs text-cyan-400 font-medium mt-1 block">{t.gmgBadge}</span>,
       normalBorder: 'border-slate-800/80 bg-slate-900/25 hover:bg-slate-900/40 hover:border-slate-700',
@@ -288,6 +290,7 @@ function PartnerStoreWidget({ game, locale, t, trainerId }: PartnerStoreWidgetPr
     {
       key: 'humble' as const,
       name: 'Humble Store',
+      affiliate: Boolean(partnerKey),
       ...getStoreDisplayDetails('humble', humbleUrl),
       badge: <span className="text-xs text-emerald-400 font-medium mt-1 block">{t.humbleBadge}</span>,
       normalBorder: 'border-slate-800/80 bg-slate-900/25 hover:bg-slate-900/40 hover:border-slate-700',
@@ -298,6 +301,7 @@ function PartnerStoreWidget({ game, locale, t, trainerId }: PartnerStoreWidgetPr
     {
       key: 'gog' as const,
       name: 'GOG.com',
+      affiliate: false,
       ...getStoreDisplayDetails('gog', gogUrl),
       badge: <span className="text-xs text-purple-400 font-medium mt-1 block">{t.gogBadge}</span>,
       normalBorder: 'border-slate-800/80 bg-slate-900/25 hover:bg-slate-900/40 hover:border-slate-700',
@@ -397,7 +401,7 @@ function PartnerStoreWidget({ game, locale, t, trainerId }: PartnerStoreWidgetPr
                 <a
                   href={store.url}
                   target="_blank"
-                  rel="noopener noreferrer"
+                  rel={store.affiliate ? 'sponsored noopener noreferrer' : 'noopener noreferrer'}
                   onClick={() => trackMerchantClick(store.key)}
                   aria-label={`${store.name} - ${store.priceStr}`}
                   className={`inline-flex items-center justify-center px-4 py-2 rounded-lg border text-xs font-bold transition-all duration-200 flex-1 sm:flex-none sm:w-auto text-center ${btnStyle}`}
@@ -413,6 +417,9 @@ function PartnerStoreWidget({ game, locale, t, trainerId }: PartnerStoreWidgetPr
       <div className="z-10 text-[10px] text-slate-500 leading-relaxed text-left border-t border-slate-900/60 pt-3 font-sans">
         {t.priceDisclaimer}
       </div>
+      {partnerKey && <p className="z-10 text-[10px] leading-relaxed text-slate-500" data-affiliate-disclosure>
+        {t.humbleAffiliateDisclosure}
+      </p>}
     </div>
   );
 }
@@ -434,6 +441,7 @@ export default function PatcherClient({
   // 서버가 version_str 기준으로 정렬한 순서를 metadata/JSON-LD와 동일하게 유지합니다.
   const sortedTrainers = trainers;
   const t = getCommonDict(locale);
+  const gamesT = getGamesDict(locale);
   const pt = getPatcherDict(locale as Locale);
   const displayTitle = getGameTitle(game, locale);
   const [selectedTrainerId, setSelectedTrainerId] = useState<number>(
@@ -490,11 +498,6 @@ export default function PatcherClient({
     fling: pt.startGuideFling, guide: pt.startGuideGuide, missingFling: pt.startGuideMissingFling,
     zipNotice: pt.startGuideZipNotice,
   };
-
-  const partnerKey = process.env.NEXT_PUBLIC_HUMBLE_PARTNER_KEY;
-  const purchaseUrl = partnerKey
-    ? `https://www.humblebundle.com/store/search?search=${encodeURIComponent(game.title_en)}&partner=${partnerKey}`
-    : `https://store.steampowered.com/search/?term=${encodeURIComponent(game.title_en)}`;
 
   const handleTrainerDetected = (id: number) => {
     setSelectedTrainerId(id);
@@ -666,7 +669,7 @@ export default function PatcherClient({
           </div>
         </div>
         {shouldRenderPatcherAds(showAds) && <AdSenseUnit locale={locale} slot={midAdSlot} />}
-        {shouldRenderPatcherAds(showAds) && <PartnerStoreWidget game={game} locale={locale} t={t} trainerId={selectedTrainerId} />}
+        {shouldRenderPatcherAds(showAds) && <PartnerStoreWidget game={game} locale={locale} t={gamesT} trainerId={selectedTrainerId} />}
         
             {shouldRenderPatcherAds(showAds) && <AdSenseUnit locale={locale} slot={bottomAdSlot} />}
 
@@ -983,7 +986,7 @@ export default function PatcherClient({
                   )}
                 </section>
 
-                {shouldRenderPatcherAds(showAds) && <PartnerStoreWidget game={game} locale={locale} t={t} trainerId={selectedTrainerId} />}
+                {shouldRenderPatcherAds(showAds) && <PartnerStoreWidget game={game} locale={locale} t={gamesT} trainerId={selectedTrainerId} />}
                 {shouldRenderPatcherAds(showAds) && <AdSenseUnit locale={locale} slot={bottomAdSlot} />}
                 {/* Related Trainers Grid */}
                 {relatedGames && relatedGames.length > 0 && (

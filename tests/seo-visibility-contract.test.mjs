@@ -142,7 +142,7 @@ test('비자격 패처는 구조화 데이터와 제3자 광고를 내보내지 
   const source = await readFile(patcherPageUrl, 'utf8');
   assert.match(source, /const indexEligible = await isPatcherIndexEligible\(game\.id, currentLocale\)/);
   assert.match(source, /\{indexEligible && \(\s*<script\s+type="application\/ld\+json"/s);
-  assert.match(source, /\{indexEligible && <AdsterraBanner locale=\{currentLocale as Locale\} \/>\}/);
+  assert.match(source, /\{indexEligible && <AdsterraBanner locale=\{currentLocale as Locale\} enabled=\{process\.env\.ADSTERRA_ENABLED === 'true'\} \/>\}/);
   assert.match(source, /showAds=\{indexEligible\}/);
 });
 
