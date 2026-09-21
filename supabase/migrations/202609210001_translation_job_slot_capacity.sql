@@ -85,7 +85,19 @@ begin
     elsif source_row.encoding = 'UTF-8' then
       encoded_length := pg_catalog.octet_length(pg_catalog.convert_to(translated_block, 'UTF8'));
     else
-      encoded_length := pg_catalog.octet_length(pg_catalog.convert_to(translated_block, 'UTF16')) - 2;
+      -- PostgreSQL은 UTF-16/UTF-16LE를 convert_to 대상 인코딩으로 제공하지 않는다.
+      -- text는 유효한 Unicode 코드 포인트만 저장하므로 UTF-16LE의 바이트 수는
+      -- BMP 코드 포인트당 2바이트, 보조 평면 코드 포인트당 4바이트다. 줄바꿈도
+      -- 실제 슬롯에 기록되므로 포함한다. 이 계산을 쓰기 전에 끝내야 승인 중간에
+      -- 일부 슬롯만 저장되는 일이 없다.
+      encoded_length := 2 * (
+        pg_catalog.char_length(translated_block)::bigint
+        + (
+          select count(*)::bigint
+          from pg_catalog.generate_series(1, pg_catalog.char_length(translated_block)) as characters(position)
+          where pg_catalog.ascii(pg_catalog.substr(translated_block, characters.position, 1)) > 65535
+        )
+      );
     end if;
     if encoded_length > source_row.max_char_len::bigint * (case when source_row.encoding = 'UTF-16LE' then 2 else 1 end) then
       raise exception 'slot translation exceeds capacity';

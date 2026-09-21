@@ -140,14 +140,16 @@ test('rollback은 manual 기록을 발견하면 상태 제약을 되돌리지 �
   assert.match(rollback, /drop function if exists public\.save_manual_translation_mapping/);
 });
 
-test('수동 저장 RPC는 DB에서도 슬롯 인코딩과 정확한 바이트 용량을 검증한다', async () => {
-  const migration = await read('supabase/migrations/202609200002_manual_mapping_review_lock.sql');
+test('수동 저장 RPC는 새 호환성 마이그레이션에서 지원되는 방식으로 슬롯 인코딩과 정확한 바이트 용량을 검증한다', async () => {
+  const migration = await read('supabase/migrations/202609210002_manual_mapping_utf16le_capacity.sql');
   const start = migration.indexOf('create or replace function public.save_manual_translation_mapping');
   const end = migration.indexOf('create or replace function public.approve_manual_translation_mapping');
   const save = migration.slice(start, end);
   assert.match(save, /target\.encoding not in \('ASCII', 'UTF-8', 'UTF-16LE'\)/);
   assert.match(save, /pg_catalog\.convert_to\(p_translated_text, 'UTF8'\)/);
-  assert.match(save, /pg_catalog\.convert_to\(p_translated_text, 'UTF16'\)\) - 2/);
+  assert.match(save, /pg_catalog\.ascii\(pg_catalog\.substr\(p_translated_text, characters\.position, 1\)\) > 65535/);
+  assert.match(save, /pg_catalog\.generate_series\(1, pg_catalog\.char_length\(p_translated_text\)\)/);
+  assert.doesNotMatch(save, /'UTF16'/);
   assert.match(
     save,
     /encoded_length\s*>\s*\(\s*target\.max_char_len::bigint\s*\*\s*\(case when target\.encoding = 'UTF-16LE' then 2 else 1 end\)\s*\) then/,
