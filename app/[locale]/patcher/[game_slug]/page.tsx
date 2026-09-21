@@ -28,6 +28,7 @@ import {
   getPatcherIndexEligibilityByLocales,
   getPatcherTrainers,
 } from '@/lib/content-eligibility';
+import { getTrainerOptionSummary } from '@/lib/trainer-option-summary';
 
 export const revalidate = 3600; // 1 hour ISR cache
 
@@ -248,6 +249,10 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
     : false;
   // 매핑 한 행에는 최신 트레이너의 전체 번역문이 들어가므로 행 개수가 아닌 옵션 수를 표시합니다.
   const translatedOptionCount = hasApprovedLatestMapping ? supportedOptionCount : 0;
+  // 최신 트레이너의 승인 매핑에서 원문·번역 단축키가 일치하는 옵션만 SSR 정보로 노출합니다.
+  const optionSummary = latestTrainer
+    ? getTrainerOptionSummary(mappingsMap[latestTrainer.id] || [])
+    : null;
   const supportedVersions = [...new Set(
     trainers
       .map((trainer) => trainer.version_str?.trim())
@@ -290,6 +295,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
           tags={Array.isArray(game.tags) ? game.tags : []}
           sourceUrl={game.fling_url}
           translatedOptionCount={translatedOptionCount}
+          optionSummary={optionSummary}
         />
         )}
         steamNewsSlot={steamAppId ? (
