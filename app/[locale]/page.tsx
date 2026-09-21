@@ -6,13 +6,14 @@ import { ShieldCheck, Zap, Info } from 'lucide-react';
 import GamesListSkeleton from '@/components/GamesListSkeleton';
 import PatcherLinkDirectory from '@/components/PatcherLinkDirectory';
 import { canonicalizeListedGameSlug } from '@/lib/game-slug-aliases';
-import { getEligiblePatcherSlugs } from '@/lib/content-eligibility';
+import { getEligiblePatcherSlugsForListedGames } from '@/lib/content-eligibility';
 
 export const revalidate = 3600;
 
 async function GamesFetcher({ locale }: { locale: Locale }) {
   const gamesData = await getGamesWithTrainers();
-  const eligibleSlugs = new Set(await getEligiblePatcherSlugs(locale));
+  // 이미 목록에 포함된 trainer 데이터를 재사용해 자격 판정용 전체 DB 스캔을 추가로 하지 않습니다.
+  const eligibleSlugs = new Set(await getEligiblePatcherSlugsForListedGames(gamesData, locale));
   const directoryCandidates = gamesData
     .filter(g => g.trainers?.some((trainer: { option_count: number }) => trainer.option_count > 0));
   const existingSlugs = new Set(directoryCandidates.map(game => game.slug));

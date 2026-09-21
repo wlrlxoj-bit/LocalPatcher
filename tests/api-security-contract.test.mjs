@@ -5,6 +5,8 @@ import test from 'node:test';
 const priceRouteUrl = new URL('../app/api/prices/route.ts', import.meta.url);
 const workflowRouteUrl = new URL('../app/api/admin/system/trigger-workflow/route.ts', import.meta.url);
 const workflowStatusRouteUrl = new URL('../app/api/admin/system/workflow-status/route.ts', import.meta.url);
+const retryStatusRouteUrl = new URL('../app/api/admin/system/translation-retry-status/route.ts', import.meta.url);
+const adminSystemPageUrl = new URL('../app/[locale]/admin/system/page.tsx', import.meta.url);
 
 test('가격 API는 입력 검증 실패 시 DB·외부 가격 API 호출보다 먼저 종료한다', async () => {
   const source = await readFile(priceRouteUrl, 'utf8');
@@ -51,4 +53,36 @@ test('워크플로 상태 API도 allowlist 외 요청을 GitHub에 전달하지 
   assert.match(source, /cache: 'no-store'/);
   assert.match(source, /WORKFLOW_STATUS_UNAVAILABLE/);
   assert.doesNotMatch(source, /error\.message|response\.text\(\)/);
+});
+
+test('워크플로 상태 API는 수동 dispatch를 예약 실행과 구분하고 마지막 성공 실행을 함께 제공한다', async () => {
+  const source = await readFile(workflowStatusRouteUrl, 'utf8');
+  assert.match(source, /dispatchRequestedAt/);
+  assert.match(source, /workflow_dispatch/);
+  assert.match(source, /awaiting_dispatch_run/);
+  assert.match(source, /latestSuccess/);
+  assert.match(source, /run_attempt/);
+  assert.match(source, /Cache-Control': 'private, no-store'/);
+});
+
+test('재번역 상태 API는 관리자 인증 후 집계만 제공하고 개별 trainer 정보를 노출하지 않는다', async () => {
+  const source = await readFile(retryStatusRouteUrl, 'utf8');
+  assert.match(source, /requireAdmin\(request\)/);
+  assert.match(source, /getAdminClient\(\)/);
+  assert.match(source, /translation_retry_queue/);
+  assert.match(source, /select\('\*', \{ count: 'exact', head: true \}\)/);
+  assert.match(source, /ready: counts\.ready/);
+  assert.match(source, /deferred: counts\.deferred/);
+  assert.match(source, /blocked: counts\.blocked/);
+  assert.doesNotMatch(source, /trainer_id/);
+  assert.match(source, /Cache-Control': 'private, no-store'/);
+});
+
+test('관리자 화면은 dispatch가 승인된 뒤 실행 ID를 기다리고 재번역 차단 상태를 표시한다', async () => {
+  const source = await readFile(adminSystemPageUrl, 'utf8');
+  assert.match(source, /dispatchRequestedAt/);
+  assert.match(source, /awaiting_dispatch_run/);
+  assert.match(source, /translation-retry-status/);
+  assert.match(source, /차단됨/);
+  assert.match(source, /재시도 #/);
 });

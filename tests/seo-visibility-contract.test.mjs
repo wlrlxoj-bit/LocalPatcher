@@ -73,7 +73,10 @@ test('색인 자격은 4개 자동 현지화 언어의 최신 승인·완전 번
   assert.match(source, /optionLabels\.length >= optionCount/);
   assert.match(source, /original_text\.trim\(\)\.length > 0/);
   assert.match(source, /translated_text\.trim\(\)\.length > 0/);
-  assert.match(source, /if \(!isAutoLocalizationLocale\(locale\) \|\| !supabase\) return false/);
+  assert.match(source, /if \(!isAutoLocalizationLocale\(locale\) \|\| !supabase\) return emptyResult/);
+  assert.match(source, /getPatcherIndexEligibilityByGameIds/);
+  assert.match(source, /getPatcherIndexEligibilityByLocales/);
+  assert.match(source, /getEligiblePatcherSlugsByLocale/);
   assert.match(source, /빈 목록으로 처리합니다/);
   assert.doesNotMatch(source, /readStaleCache|snapshot/i);
 });
@@ -121,7 +124,7 @@ test('색인 자격 옵션 판정은 번역 검증기와 같은 단축키 형식
 test('사이트맵은 영문과 snapshot 재방출을 제외하고 자격 있는 동적 페이지만 담는다', async () => {
   const source = await readFile(sitemapUrl, 'utf8');
   assert.match(source, /const locales = AUTO_LOCALIZATION_LOCALES/);
-  assert.match(source, /getEligiblePatcherSlugs\(locale\)/);
+  assert.match(source, /getEligiblePatcherSlugsByLocale\(locales\)/);
   assert.match(source, /빈 목록으로 처리합니다/);
   assert.doesNotMatch(source, /patchableSnapshot|locales\.en|last-known-good/);
 });
@@ -130,9 +133,9 @@ test('패처 metadata·정적 생성·hreflang은 언어별 승인 자격을 확
   const source = await readFile(patcherPageUrl, 'utf8');
   assert.match(source, /AUTO_LOCALIZATION_LOCALES\.map/);
   assert.match(source, /getEligiblePatcherSlugs\(locale\)/);
-  assert.match(source, /const indexEligible = await isPatcherIndexEligible\(game\.id, currentLocale\)/);
+  assert.match(source, /getPatcherIndexEligibilityByLocales\(game\.id, AUTO_LOCALIZATION_LOCALES\)/);
   assert.match(source, /const hasApprovedTranslation = indexEligible/);
-  assert.match(source, /const eligibleLocales = await Promise\.all\(AUTO_LOCALIZATION_LOCALES\.map/);
+  assert.match(source, /const eligibleLocales = AUTO_LOCALIZATION_LOCALES\.map/);
   assert.doesNotMatch(source, /en: `\/en\/patcher\/\$\{canonicalSlug\}`/);
   assert.match(source, /alternateLanguages\['x-default'\] = alternateLanguages\.ko/);
   assert.match(source, /robots: indexEligible \? \{ index: true, follow: true \} : \{ index: false, follow: true \}/);
@@ -140,7 +143,7 @@ test('패처 metadata·정적 생성·hreflang은 언어별 승인 자격을 확
 
 test('비자격 패처는 구조화 데이터와 제3자 광고를 내보내지 않는다', async () => {
   const source = await readFile(patcherPageUrl, 'utf8');
-  assert.match(source, /const indexEligible = await isPatcherIndexEligible\(game\.id, currentLocale\)/);
+  assert.match(source, /const indexEligible = eligibleByGameId\.get\(game\.id\) === true/);
   assert.match(source, /\{indexEligible && \(\s*<script\s+type="application\/ld\+json"/s);
   assert.match(source, /\{indexEligible && <AdsterraBanner locale=\{currentLocale as Locale\} enabled=\{process\.env\.ADSTERRA_ENABLED === 'true'\} \/>\}/);
   assert.match(source, /showAds=\{indexEligible\}/);
@@ -164,9 +167,25 @@ test('홈과 전용 디렉터리는 자격 없는 게임·영문 링크를 만�
     readFile(localeHomeUrl, 'utf8'),
     readFile(directoryUrl, 'utf8'),
   ]);
-  assert.match(home, /const eligibleSlugs = new Set\(await getEligiblePatcherSlugs\(locale\)\)/);
+  assert.match(home, /getEligiblePatcherSlugsForListedGames\(gamesData, locale\)/);
   assert.match(home, /const eligibleGamesData = directoryCandidates\.filter/);
   assert.match(directory, /if \(!isAutoLocalizationLocale\(locale\)\) return null/);
+});
+
+test('색인 자격 조회는 sitemap 언어·본문 카드·홈 목록에서 배치 데이터를 재사용한다', async () => {
+  const [eligibility, sitemap, page, home] = await Promise.all([
+    readFile(eligibilityUrl, 'utf8'),
+    readFile(sitemapUrl, 'utf8'),
+    readFile(patcherPageUrl, 'utf8'),
+    readFile(localeHomeUrl, 'utf8'),
+  ]);
+  assert.match(eligibility, /getEligiblePatcherSlugsByLocale\(locales: readonly string\[\]\)/);
+  assert.match(eligibility, /Promise\.all\(validLocales\.map/);
+  assert.match(eligibility, /getEligiblePatcherSlugsForListedGames/);
+  assert.match(sitemap, /getEligiblePatcherSlugsByLocale\(locales\)/);
+  assert.doesNotMatch(sitemap, /for \(const locale of locales\)[\s\S]{0,300}getEligiblePatcherSlugs/);
+  assert.match(page, /getPatcherIndexEligibilityByGameIds\([\s\S]*popularCandidates\.map[\s\S]*relatedCandidates\.map/);
+  assert.match(home, /getEligiblePatcherSlugsForListedGames\(gamesData, locale\)/);
 });
 
 test('전역 언어 선택과 루트 hreflang도 4개 공개 언어만 사용한다', async () => {

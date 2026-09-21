@@ -1,14 +1,90 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Play, Database, HardDrive, ShieldAlert, Loader2, ExternalLink, CheckCircle, XCircle } from 'lucide-react';
+import { Settings, Play, Database, ShieldAlert, Loader2, ExternalLink, CheckCircle, XCircle } from 'lucide-react';
 
-type WorkflowStatus = {
+type WorkflowRun = {
+  runId: number | null;
   status: string;
   conclusion: string | null;
+  operationalState: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'skipped' | 'unknown';
+  attempt: number;
+  retrying: boolean;
   url: string | null;
-  updatedAt: string;
+  createdAt: string | null;
+  updatedAt: string | null;
 };
+
+type WorkflowStatus = {
+  tracking: 'matched_dispatch' | 'awaiting_dispatch_run' | 'latest_run';
+  run: WorkflowRun | null;
+  latestSuccess: WorkflowRun | null;
+};
+
+type RetryQueueStatus = {
+  ready: number;
+  deferred: number;
+  blocked: number;
+  latestUpdatedAt: string | null;
+  latestFailureCode: string | null;
+};
+
+function StatusIndicator({ status }: { status: WorkflowStatus | null }) {
+  if (!status) return null;
+  if (status.tracking === 'awaiting_dispatch_run') {
+    return <div className="mt-3 flex items-center space-x-1.5 text-xs text-amber-400"><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>GitHub 실행 대기 중</span></div>;
+  }
+  const run = status.run;
+  if (!run || run.operationalState === 'unknown') return null;
+  const inProgress = run.operationalState === 'running' || run.operationalState === 'queued';
+  const success = run.operationalState === 'succeeded';
+  const latestSuccessAt = status.latestSuccess?.updatedAt || status.latestSuccess?.createdAt;
+
+  return (
+    <>
+      <div className="mt-3 flex items-center space-x-3 text-xs bg-black/40 px-3 py-2 rounded-lg border border-slate-800/50 w-fit">
+        <div className="flex items-center space-x-1.5">
+          {inProgress ? (
+            <><Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" /><span className="text-amber-400 font-medium">{run.operationalState === 'queued' ? '대기 중 (Queued)' : '작업 중 (Running)'}</span></>
+          ) : success ? (
+            <><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /><span className="text-emerald-400 font-medium">완료 (Success)</span></>
+          ) : (
+            <><XCircle className="w-3.5 h-3.5 text-rose-400" /><span className="text-rose-400 font-medium">실패 (Failed)</span></>
+          )}
+          {run.retrying && <span className="text-amber-300 border-l border-slate-700 pl-3">재시도 #{run.attempt}</span>}
+        </div>
+        {run.url && (
+          <a href={run.url} target="_blank" rel="noopener noreferrer" className="flex items-center text-cyan-400 hover:text-cyan-300 transition-colors border-l border-slate-700 pl-3">
+            <ExternalLink className="w-3 h-3 mr-1" />
+            <span>상세 터미널 로그 보기</span>
+          </a>
+        )}
+      </div>
+      {status.latestSuccess && status.latestSuccess.runId !== run.runId && latestSuccessAt && (
+        <p className="mt-2 text-[11px] text-slate-500">최근 성공: {new Date(latestSuccessAt).toLocaleString()}</p>
+      )}
+    </>
+  );
+}
+
+function RetryQueueIndicator({ status }: { status: RetryQueueStatus | null }) {
+  if (!status) return null;
+  const hasBlocked = status.blocked > 0;
+  return (
+    <div className={`rounded-xl border p-3 text-xs ${hasBlocked ? 'border-rose-500/30 bg-rose-950/20' : 'border-slate-800 bg-black/30'}`}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-semibold text-slate-200">자동 번역 재처리 대기열</span>
+        <span className={hasBlocked ? 'text-rose-300' : 'text-emerald-300'}>{hasBlocked ? '확인 필요' : '정상'}</span>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-slate-400">
+        <span>즉시 처리 {status.ready}</span>
+        <span>재시도 대기 {status.deferred}</span>
+        <span className={hasBlocked ? 'text-rose-300 font-medium' : ''}>차단됨 {status.blocked}</span>
+      </div>
+      {status.latestFailureCode && <p className="mt-2 text-slate-500">최근 처리 사유: {status.latestFailureCode}</p>}
+    </div>
+  );
+}
 
 export default function AdminSystemPage() {
   const [running, setRunning] = useState<string | null>(null);
@@ -19,16 +95,26 @@ export default function AdminSystemPage() {
 
   const [scraperStatus, setScraperStatus] = useState<WorkflowStatus | null>(null);
   const [maintenanceStatus, setMaintenanceStatus] = useState<WorkflowStatus | null>(null);
+  const [retryQueueStatus, setRetryQueueStatus] = useState<RetryQueueStatus | null>(null);
+  const [dispatchRequestedAt, setDispatchRequestedAt] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const [scraperRes, maintRes] = await Promise.all([
-          fetch('/api/admin/system/workflow-status?workflowId=scraper.yml'),
-          fetch('/api/admin/system/workflow-status?workflowId=maintenance.yml')
+        const workflowStatusUrl = (workflowId: string) => {
+          const params = new URLSearchParams({ workflowId });
+          const requestedAt = dispatchRequestedAt[workflowId];
+          if (requestedAt) params.set('dispatchRequestedAt', requestedAt);
+          return `/api/admin/system/workflow-status?${params.toString()}`;
+        };
+        const [scraperRes, maintRes, retryRes] = await Promise.all([
+          fetch(workflowStatusUrl('scraper.yml'), { cache: 'no-store' }),
+          fetch(workflowStatusUrl('maintenance.yml'), { cache: 'no-store' }),
+          fetch('/api/admin/system/translation-retry-status', { cache: 'no-store' }),
         ]);
         if (scraperRes.ok) setScraperStatus(await scraperRes.json());
         if (maintRes.ok) setMaintenanceStatus(await maintRes.json());
+        if (retryRes.ok) setRetryQueueStatus(await retryRes.json());
       } catch (err) {
         console.error('Failed to fetch workflow status', err);
       }
@@ -37,33 +123,7 @@ export default function AdminSystemPage() {
     fetchStatus();
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
-  }, []);
-
-  const StatusIndicator = ({ status }: { status: WorkflowStatus | null }) => {
-    if (!status || status.status === 'unknown') return null;
-    const inProgress = status.status === 'in_progress' || status.status === 'queued';
-    const success = status.conclusion === 'success';
-    
-    return (
-      <div className="mt-3 flex items-center space-x-3 text-xs bg-black/40 px-3 py-2 rounded-lg border border-slate-800/50 w-fit">
-        <div className="flex items-center space-x-1.5">
-          {inProgress ? (
-            <><Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" /><span className="text-amber-400 font-medium">작업 중 (In Progress...)</span></>
-          ) : success ? (
-            <><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /><span className="text-emerald-400 font-medium">완료 (Success)</span></>
-          ) : (
-            <><XCircle className="w-3.5 h-3.5 text-rose-400" /><span className="text-rose-400 font-medium">실패 (Failed)</span></>
-          )}
-        </div>
-        {status.url && (
-          <a href={status.url} target="_blank" rel="noopener noreferrer" className="flex items-center text-cyan-400 hover:text-cyan-300 transition-colors border-l border-slate-700 pl-3">
-            <ExternalLink className="w-3 h-3 mr-1" />
-            <span>상세 터미널 로그 보기</span>
-          </a>
-        )}
-      </div>
-    );
-  };
+  }, [dispatchRequestedAt]);
 
   const addLog = (msg: string) => setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
 
@@ -85,7 +145,8 @@ export default function AdminSystemPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to trigger workflow');
-        addLog(`[Success] GitHub Action (scraper.yml) dispatched.`);
+        setDispatchRequestedAt((previous) => ({ ...previous, [data.workflowId]: data.dispatchRequestedAt }));
+        addLog(`[Success] GitHub Action (scraper.yml) dispatched. 실행 ID 확인 중...`);
       } else if (taskId === 'gh-cover-maintenance') {
         const res = await fetch('/api/admin/system/trigger-workflow', { 
           method: 'POST', 
@@ -94,10 +155,11 @@ export default function AdminSystemPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to trigger workflow');
-        addLog(`[Success] GitHub Action (maintenance.yml) dispatched.`);
+        setDispatchRequestedAt((previous) => ({ ...previous, [data.workflowId]: data.dispatchRequestedAt }));
+        addLog(`[Success] GitHub Action (maintenance.yml) dispatched. 실행 ID 확인 중...`);
       }
-    } catch (err: any) {
-      addLog(`[Error] ${err.message}`);
+    } catch (err: unknown) {
+      addLog(`[Error] ${err instanceof Error ? err.message : '작업 요청에 실패했습니다.'}`);
     } finally {
       setRunning(null);
     }
@@ -186,6 +248,8 @@ export default function AdminSystemPage() {
             </div>
           </div>
 
+          <RetryQueueIndicator status={retryQueueStatus} />
+
         </div>
 
         {/* Task Terminal / Logs */}
@@ -198,7 +262,7 @@ export default function AdminSystemPage() {
               <div key={i}>{log}</div>
             ))}
             {running && (
-              <div className="text-cyan-400 animate-pulse">Running task '{running}'...</div>
+              <div className="text-cyan-400 animate-pulse">Running task &apos;{running}&apos;...</div>
             )}
           </div>
         </div>

@@ -42,7 +42,13 @@ export async function POST(req: Request) {
       console.error('GitHub workflow dispatch failed', { status: response.status, workflowId });
       return NextResponse.json({ error: 'WORKFLOW_DISPATCH_FAILED' }, { status: 502 });
     }
-    return NextResponse.json({ success: true, workflowId });
+    // GitHub의 workflow_dispatch 응답에는 run id가 없습니다. 브라우저가 이 시각을
+    // 상태 API로 다시 보내면, 그 이후 생성된 workflow_dispatch 실행만 추적합니다.
+    return NextResponse.json({
+      success: true,
+      workflowId,
+      dispatchRequestedAt: new Date().toISOString(),
+    }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch {
     return NextResponse.json({ error: 'WORKFLOW_DISPATCH_FAILED' }, { status: 502 });
   }

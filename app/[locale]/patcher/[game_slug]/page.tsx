@@ -24,8 +24,9 @@ import {
   ELDEN_RING_CANONICAL_SLUG,
   ELDEN_RING_SOURCE_SLUG,
   getEligiblePatcherSlugs,
+  getPatcherIndexEligibilityByGameIds,
+  getPatcherIndexEligibilityByLocales,
   getPatcherTrainers,
-  isPatcherIndexEligible,
 } from '@/lib/content-eligibility';
 
 export const revalidate = 3600; // 1 hour ISR cache
@@ -92,13 +93,14 @@ export async function generateMetadata({ params }: PatcherPageProps) {
   }
 
   const { canonicalSlug, game, trainers } = patcherData;
-  const indexEligible = await isPatcherIndexEligible(game.id, currentLocale);
+  const eligibleByLocale = await getPatcherIndexEligibilityByLocales(game.id, AUTO_LOCALIZATION_LOCALES);
+  const indexEligible = eligibleByLocale.get(currentLocale) === true;
   // metadata의 '승인됨' 표기도 실제 색인 자격과 같은 최신·완전 매핑 기준을 사용합니다.
   const hasApprovedTranslation = indexEligible;
-  const eligibleLocales = await Promise.all(AUTO_LOCALIZATION_LOCALES.map(async (candidate) => ({
+  const eligibleLocales = AUTO_LOCALIZATION_LOCALES.map((candidate) => ({
     candidate,
-    eligible: await isPatcherIndexEligible(game.id, candidate),
-  })));
+    eligible: eligibleByLocale.get(candidate) === true,
+  }));
   const alternateLanguages: Record<string, string> = Object.fromEntries(eligibleLocales
     .filter(({ eligible }) => eligible)
     .map(({ candidate }) => [candidate, `/${candidate}/patcher/${canonicalSlug}`]));
@@ -189,8 +191,6 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
   }
   // metadata와 본문 외부 노출 판단을 같은 최신·완전 승인 기준으로 맞춘다.
   // 대기/실패 번역 페이지는 사용자에게 남기되 구조화 데이터·광고 대상에서는 제외한다.
-  const indexEligible = await isPatcherIndexEligible(game.id, currentLocale);
-
   // 3. Pre-fetch mappings for all trainers of this game in a single batch query
   const mappingsMap = await getMappingsForTrainers(trainers.map(t => t.id), currentLocale);
   const unapprovedStatusMap = currentLocale !== 'en'
@@ -206,12 +206,14 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
     getPopularGamesWithTrainers(),
     getRelatedGames(game.id),
   ]);
-  const popularGames = (await Promise.all(popularCandidates.map(async (candidate) =>
-    (await isPatcherIndexEligible(candidate.id, currentLocale)) ? candidate : null
-  ))).filter((candidate): candidate is (typeof popularCandidates)[number] => candidate !== null);
-  const relatedGames = (await Promise.all(relatedCandidates.map(async (candidate) =>
-    (await isPatcherIndexEligible(candidate.id, currentLocale)) ? candidate : null
-  ))).filter((candidate): candidate is (typeof relatedCandidates)[number] => candidate !== null);
+  // 본문, 인기·관련 카드의 최신 승인 자격을 단일 게임·트레이너 조회로 계산합니다.
+  const eligibleByGameId = await getPatcherIndexEligibilityByGameIds(
+    [game.id, ...popularCandidates.map((candidate) => candidate.id), ...relatedCandidates.map((candidate) => candidate.id)],
+    currentLocale,
+  );
+  const indexEligible = eligibleByGameId.get(game.id) === true;
+  const popularGames = popularCandidates.filter((candidate) => eligibleByGameId.get(candidate.id) === true);
+  const relatedGames = relatedCandidates.filter((candidate) => eligibleByGameId.get(candidate.id) === true);
 
   const jsonLd = {
     '@context': 'https://schema.org',

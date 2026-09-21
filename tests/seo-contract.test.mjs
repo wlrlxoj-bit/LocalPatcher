@@ -23,7 +23,8 @@ test('게임 정보는 서버 슬롯으로 전달하고 두 언어 화면에서 
 test('패처 metadata는 4개 현지화 언어의 승인·완전 번역만 index와 hreflang에 넣는다', async () => {
   const source = await readFile(patcherPageUrl, 'utf8');
 
-  assert.match(source, /const indexEligible = await isPatcherIndexEligible\(game\.id, currentLocale\)/);
+  assert.match(source, /getPatcherIndexEligibilityByLocales\(game\.id, AUTO_LOCALIZATION_LOCALES\)/);
+  assert.match(source, /const indexEligible = eligibleByLocale\.get\(currentLocale\) === true/);
   assert.match(source, /AUTO_LOCALIZATION_LOCALES\.map/);
   assert.match(source, /robots:\s*indexEligible\s*\?\s*\{\s*index:\s*true,\s*follow:\s*true\s*\}/s);
   assert.match(source, /canonical:\s*`\/\$\{currentLocale\}\/patcher\/\$\{canonicalSlug\}`/);
@@ -70,7 +71,8 @@ test('정상 패처의 상위 SEO 경계는 noindex 헤더나 robots 차단을 �
   assert.match(robotsSource, /allow:\s*['"]\/['"]/);
 
   const patcherSource = await readFile(patcherPageUrl, 'utf8');
-  assert.match(patcherSource, /const indexEligible = await isPatcherIndexEligible\(game\.id, currentLocale\)/);
+  assert.match(patcherSource, /getPatcherIndexEligibilityByGameIds\(/);
+  assert.match(patcherSource, /const indexEligible = eligibleByGameId\.get\(game\.id\) === true/);
   assert.match(patcherSource, /robots:\s*indexEligible\s*\?\s*\{\s*index:\s*true,\s*follow:\s*true\s*\}\s*:\s*\{\s*index:\s*false,\s*follow:\s*true\s*\}/s);
   assert.equal((patcherSource.match(/index:\s*false/g) || []).length, 1, '비자격 patcher 분기 외 index:false가 없어야 합니다.');
 });
@@ -94,10 +96,10 @@ test('sitemap은 승인된 URL 생성 루프를 유지하고 홈 링크는 별�
     readFile(localeHomeUrl, 'utf8'),
   ]);
 
-  assert.match(sitemapSource, /getEligiblePatcherSlugs\(locale\)/);
+  assert.match(sitemapSource, /getEligiblePatcherSlugsByLocale\(locales\)/);
   assert.match(sitemapSource, /const locales = AUTO_LOCALIZATION_LOCALES/);
   assert.doesNotMatch(sitemapSource, /patchableSnapshot|last-known-good/);
-  assert.match(sitemapSource, /for \(const locale of locales\)[\s\S]*for \(const slug of eligibleSlugs\[locale\]\)/);
+  assert.match(sitemapSource, /for \(const locale of locales\)[\s\S]*for \(const slug of eligibleSlugs\.get\(locale\) \|\| \[\]\)/);
   assert.match(sitemapSource, /url:\s*`\$\{SITE_URL\}\/\$\{locale\}\/patcher\/\$\{slug\}`/);
 
   assert.match(localeHomeSource, /canonicalizeListedGameSlug\(game\.slug, existingSlugs, titleBySlug\)/);
