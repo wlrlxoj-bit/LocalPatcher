@@ -60,6 +60,8 @@ OPENAI_FALLBACK_MONTHLY_MAX_CHARS = environment_nonnegative_int("OPENAI_FALLBACK
 OPENAI_AUTOMATION_FALLBACK_ENABLED = os.environ.get(
     "OPENAI_AUTOMATION_FALLBACK_ENABLED", "true"
 ).strip().lower() == "true"
+PATCHER_REVALIDATE_URL = (os.environ.get("PATCHER_REVALIDATE_URL") or "").strip()
+PATCHER_REVALIDATE_SECRET = os.environ.get("PATCHER_REVALIDATE_SECRET")
 openai_fallback_requests = 0
 openai_fallback_chars = 0
 last_llm_provider = None
@@ -113,6 +115,31 @@ def complete_translation_retry(db, trainer_id, language_code):
     except Exception:
         pass
     print("[RETRY_QUEUE_WRITE_FAILED]")
+    return False
+
+
+def revalidate_patcher_after_automation(trainer_id):
+    """저장 완료한 trainer의 공개 페이지와 sitemap ISR을 웹훅으로 갱신한다.
+
+    구성 누락·일시 네트워크 오류는 수집 DB 작업을 되돌리거나 실패로 오인하지 않는다.
+    웹훅은 별도 비밀이 있는 경우에만 호출하며, 응답 본문은 로그에 남기지 않는다.
+    """
+    if not PATCHER_REVALIDATE_URL or not PATCHER_REVALIDATE_SECRET:
+        print("[PATCHER_REVALIDATE_NOT_CONFIGURED]")
+        return False
+    try:
+        response = requests.post(
+            PATCHER_REVALIDATE_URL,
+            headers={"Authorization": f"Bearer {PATCHER_REVALIDATE_SECRET}"},
+            json={"trainerId": trainer_id},
+            timeout=10,
+        )
+        if response.status_code == 200:
+            print(f"[PATCHER_REVALIDATED] trainer={trainer_id}")
+            return True
+        print(f"[PATCHER_REVALIDATE_FAILED] trainer={trainer_id} status={response.status_code}")
+    except requests.RequestException:
+        print(f"[PATCHER_REVALIDATE_FAILED] trainer={trainer_id} status=network")
     return False
 
 # Dictionary of common trainer translations for cost-free instant translation mapping
@@ -1390,6 +1417,8 @@ def scrape_and_patch_trainer(
                         trainer_ok = False
                 
                 print(f"[번역 결과] trainer={trainer_id} game={game_id} success={trainer_ok}")
+                if trainer_ok:
+                    revalidate_patcher_after_automation(trainer_id)
                 any_registered = any_registered or trainer_ok
                 if not trainer_ok:
                     had_eligible_failure = True

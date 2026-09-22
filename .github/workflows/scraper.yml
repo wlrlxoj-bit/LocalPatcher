@@ -50,6 +50,8 @@ jobs:
         OPENAI_FALLBACK_MONTHLY_MAX_CHARS: ${{ vars.OPENAI_FALLBACK_MONTHLY_MAX_CHARS }}
         OPENAI_FALLBACK_MAX_REQUESTS: ${{ vars.OPENAI_FALLBACK_MAX_REQUESTS || '8' }}
         OPENAI_FALLBACK_MAX_CHARS: ${{ vars.OPENAI_FALLBACK_MAX_CHARS || '12000' }}
+        PATCHER_REVALIDATE_URL: https://localpatcher.com/api/internal/revalidate-patcher
+        PATCHER_REVALIDATE_SECRET: ${{ secrets.PATCHER_REVALIDATE_SECRET }}
       run: |
         if [ -n "${{ github.event.inputs.target_url }}" ]; then
           python scripts/scraper.py --provider gemini --url "${{ github.event.inputs.target_url }}"
@@ -59,10 +61,10 @@ jobs:
 
   reprocess-ready:
     needs: crawl
-    # 수동 단일 수집에는 섞지 않는다. 예약 수집이 성공한 경우에만 DB가 claim한
-    # due/ready 항목을 작은 배치로 처리한다.
+    # 예약 수집과 관리 화면의 일반 동기화는 DB가 claim한 due/ready 항목을 작은
+    # 배치로 처리한다. 수동 단일 URL 수집에는 섞지 않는다.
     # 새 수집 일부가 실패해도 기존 due retry가 영구 정지하면 안 된다.
-    if: ${{ always() && !cancelled() && github.event_name == 'schedule' }}
+    if: ${{ always() && !cancelled() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_url == '')) }}
     runs-on: ubuntu-latest
 
     steps:
@@ -90,4 +92,6 @@ jobs:
         OPENAI_FALLBACK_MONTHLY_MAX_CHARS: ${{ vars.OPENAI_FALLBACK_MONTHLY_MAX_CHARS }}
         OPENAI_FALLBACK_MAX_REQUESTS: ${{ vars.OPENAI_FALLBACK_MAX_REQUESTS || '8' }}
         OPENAI_FALLBACK_MAX_CHARS: ${{ vars.OPENAI_FALLBACK_MAX_CHARS || '12000' }}
+        PATCHER_REVALIDATE_URL: https://localpatcher.com/api/internal/revalidate-patcher
+        PATCHER_REVALIDATE_SECRET: ${{ secrets.PATCHER_REVALIDATE_SECRET }}
       run: python scripts/reprocess_pending_translations.py --apply --provider gemini --limit 4
