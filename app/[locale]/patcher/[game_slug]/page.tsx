@@ -29,6 +29,8 @@ import {
   getPatcherTrainers,
 } from '@/lib/content-eligibility';
 import { getTrainerOptionSummary } from '@/lib/trainer-option-summary';
+import { getTrainerProvenance } from '@/lib/trainer-provenance';
+import PatcherVerificationProvenance from '@/components/PatcherVerificationProvenance';
 
 export const revalidate = 3600; // 1 hour ISR cache
 
@@ -253,6 +255,17 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
   const optionSummary = latestTrainer
     ? getTrainerOptionSummary(mappingsMap[latestTrainer.id] || [])
     : null;
+  // getMappingsForTrainers는 승인된 행만 반환한다. provenance 생성기에도 그 경계를
+  // 명시해 불완전한 최신 매핑은 서버 본문에서 숨긴다.
+  const provenance = getTrainerProvenance({
+    sourceUrl: game.fling_url,
+    trainers,
+    latestMappings: (latestTrainer ? mappingsMap[latestTrainer.id] || [] : []).map((mapping) => ({
+      original_text: mapping.original_text,
+      translated_text: mapping.translated_text,
+      is_approved: true,
+    })),
+  });
   const supportedVersions = [...new Set(
     trainers
       .map((trainer) => trainer.version_str?.trim())
@@ -284,19 +297,24 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
         relatedGames={relatedGames}
         locale={currentLocale as Locale}
         gameInfoSlot={(
-        <PatcherUniqueContent
-          locale={currentLocale as Locale}
-          gameTitle={getGameTitle(game, currentLocale as Locale)}
-          gameTitleEn={game.title_en}
-          description={description}
-          versions={supportedVersions}
-          optionCount={supportedOptionCount}
-          genres={Array.isArray(game.genres) ? game.genres : []}
-          tags={Array.isArray(game.tags) ? game.tags : []}
-          sourceUrl={game.fling_url}
-          translatedOptionCount={translatedOptionCount}
-          optionSummary={optionSummary}
-        />
+          <>
+            <PatcherUniqueContent
+              locale={currentLocale as Locale}
+              gameTitle={getGameTitle(game, currentLocale as Locale)}
+              gameTitleEn={game.title_en}
+              description={description}
+              versions={supportedVersions}
+              optionCount={supportedOptionCount}
+              genres={Array.isArray(game.genres) ? game.genres : []}
+              tags={Array.isArray(game.tags) ? game.tags : []}
+              sourceUrl={game.fling_url}
+              translatedOptionCount={translatedOptionCount}
+              optionSummary={optionSummary}
+            />
+            {indexEligible && provenance && (
+              <PatcherVerificationProvenance locale={currentLocale as Locale} provenance={provenance} />
+            )}
+          </>
         )}
         steamNewsSlot={steamAppId ? (
           <React.Suspense fallback={<div className="h-64 animate-pulse bg-slate-800/50 rounded-xl border border-slate-700/50" />}>
