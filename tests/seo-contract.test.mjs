@@ -69,6 +69,8 @@ test('정상 패처의 상위 SEO 경계는 noindex 헤더나 robots 차단을 �
   const robotsSource = await readFile(new URL('../app/robots.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(robotsSource, /disallow\s*:\s*(?:\[(?:(?!\])[\s\S]){0,1000}?['"]\/patcher(?:\/|['"])|['"]\/patcher(?:\/|['"]))/i);
   assert.match(robotsSource, /allow:\s*['"]\/['"]/);
+  assert.match(robotsSource, /disallow:\s*\[\s*['"]\/api\/['"]\s*\]/);
+  assert.doesNotMatch(robotsSource, /['"]\/_next\//);
 
   const patcherSource = await readFile(patcherPageUrl, 'utf8');
   assert.match(patcherSource, /getPatcherIndexEligibilityByGameIds\(/);
