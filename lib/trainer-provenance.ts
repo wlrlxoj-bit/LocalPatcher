@@ -21,12 +21,14 @@ export interface ProvenanceMappingInput {
 }
 
 export interface TrainerProvenance {
-  sourceUrl: string;
-  latestVersion: string;
-  versionHistory: string[];
-  fingerprint: string;
-  fileSize: string;
-  approvedOptionCount: number;
+  sourceUrl?: string;
+  latestVersion?: string;
+  versionHistory?: string[];
+  file?: {
+    fingerprint: string;
+    fileSize: string;
+  };
+  approvedOptionCount?: number;
 }
 
 function sanitizeVersion(value: unknown): string | null {
@@ -94,8 +96,8 @@ function getApprovedCoverage(mappings: ProvenanceMappingInput[], optionCount: nu
 }
 
 /**
- * 공개 가능한 수집 사실만 조합합니다. 원본 링크, 최신 빌드 식별값, 파일 크기,
- * 승인된 옵션 범위가 모두 엄격하게 확인되지 않으면 어떤 정보도 렌더링하지 않습니다.
+ * 공개 가능한 수집 사실만 조합합니다. 출처, 버전 이력, 승인 매핑 범위, 파일 식별값은
+ * 각각 독립적으로 검증하며, 확인된 사실이 둘 미만이면 어떤 정보도 렌더링하지 않습니다.
  */
 export function getTrainerProvenance(input: {
   sourceUrl: unknown;
@@ -104,22 +106,17 @@ export function getTrainerProvenance(input: {
 }): TrainerProvenance | null {
   const sourceUrl = sanitizeSourceUrl(input.sourceUrl);
   const latestTrainer = input.trainers[0];
-  if (!sourceUrl || !latestTrainer || !Number.isSafeInteger(latestTrainer.id) || (latestTrainer.id as number) <= 0) return null;
+  if (!latestTrainer || !Number.isSafeInteger(latestTrainer.id) || (latestTrainer.id as number) <= 0) return null;
 
   const latestVersion = sanitizeVersion(latestTrainer.version_str);
   const hash = typeof latestTrainer.original_file_hash === 'string' ? latestTrainer.original_file_hash.trim() : '';
   const fileSize = latestTrainer.original_file_size;
   const optionCount = latestTrainer.option_count;
-  if (
-    !latestVersion ||
-    !SHA256_PATTERN.test(hash) ||
-    !Number.isSafeInteger(fileSize) || (fileSize as number) <= 0 || (fileSize as number) > MAX_FILE_SIZE_BYTES ||
-    !getApprovedCoverage(input.latestMappings, optionCount as number)
-  ) return null;
-
   const versionHistory: string[] = [];
   const versionKeys = new Set<string>();
   for (const trainer of input.trainers) {
+    // 버전 이력도 공개 가능한 수집 사실이므로, 식별자가 검증된 레코드만 사용합니다.
+    if (!Number.isSafeInteger(trainer.id) || (trainer.id as number) <= 0) continue;
     const version = sanitizeVersion(trainer.version_str);
     const versionKey = version ? getVersionKey(version) : null;
     if (version && versionKey && !versionKeys.has(versionKey)) {
@@ -128,16 +125,30 @@ export function getTrainerProvenance(input: {
     }
     if (versionHistory.length === MAX_VERSION_HISTORY) break;
   }
-  // 최신 빌드와 비교할 이전 등록 버전이 없으면 단일 행을 버전 이력처럼 보이지 않습니다.
-  if (versionHistory.length < 2 || getVersionKey(versionHistory[0]) !== getVersionKey(latestVersion)) return null;
+  const validVersionHistory = latestVersion && versionHistory.length >= 2 &&
+    getVersionKey(versionHistory[0]) === getVersionKey(latestVersion)
+    ? versionHistory
+    : undefined;
+  const approvedOptionCount = getApprovedCoverage(input.latestMappings, optionCount as number)
+    ? optionCount as number
+    : undefined;
+  const file = SHA256_PATTERN.test(hash) && Number.isSafeInteger(fileSize) &&
+    (fileSize as number) > 0 && (fileSize as number) <= MAX_FILE_SIZE_BYTES
+    ? {
+      // 전체 SHA-256은 공개하지 않고 식별에 필요한 짧은 접두부만 보여 줍니다.
+      fingerprint: `${hash.slice(0, 12).toLowerCase()}…`,
+      fileSize: formatFileSize(fileSize as number),
+    }
+    : undefined;
+
+  const factCount = Number(Boolean(sourceUrl)) + Number(Boolean(validVersionHistory)) +
+    Number(approvedOptionCount !== undefined) + Number(Boolean(file));
+  if (factCount < 2) return null;
 
   return {
-    sourceUrl,
-    latestVersion,
-    versionHistory,
-    // 전체 SHA-256은 공개하지 않고 식별에 필요한 짧은 접두부만 보여 줍니다.
-    fingerprint: `${hash.slice(0, 12).toLowerCase()}…`,
-    fileSize: formatFileSize(fileSize as number),
-    approvedOptionCount: optionCount as number,
+    ...(sourceUrl ? { sourceUrl } : {}),
+    ...(validVersionHistory ? { latestVersion: validVersionHistory[0], versionHistory: validVersionHistory } : {}),
+    ...(file ? { file } : {}),
+    ...(approvedOptionCount !== undefined ? { approvedOptionCount } : {}),
   };
 }

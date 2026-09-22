@@ -37,17 +37,17 @@ export default function PatcherVerificationProvenance({ locale, provenance }: Pa
           <p className="mt-1 text-sm leading-relaxed text-slate-400">{labels.description}</p>
         </div>
       </div>
-      <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4"><dt className="text-xs text-slate-500">{labels.latest}</dt><dd className="mt-1 break-words text-sm font-medium text-slate-100">{provenance.latestVersion}</dd></div>
-        <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4"><dt className="flex items-center gap-1.5 text-xs text-slate-500"><Fingerprint className="h-3.5 w-3.5" />{labels.fingerprint}</dt><dd className="mt-1 font-mono text-sm text-slate-200">{provenance.fingerprint}</dd></div>
-        <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4"><dt className="text-xs text-slate-500">{labels.size}</dt><dd className="mt-1 text-sm text-slate-200">{provenance.fileSize}</dd></div>
-        <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4"><dt className="text-xs text-slate-500">{labels.coverage}</dt><dd className="mt-1 text-sm text-slate-200">{provenance.approvedOptionCount.toLocaleString(locale)}</dd></div>
-      </dl>
-      <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+      {(provenance.latestVersion || provenance.file || provenance.approvedOptionCount !== undefined) && <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {provenance.latestVersion && <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4"><dt className="text-xs text-slate-500">{labels.latest}</dt><dd className="mt-1 break-words text-sm font-medium text-slate-100">{provenance.latestVersion}</dd></div>}
+        {provenance.file && <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4"><dt className="flex items-center gap-1.5 text-xs text-slate-500"><Fingerprint className="h-3.5 w-3.5" />{labels.fingerprint}</dt><dd className="mt-1 font-mono text-sm text-slate-200">{provenance.file.fingerprint}</dd></div>}
+        {provenance.file && <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4"><dt className="text-xs text-slate-500">{labels.size}</dt><dd className="mt-1 text-sm text-slate-200">{provenance.file.fileSize}</dd></div>}
+        {provenance.approvedOptionCount !== undefined && <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4"><dt className="text-xs text-slate-500">{labels.coverage}</dt><dd className="mt-1 text-sm text-slate-200">{provenance.approvedOptionCount.toLocaleString(locale)}</dd></div>}
+      </dl>}
+      {provenance.versionHistory && <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/40 p-4">
         <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500"><History className="h-3.5 w-3.5" />{labels.history}</h3>
         <p className="mt-2 break-words text-sm text-slate-200">{provenance.versionHistory.join(' · ')}</p>
-      </div>
-      <p className="mt-4 text-xs"><a className="inline-flex items-center gap-1.5 text-cyan-400 hover:text-cyan-300" href={provenance.sourceUrl} target="_blank" rel="noopener noreferrer"><LinkIcon className="h-3.5 w-3.5" />{labels.sourceLink}<span className="sr-only"> ({labels.source})</span></a></p>
+      </div>}
+      {provenance.sourceUrl && <p className="mt-4 text-xs"><a className="inline-flex items-center gap-1.5 text-cyan-400 hover:text-cyan-300" href={provenance.sourceUrl} target="_blank" rel="noopener noreferrer"><LinkIcon className="h-3.5 w-3.5" />{labels.sourceLink}<span className="sr-only"> ({labels.source})</span></a></p>}
     </section>
   );
 }
