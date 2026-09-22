@@ -13,6 +13,11 @@ const validMappings = [{
   original_text: [1, 2, 3, 4].map((number) => `Num ${number} - Original ${number}`).join('\n'),
   translated_text: [1, 2, 3, 4].map((number) => `Num ${number} - Translation ${number}`).join('\n'),
 }];
+const numMultiplyMappings = [{
+  is_approved: true,
+  original_text: 'Num * - Original multiply',
+  translated_text: 'Num * - Translation multiply',
+}];
 const validTrainers = [
   { id: 1, version_str: 'v1.16.1 Plus 35', original_file_hash: 'a'.repeat(64), original_file_size: 1_048_576, option_count: 4 },
   { id: 2, version_str: 'v1.15.0 Plus 35', original_file_hash: 'b'.repeat(64), original_file_size: 1_000_000, option_count: 4 },
@@ -52,9 +57,9 @@ test('형식이 잘못된 출처 URL은 링크만 숨기고, 다른 확인 사�
   }
 });
 
-test('확인된 사실이 둘 미만이면 출처 영역 전체를 만들지 않는다', async () => {
+test('최신 버전만 남고 다른 수집 사실이 없으면 출처 영역 전체를 만들지 않는다', async () => {
   const result = await runFixture({
-    sourceUrl: 'https://flingtrainer.com/trainer/example/',
+    sourceUrl: 'https://invalid.example/trainer/example/',
     trainers: [{ ...validTrainers[0], original_file_hash: 'bad', original_file_size: 0 }],
     latestMappings: [{ ...validMappings[0], is_approved: false }],
   });
@@ -83,9 +88,46 @@ test('대소문자나 공백만 다른 버전은 하나의 이력으로 처리�
   });
   assert.notEqual(result, null);
   assert.equal(result.versionHistory, undefined);
+  assert.equal(result.latestVersion, 'v1.16.1 Plus 35');
 });
 
-test('유효하지 않은 과거 레코드는 이력을 만들지 않으며 확인 사실이 둘 미만이면 전체를 숨긴다', async () => {
+test('Num * 단축키를 포함한 완전 승인 슬롯은 최신 버전과 승인 범위를 만든다', async () => {
+  const result = await runFixture({
+    sourceUrl: '',
+    trainers: [{ ...validTrainers[0], option_count: 1, original_file_hash: 'bad', original_file_size: 0 }],
+    latestMappings: numMultiplyMappings,
+  });
+  assert.equal(result.latestVersion, 'v1.16.1 Plus 35');
+  assert.equal(result.versionHistory, undefined);
+  assert.equal(result.approvedOptionCount, 1);
+});
+
+test('승인 원문과 번역문의 단축키 순서 또는 전체 옵션 수가 다르면 승인 범위를 만들지 않는다', async () => {
+  const base = {
+    sourceUrl: 'https://flingtrainer.com/trainer/example/',
+    trainers: [{ ...validTrainers[0], option_count: 2, original_file_hash: 'bad', original_file_size: 0 }],
+  };
+  const reordered = await runFixture({
+    ...base,
+    latestMappings: [{
+      is_approved: true,
+      original_text: 'Num 1 - Original\nNum 2 - Original',
+      translated_text: 'Num 2 - Translation\nNum 1 - Translation',
+    }],
+  });
+  assert.equal(reordered.approvedOptionCount, undefined);
+  const incomplete = await runFixture({
+    ...base,
+    latestMappings: [{
+      is_approved: true,
+      original_text: 'Num 1 - Original',
+      translated_text: 'Num 1 - Translation',
+    }],
+  });
+  assert.equal(incomplete.approvedOptionCount, undefined);
+});
+
+test('유효하지 않은 과거 레코드는 이력을 만들지 않지만 최신 버전과 출처는 독립적으로 표시한다', async () => {
   const result = await runFixture({
     sourceUrl: 'https://flingtrainer.com/trainer/example/',
     trainers: [
@@ -94,7 +136,8 @@ test('유효하지 않은 과거 레코드는 이력을 만들지 않으며 확�
     ],
     latestMappings: [{ ...validMappings[0], is_approved: false }],
   });
-  assert.equal(result, null);
+  assert.equal(result.latestVersion, 'v1.16.1 Plus 35');
+  assert.equal(result.versionHistory, undefined);
 });
 
 test('유효하지 않은 과거 레코드는 독립 사실이 있어도 버전 이력에 포함하지 않는다', async () => {
@@ -105,7 +148,7 @@ test('유효하지 않은 과거 레코드는 독립 사실이 있어도 버전 
   });
   assert.notEqual(result, null);
   assert.equal(result.versionHistory, undefined);
-  assert.equal(result.latestVersion, undefined);
+  assert.equal(result.latestVersion, 'v1.16.1 Plus 35');
 });
 
 test('버전 기록은 중복 없이 여섯 개까지만 보이며 전체 해시는 반환하지 않는다', async () => {

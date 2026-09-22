@@ -4,7 +4,13 @@ const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 * 1024;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/i;
 const VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 .,+()_\-]{0,119}$/;
 const TRAINER_PATH_PATTERN = /^\/trainer\/[a-z0-9][a-z0-9-]{0,199}\/?$/;
-const OPTION_LINE_PATTERN = /^[ \t]*([A-Za-z0-9[\]+\-.,/ ]+?)\s*(?:-|:|—|–|→)\s+\S/gim;
+// 색인 자격 판정과 같은 단축키 문법을 사용한다. 특히 `Num *`은 Num 키의
+// Multiply 표기이므로 옵션으로 집계해야 한다.
+const OPTION_KEY_PATTERN = String.raw`(?:Num(?:Pad)?[ \t]*(?:[0-9]|Plus|Minus|Decimal|Divide|Multiply|[+\-./*])|F(?:[1-9]|1[0-9]|2[0-4])|Ctrl|Alt|Shift|Home|End|Insert|Delete|PageUp|PageDown|Up|Down|Left|Right|Arrow(?:Up|Down|Left|Right)|Bracket(?:Left|Right)|[\[\]]|[A-Z0-9+\-=.,/])`;
+const OPTION_LINE_PATTERN = new RegExp(
+  String.raw`^[ \t]*(${OPTION_KEY_PATTERN}(?:[ \t]*\+[ \t]*${OPTION_KEY_PATTERN})*)[ \t]*(?=(?:->|—|–|→|-|:)[ \t]*\S)`,
+  'gim',
+);
 
 export interface ProvenanceTrainerInput {
   id: unknown;
@@ -90,7 +96,9 @@ function getApprovedCoverage(mappings: ProvenanceMappingInput[], optionCount: nu
     collect(mapping.original_text as string, originalShortcuts);
     collect(mapping.translated_text as string, translatedShortcuts);
   }
-  return originalShortcuts.length >= optionCount &&
+  // 목록이 서로 같아도 원문 옵션 수와 정확히 맞지 않으면, 잘린 블록 또는 다른
+  // 버전의 매핑일 수 있다. 출처 정보는 이 경우 공개하지 않는다.
+  return originalShortcuts.length === optionCount &&
     originalShortcuts.length === translatedShortcuts.length &&
     originalShortcuts.every((shortcut, index) => shortcut === translatedShortcuts[index]);
 }
@@ -141,13 +149,16 @@ export function getTrainerProvenance(input: {
     }
     : undefined;
 
-  const factCount = Number(Boolean(sourceUrl)) + Number(Boolean(validVersionHistory)) +
+  // 최신 버전은 과거 버전 이력이 없더라도 독립된 수집 사실이다. 이력은 두 개 이상
+  // 검증된 버전이 있을 때만 보조 정보로 노출한다.
+  const factCount = Number(Boolean(sourceUrl)) + Number(Boolean(latestVersion)) +
     Number(approvedOptionCount !== undefined) + Number(Boolean(file));
   if (factCount < 2) return null;
 
   return {
     ...(sourceUrl ? { sourceUrl } : {}),
-    ...(validVersionHistory ? { latestVersion: validVersionHistory[0], versionHistory: validVersionHistory } : {}),
+    ...(latestVersion ? { latestVersion } : {}),
+    ...(validVersionHistory ? { versionHistory: validVersionHistory } : {}),
     ...(file ? { file } : {}),
     ...(approvedOptionCount !== undefined ? { approvedOptionCount } : {}),
   };
