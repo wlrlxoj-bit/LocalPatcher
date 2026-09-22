@@ -62,10 +62,21 @@ OPENAI_AUTOMATION_FALLBACK_ENABLED = os.environ.get(
 ).strip().lower() == "true"
 PATCHER_REVALIDATE_URL = (os.environ.get("PATCHER_REVALIDATE_URL") or "").strip()
 PATCHER_REVALIDATE_SECRET = os.environ.get("PATCHER_REVALIDATE_SECRET")
+# FLiNG는 짧은 간격의 연속 다운로드를 WAF/rate limit으로 차단할 수 있다. 같은
+# 실행에서의 FLiNG 요청만 보수적으로 간격을 둔다(다른 API 호출에는 적용하지 않는다).
+# 환경 변수 오입력으로 한 번의 예약 배치가 수십 분 대기하지 않도록, 요청 간격과
+# 429 대기 시간에 상한을 둔다. 최대 20개 게시물 기준 전체 429 대기도 60초다.
+FLING_REQUEST_MIN_INTERVAL_SECONDS = min(
+    environment_nonnegative_int("FLING_REQUEST_MIN_INTERVAL_SECONDS", 2), 5
+)
+FLING_429_RETRY_MAX_SECONDS = 10
+FLING_RETRY_SLEEP_BUDGET_SECONDS = 60
 openai_fallback_requests = 0
 openai_fallback_chars = 0
 last_llm_provider = None
 translation_usage_db = None
+last_fling_request_at = 0.0
+fling_retry_sleep_used_seconds = 0
 
 class TranslationQuotaError(RuntimeError):
     pass
@@ -100,6 +111,37 @@ def schedule_translation_retry(db, trainer_id, language_code, state, failure_cod
         pass
     print("[RETRY_QUEUE_WRITE_FAILED]")
     return False
+
+
+def defer_existing_trainers_for_upstream(db, game_slug, game_title_en, source_url, languages, status_code):
+    """이미 등록된 게임만 upstream 차단 재시도 큐에 보류한다.
+
+    새 게시물이 403/429를 받았을 때에는 게임/트레이너를 만들지 않는다. 반면 기존
+    게임의 최신 원본 URL은 갱신하고, 가장 최근 trainer의 요청 언어별 큐에 다음
+    실행 시점과 원인 코드를 남긴다. 큐 기록 실패는 호출자에게 실패로 전달한다.
+    """
+    game_row = find_game_by_canonical_slug(db, game_slug, game_title_en)
+    if not game_row:
+        print(f"[UPSTREAM_DOWNLOAD_DEFERRED_UNTRACKED] status={status_code} slug={game_slug}")
+        return True
+    game_id = game_row['id']
+    db.table('games').update({'fling_url': source_url}).eq('id', game_id).execute()
+    trainers = (db.table('trainers').select('id').eq('game_id', game_id)
+                .order('id', desc=True).limit(1).execute().data or [])
+    if not trainers:
+        print(f"[UPSTREAM_DOWNLOAD_DEFERRED_UNTRACKED] status={status_code} game={game_id}")
+        return True
+    failure_code = f"UPSTREAM_HTTP_{status_code}"
+    queued = True
+    for language_code in sorted(set(languages)):
+        queued = schedule_translation_retry(
+            db, trainers[0]['id'], language_code, 'deferred', failure_code, 10_800,
+        ) and queued
+    print(
+        f"[UPSTREAM_DOWNLOAD_DEFERRED] status={status_code} game={game_id} "
+        f"trainer={trainers[0]['id']} locales={','.join(sorted(set(languages)))} queued={queued}"
+    )
+    return queued
 
 
 def complete_translation_retry(db, trainer_id, language_code):
@@ -947,7 +989,7 @@ def fetch_recent_trainers():
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = paced_fling_get(url, headers=headers, timeout=10)
         if response.status_code != 200:
             print(f"[-] Failed to scrape FLiNG index page: {response.status_code}")
             return []
@@ -1078,7 +1120,7 @@ def recover_official_archive(response, headers):
     archive_url = official_archive_from_redirect(response)
     if not archive_url:
         return response
-    archive = requests.get(archive_url, headers=headers, timeout=30, allow_redirects=False)
+    archive = paced_fling_get(archive_url, headers=headers, timeout=30, allow_redirects=False)
     if (archive.status_code == 200 and archive.content.startswith(b'PK\x03\x04')
             and zipfile.is_zipfile(io.BytesIO(archive.content))):
         print('[*] Official archive recovered from download redirect.')
@@ -1090,6 +1132,68 @@ def is_rar_archive(download_url, file_bytes=None):
     """지원하지 않는 RAR 보관본을 URL 또는 응답 매직 바이트로 판별한다."""
     clean_url = (download_url or "").split("?", 1)[0].lower()
     return clean_url.endswith(".rar") or bool(file_bytes and file_bytes.startswith(b"Rar!"))
+
+
+def latest_supported_download(download_anchors):
+    """페이지 DOM의 최신→과거 순서에서 첫 지원 보관본만 선택한다.
+
+    FLiNG 게시물은 최신 다운로드 링크를 먼저 렌더링한다는 현재 HTML 구조에
+    의존한다. RAR은 실행 환경에서 열지 못하므로 기존과 같이 후보에서 제외한다.
+    URL 중복도 제거해 과거 버전으로 내려가며 요청을 늘리지 않는다.
+    """
+    seen_urls = set()
+    rar_skips = 0
+    for anchor in download_anchors:
+        download_url = anchor.get('href', '')
+        if not download_url or download_url in seen_urls:
+            continue
+        seen_urls.add(download_url)
+        if is_rar_archive(download_url):
+            rar_skips += 1
+            continue
+        return anchor, rar_skips
+    return None, rar_skips
+
+
+def retry_after_delay_seconds(response, attempt, fallback_seconds=2, max_delay_seconds=10):
+    """429 응답은 Retry-After를 우선하고, 누락 시 상한 있는 지수 backoff를 쓴다."""
+    retry_after = (getattr(response, 'headers', {}) or {}).get('Retry-After')
+    if retry_after:
+        try:
+            return min(max(0, int(retry_after)), max_delay_seconds)
+        except (TypeError, ValueError):
+            pass
+    return min(fallback_seconds * (2 ** max(0, attempt - 1)), max_delay_seconds)
+
+
+def sleep_for_fling_retry(delay_seconds):
+    """429 재시도 대기의 실행 전체 예산을 넘기지 않고, 가능할 때만 잠시 대기한다."""
+    global fling_retry_sleep_used_seconds
+    remaining = max(0, FLING_RETRY_SLEEP_BUDGET_SECONDS - fling_retry_sleep_used_seconds)
+    delay = min(max(0, delay_seconds), remaining)
+    if delay <= 0:
+        print("[FLING_RETRY_SLEEP_BUDGET_EXHAUSTED]")
+        return False
+    time.sleep(delay)
+    fling_retry_sleep_used_seconds += delay
+    return True
+
+
+def should_retry_upstream_status(status_code, attempt):
+    """403은 재시도하지 않고, 429의 첫 응답만 제한적으로 한 번 재시도한다."""
+    return status_code == 429 and attempt == 1
+
+
+def paced_fling_get(url, *, headers, timeout, allow_redirects=True):
+    """FLiNG에만 최소 요청 간격을 적용해 연속 수집으로 인한 차단을 줄인다."""
+    global last_fling_request_at
+    elapsed = time.monotonic() - last_fling_request_at
+    remaining = FLING_REQUEST_MIN_INTERVAL_SECONDS - elapsed
+    if remaining > 0:
+        time.sleep(remaining)
+    response = requests.get(url, headers=headers, timeout=timeout, allow_redirects=allow_redirects)
+    last_fling_request_at = time.monotonic()
+    return response
 
 
 def scrape_and_patch_trainer(
@@ -1113,7 +1217,7 @@ def scrape_and_patch_trainer(
     requested_locales = set(languages or ('ko', 'ja', 'de', 'es'))
     
     try:
-        response = requests.get(post['link'], headers=headers, timeout=10)
+        response = paced_fling_get(post['link'], headers=headers, timeout=10)
         if response.status_code != 200:
             return False
             
@@ -1125,87 +1229,82 @@ def scrape_and_patch_trainer(
             print("[-] No download links found on page.")
             return False
             
-        # Deduplicate URLs preserving order
-        seen_urls = set()
-        unique_downloads = []
-        for a in download_anchors:
-            url = a['href']
-            if url not in seen_urls:
-                seen_urls.add(url)
-                unique_downloads.append(a)
+        # FLiNG DOM은 최신→과거 순으로 링크를 제공한다. 과거 버전까지 연속
+        # 요청하면 WAF를 자극하므로, 지원 가능한 최신 보관본 하나만 처리한다.
+        latest_download, rar_skips = latest_supported_download(download_anchors)
+        if latest_download is None:
+            print("[ARCHIVE_ONLY_PAGE_SKIPPED] no supported executable archive was available")
+            return True
+        skipped_link_count = max(0, len(download_anchors) - 1)
                 
-        # Check if game already exists in DB by slug first, or by title_en
+        # upstream 보류 상태에서는 게임/트레이너/번역 테이블에 쓰지 않는다. 게임
+        # 메타 확인·갱신은 지원 파일 구조 검증 뒤로 미룬다.
         game_title_en = post['title'].split('Trainer')[0].strip()
         post['slug'] = normalize_fling_slug(post['slug'])
-        game_row = find_game_by_canonical_slug(db, post['slug'], game_title_en)
-                
-        if game_row:
-            game_id = game_row['id']
-            db.table('games').update({'fling_url': post['link']}).eq('id', game_id).execute()
-        else:
-            # Create new game meta row
-            steam_meta = fetch_steam_meta(game_title_en)
-            
-            insert_game = db.table('games').insert({
-                'title_en': game_title_en,
-                'title_ko': steam_meta['title_ko'],
-                'title_ja': steam_meta['title_ja'],
-                'slug': post['slug'],
-                'cover_image_url': steam_meta['cover_url'],
-                'description_en': steam_meta['description_en'],
-                'description_ko': steam_meta['description_ko'],
-                'description_ja': steam_meta['description_ja'],
-                'description_de': steam_meta['description_de'],
-                'description_es': steam_meta['description_es'],
-                'anti_cheat': 'none',
-                'fling_url': post['link']
-            }).execute()
-            if not insert_game.data:
-                print("[-] Failed to create game meta.")
-                return False
-            game_id = insert_game.data[0]['id']
             
         any_registered = False
         approved_skips = 0
         had_eligible_failure = False
-        rar_skips = 0
         actionable_downloads = 0
-        # Now process each version download link
-        for download_a in unique_downloads:
+        upstream_deferred = False
+        # 최신 지원 링크 하나만 처리한다. 선택 함수가 URL 중복과 RAR을 제외한다.
+        for download_a in [latest_download]:
             download_url = download_a['href']
             download_text = download_a.text.strip()
             print(f"[*] Version download link found: {download_url} ({download_text})")
+            print(
+                f"[DOWNLOAD_SELECTED] url={download_url} version={download_text!r} "
+                f"skipped_links={skipped_link_count} fallback=disabled"
+            )
             target_eligible = False
             approved_locales = set()
 
-            # RAR은 GitHub 실행 환경에서 안전하게 열 수 있는 형식이 아니다. 구형
-            # 보관본은 다운로드/번역 후보에서 제외하며, RAR만 있는 페이지는 아래에서
-            # 명시적인 중립 건너뜀으로만 처리한다.
-            if is_rar_archive(download_url):
-                print(f"[ARCHIVE_RAR_SKIPPED] url={download_url} source=url")
-                rar_skips += 1
-                continue
-            
             try:
                 # Download binary bytes with retries
                 file_bytes = None
                 download_failure = "empty_response"
-                for dl_attempt in range(1, 4):
+                upstream_status = None
+                # 403은 즉시 보류한다. 429만 Retry-After를 지켜 한 번 재시도한다.
+                for dl_attempt in range(1, 3):
                     try:
-                        dl_response = requests.get(download_url, headers=headers, timeout=30)
+                        dl_response = paced_fling_get(download_url, headers=headers, timeout=30)
                         dl_response = recover_official_archive(dl_response, headers)
                         if dl_response.status_code == 200:
                             file_bytes = dl_response.content
                             break
+                        upstream_status = dl_response.status_code
                         download_failure = f"http_{dl_response.status_code}"
                         # 접근 거부/삭제 응답은 같은 실행에서 반복 요청하지 않는다.
                         if dl_response.status_code in {400, 401, 403, 404, 410}:
                             break
+                        if dl_response.status_code == 429:
+                            if should_retry_upstream_status(dl_response.status_code, dl_attempt):
+                                wait_seconds = retry_after_delay_seconds(
+                                    dl_response, dl_attempt,
+                                    max_delay_seconds=FLING_429_RETRY_MAX_SECONDS,
+                                )
+                                if sleep_for_fling_retry(wait_seconds):
+                                    continue
+                            break
                     except Exception as download_error:
                         download_failure = type(download_error).__name__
-                    time.sleep(1)
+                    if dl_attempt == 1:
+                        sleep_for_fling_retry(retry_after_delay_seconds(
+                            None, dl_attempt, max_delay_seconds=FLING_429_RETRY_MAX_SECONDS,
+                        ))
                 if not file_bytes:
                     print(f"[-] Failed to download binary from {download_url} reason={download_failure}")
+                    if upstream_status in {403, 429}:
+                        # 기존 등록 trainer만 언어별 재시도 큐로 보류한다. 새 URL은
+                        # 게임/트레이너를 만들지 않아 upstream 차단을 성공으로 위장하지 않는다.
+                        queued = defer_existing_trainers_for_upstream(
+                            db, post['slug'], game_title_en, post['link'],
+                            requested_locales, upstream_status,
+                        )
+                        if not queued:
+                            had_eligible_failure = True
+                        upstream_deferred = True
+                        continue
                     if strict_download_failures:
                         had_eligible_failure = True
                     continue
@@ -1243,12 +1342,15 @@ def scrape_and_patch_trainer(
                 print(f"[+] Size: {original_file_size} bytes, Hash: {original_file_hash}")
                 
                 # Check if trainer version already exists in DB
-                trainer_res = db.table('trainers').select('id').eq('original_file_hash', original_file_hash).execute()
+                trainer_res = db.table('trainers').select('id,game_id').eq('original_file_hash', original_file_hash).execute()
                 approved_locales = set()
                 manual_review_locales = set()
                 effective_force = force
                 if trainer_res.data:
                     trainer_id = trainer_res.data[0]['id']
+                    game_id = trainer_res.data[0]['game_id']
+                    # 해시가 같은 기존 trainer라도 FLiNG 게시물 URL은 최신으로 보관한다.
+                    db.table('games').update({'fling_url': post['link']}).eq('id', game_id).execute()
                     # 재시도 큐는 (trainer, 언어) 단위다. 같은 FLiNG 게시물의 다른
                     # 다운로드까지 다시 번역하면 큐 한 건이 비용 폭주로 번질 수 있다.
                     if target_trainer_id is not None and trainer_id != target_trainer_id:
@@ -1320,6 +1422,31 @@ def scrape_and_patch_trainer(
                 final_version_str, option_count = parse_trainer_version(download_text)
                 
                 if trainer_id is None:
+                    game_row = find_game_by_canonical_slug(db, post['slug'], game_title_en)
+                    if game_row:
+                        game_id = game_row['id']
+                        db.table('games').update({'fling_url': post['link']}).eq('id', game_id).execute()
+                    else:
+                        steam_meta = fetch_steam_meta(game_title_en)
+                        insert_game = db.table('games').insert({
+                            'title_en': game_title_en,
+                            'title_ko': steam_meta['title_ko'],
+                            'title_ja': steam_meta['title_ja'],
+                            'slug': post['slug'],
+                            'cover_image_url': steam_meta['cover_url'],
+                            'description_en': steam_meta['description_en'],
+                            'description_ko': steam_meta['description_ko'],
+                            'description_ja': steam_meta['description_ja'],
+                            'description_de': steam_meta['description_de'],
+                            'description_es': steam_meta['description_es'],
+                            'anti_cheat': 'none',
+                            'fling_url': post['link']
+                        }).execute()
+                        if not insert_game.data:
+                            print("[-] Failed to create game meta.")
+                            had_eligible_failure = True
+                            continue
+                        game_id = insert_game.data[0]['id']
                     insert_trainer = db.table('trainers').insert({
                         'game_id': game_id, 'version_str': final_version_str,
                         'option_count': option_count, 'original_file_hash': original_file_hash,
@@ -1428,12 +1555,14 @@ def scrape_and_patch_trainer(
                 if target_eligible or strict_download_failures:
                     had_eligible_failure = True
                 
-        archive_only_skip = rar_skips > 0 and actionable_downloads == 0
+        # 지원 URL이 403/429로 보류된 경우에는 RAR 건너뜀으로 오인하지 않는다.
+        archive_only_skip = rar_skips > 0 and actionable_downloads == 0 and not upstream_deferred
         if archive_only_skip:
             print("[ARCHIVE_ONLY_PAGE_SKIPPED] no supported executable archive was available")
         return page_result(
             any_registered, approved_skips, had_eligible_failure,
             archive_only_skip=archive_only_skip,
+            upstream_deferred=upstream_deferred,
         )
     except Exception as e:
         print(f"[-] Error processing page: {e}")
@@ -1444,9 +1573,10 @@ def page_result(
     approved_skips: int,
     had_eligible_failure: bool,
     archive_only_skip: bool = False,
+    upstream_deferred: bool = False,
 ) -> bool:
-    """RAR만 있던 페이지는 중립 건너뜀으로, 지원 형식 실패는 실패로 반환한다."""
-    if archive_only_skip:
+    """지원 불가 보관본·upstream 보류는 중립, 실제 처리 실패만 실패로 반환한다."""
+    if archive_only_skip or upstream_deferred:
         return not had_eligible_failure
     return (any_registered or approved_skips > 0) and not had_eligible_failure
 
@@ -1551,7 +1681,7 @@ def sync_popular_fling_trainers(db: Client):
     url = 'https://flingtrainer.com/'
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = paced_fling_get(url, headers=headers, timeout=10)
         if response.status_code != 200:
             print(f'[-] Failed to scrape FLiNG index page for popular posts: {response.status_code}')
             return

@@ -1,6 +1,7 @@
 import io
 import re
 import sys
+import time
 import pathlib
 import unittest
 import zipfile
@@ -15,10 +16,11 @@ from test_translation_pipeline_contracts import load_functions
 class OfficialArchiveRecoveryTests(unittest.TestCase):
     def setUp(self):
         self.requests = SimpleNamespace(get=Mock())
-        self.resolve, self.recover = load_functions('scraper.py', [
-            'official_archive_from_redirect', 'recover_official_archive',
+        self.resolve, self.paced_get, self.recover = load_functions('scraper.py', [
+            'official_archive_from_redirect', 'paced_fling_get', 'recover_official_archive',
         ], dict(parse_qs=parse_qs, quote=quote, urlparse=urlparse, re=re,
-                requests=self.requests, zipfile=zipfile, io=io))
+                requests=self.requests, zipfile=zipfile, io=io, time=time,
+                FLING_REQUEST_MIN_INTERVAL_SECONDS=0, last_fling_request_at=0.0))
 
     def response(self, path='/wp-content/uploads/2026/09/Example.zip', status=403):
         return SimpleNamespace(status_code=status, history=[
