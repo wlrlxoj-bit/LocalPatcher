@@ -7,6 +7,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MIGRATION = ROOT / "supabase" / "migrations" / "202609270001_source_discovery_queue.sql"
 DIAGNOSTICS_MIGRATION = ROOT / "supabase" / "migrations" / "202609270002_source_discovery_queue_diagnostics.sql"
+URL_REGEX_FIX_MIGRATION = ROOT / "supabase" / "migrations" / "202609270003_source_discovery_queue_url_regex_fix.sql"
 
 
 class SourceDiscoveryQueueSqlContracts(unittest.TestCase):
@@ -14,6 +15,7 @@ class SourceDiscoveryQueueSqlContracts(unittest.TestCase):
     def setUpClass(cls):
         cls.sql = MIGRATION.read_text(encoding="utf-8").casefold()
         cls.diagnostics_sql = DIAGNOSTICS_MIGRATION.read_text(encoding="utf-8").casefold()
+        cls.url_regex_fix_sql = URL_REGEX_FIX_MIGRATION.read_text(encoding="utf-8").casefold()
 
     def test_queue_is_separate_and_accepts_only_canonical_fling_trainer_urls(self):
         self.assertIn("create table if not exists public.source_discovery_queue", self.sql)
@@ -24,6 +26,13 @@ class SourceDiscoveryQueueSqlContracts(unittest.TestCase):
         self.assertIn("source_lastmod timestamptz", self.sql)
         self.assertIn("discovered_at timestamptz not null default now()", self.sql)
         self.assertIn("attempt_count integer not null default 0", self.sql)
+
+    def test_url_regex_fix_accepts_canonical_urls_and_rejects_noncanonical_urls(self):
+        self.assertIn("202609270003_source_discovery_queue_url_regex_fix", str(URL_REGEX_FIX_MIGRATION))
+        self.assertIn("drop constraint if exists source_discovery_queue_source_url_check", self.url_regex_fix_sql)
+        self.assertIn("'^https://flingtrainer\\.com/trainer/[a-z0-9][a-z0-9-]*/$'", self.url_regex_fix_sql)
+        self.assertNotIn("'^https://flingtrainer\\\\.com/trainer/", self.url_regex_fix_sql)
+        self.assertIn("source_discovery_invalid_candidate", self.url_regex_fix_sql)
 
     def test_claim_uses_bounded_service_role_only_skip_locked_lease(self):
         self.assertIn("create or replace function public.claim_fling_discovery_candidates", self.sql)
