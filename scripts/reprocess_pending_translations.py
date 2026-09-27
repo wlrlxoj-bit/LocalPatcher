@@ -133,6 +133,34 @@ def claim_due_retry_targets(db, limit):
     return targets, missing_sources
 
 
+def requeue_safe_noindex_candidates(db, *, chunk_limit, chunks):
+    """명시된 운영 복구에서만 안전 noindex 후보를 제한된 청크로 다시 준비한다.
+
+    후보의 최신 trainer 선택·수동/승인본 보호·lease 보존은 DB RPC가 원자적으로
+    수행한다. 여기서는 집계만 출력하므로 URL, 원문, 번역문을 로그에 남기지 않는다.
+    """
+    queued_total = 0
+    preserved_total = 0
+    for _ in range(chunks):
+        rows = (db.rpc("requeue_safe_noindex_translation_candidates", {
+            "p_limit": chunk_limit,
+        }).execute().data or [])
+        if len(rows) != 1:
+            raise RuntimeError("safe_noindex_requeue_result_invalid")
+        row = rows[0]
+        queued = row.get("queued_count")
+        preserved = row.get("preserved_count")
+        if not isinstance(queued, int) or not isinstance(preserved, int):
+            raise RuntimeError("safe_noindex_requeue_result_invalid")
+        queued_total += queued
+        preserved_total += preserved
+        # 이 청크가 비었으면 뒤 청크도 새 후보를 만들지 않으므로 즉시 끝낸다.
+        if queued + preserved == 0:
+            break
+    print(f"[SAFE_NOINDEX_REQUEUE] queued={queued_total} preserved={preserved_total}")
+    return queued_total, preserved_total
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true")
@@ -140,11 +168,37 @@ def main():
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument("--offset", type=int, default=None,
                         help="명시 URL을 나눠 실행할 때만 쓰는 시작 위치")
+    parser.add_argument("--requeue-safe-noindex", action="store_true",
+                        help="명시 실행에서만 안전한 noindex 자동 번역 후보를 재큐잉")
+    parser.add_argument("--requeue-chunks", type=int, default=1,
+                        help="noindex 재큐잉 RPC 청크 수(1~20, 기본 1)")
     parser.add_argument("--provider", choices=["gemini", "azure", "openai_paid"],
                         default=os.getenv("TRANSLATION_PROVIDER", "gemini"))
     args = parser.parse_args()
-    if not 1 <= args.limit <= 20 or (args.offset is not None and args.offset < 0):
+    if args.requeue_safe_noindex:
+        if args.url or args.offset is not None or not args.apply:
+            parser.error("noindex 재큐잉은 --apply와 함께 단독으로 실행해야 합니다")
+        if not 1 <= args.limit <= 500 or not 1 <= args.requeue_chunks <= 20:
+            parser.error("noindex 재큐잉 limit은 1~500, chunks는 1~20입니다")
+    elif not 1 <= args.limit <= 20 or (args.offset is not None and args.offset < 0):
         parser.error("limit은 1~20, offset은 0 이상이어야 합니다")
+
+    if args.requeue_safe_noindex:
+        endpoint = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        if not endpoint or not key:
+            print("[REPROCESS_QUEUE_UNAVAILABLE]")
+            return 1
+        try:
+            requeue_safe_noindex_candidates(
+                create_client(endpoint, key),
+                chunk_limit=args.limit,
+                chunks=args.requeue_chunks,
+            )
+        except Exception:
+            print("[SAFE_NOINDEX_REQUEUE_FAILED]")
+            return 1
+        return 0
 
     if args.url:
         target_locales, missing_sources = [

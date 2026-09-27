@@ -93,7 +93,8 @@ class MissingMappingRecoveryTests(unittest.TestCase):
         fake_parser = SimpleNamespace(
             add_argument=lambda *a, **k: None,
             parse_args=lambda: SimpleNamespace(provider="azure", confirm_paid=False,
-                                              force=False, url=None, languages=["ko", "ja"]),
+                                              force=False, url=None, trainer_id=None,
+                                              discovery_limit=None, languages=["ko", "ja"]),
         )
         outcomes = iter([True, False, True])
         calls = []
@@ -103,6 +104,9 @@ class MissingMappingRecoveryTests(unittest.TestCase):
             "create_client": lambda *a: DictionaryDb(), "Client": object,
             "db_dictionary_ko": {}, "db_dictionary_ja": {},
             "fetch_recent_trainers": lambda: [{}, {}, {}],
+            # 현재 main은 먼저 공식 sitemap 발견 큐를 호출한다. 이 계약 테스트는
+            # sitemap 장애 시 홈페이지 fallback의 기존 배치 실패 전파를 확인한다.
+            "run_sitemap_discovery_queue": lambda *a, **k: None,
             "scrape_and_patch_trainer": lambda *a, **k: (calls.append(k), next(outcomes))[1],
             "sync_popular_fling_trainers": lambda db: None,
         })

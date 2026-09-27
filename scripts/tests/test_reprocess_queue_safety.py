@@ -121,6 +121,37 @@ class ReprocessQueueSafetyTests(unittest.TestCase):
         self.assertIn("VALIDATION_REJECTED", scraper)
         self.assertIn("TRANSLATION_QUOTA", scraper)
 
+    def test_safe_noindex_requeue_is_explicit_chunked_and_aggregate_only(self):
+        class Db:
+            def __init__(self):
+                self.calls = 0
+
+            def rpc(self, name, payload):
+                self.calls += 1
+                self.name, self.payload = name, payload
+                rows = [{"queued_count": 2, "preserved_count": 1}] if self.calls == 1 else [
+                    {"queued_count": 0, "preserved_count": 0}
+                ]
+                return SimpleNamespace(execute=lambda: SimpleNamespace(data=rows))
+
+        requeue, = load_functions(
+            "reprocess_pending_translations.py",
+            ["requeue_safe_noindex_candidates"],
+        )
+        db = Db()
+        self.assertEqual(requeue(db, chunk_limit=500, chunks=20), (2, 1))
+        self.assertEqual(db.name, "requeue_safe_noindex_translation_candidates")
+        self.assertEqual(db.payload, {"p_limit": 500})
+        self.assertEqual(db.calls, 2)
+
+    def test_safe_noindex_requeue_does_not_join_the_scheduled_workflow(self):
+        scripts = pathlib.Path(__file__).resolve().parents[1]
+        source = (scripts / "reprocess_pending_translations.py").read_text(encoding="utf-8")
+        workflow = (scripts.parent / ".github" / "workflows" / "scraper.yml").read_text(encoding="utf-8")
+        self.assertIn("--requeue-safe-noindex", source)
+        self.assertIn("--apply와 함께 단독", source)
+        self.assertNotIn("requeue-safe-noindex", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
