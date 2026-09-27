@@ -1,8 +1,10 @@
 import ast
+import io
 from datetime import datetime, timezone
 import pathlib
 import unittest
 import xml.etree.ElementTree as ElementTree
+from contextlib import redirect_stdout
 from types import SimpleNamespace
 from urllib.parse import urlparse
 
@@ -167,6 +169,50 @@ class SourceDiscoveryQueueTests(unittest.TestCase):
         self.assertTrue(bulk_upsert(db, candidates))
         self.assertEqual(db.calls[0][1]["p_candidates"], candidates)
         self.assertTrue(all(valid_url(candidate["source_url"]) for candidate in candidates))
+
+    def test_bulk_upsert_api_error_logs_only_allowlisted_category(self):
+        bulk_upsert = load_functions(
+            ["is_official_fling_trainer_url", "upsert_fling_discovery_candidates"],
+            {"urlparse": urlparse, "re": __import__("re"), "DISCOVERY_UPSERT_BATCH_SIZE": 5_000},
+        )[1]
+
+        class APIError(Exception):
+            pass
+
+        class Db:
+            def __init__(self, error):
+                self.error = error
+
+            def rpc(self, _name, _params):
+                return self
+
+            def execute(self):
+                raise self.error
+
+        candidate = [{"source_url": "https://flingtrainer.com/trainer/example"}]
+        cases = (
+            ({"code": "P0001", "message": "SOURCE_DISCOVERY_INVALID_LASTMOD",
+              "details": "https://private.example/DO_NOT_LOG", "hint": "secret=DO_NOT_LOG"},
+             "SOURCE_DISCOVERY_INVALID_LASTMOD"),
+            ({"code": "42501", "message": "Bearer DO_NOT_LOG"},
+             "SOURCE_DISCOVERY_UNAUTHORIZED"),
+            ({"code": "PGRST202", "message": "DO_NOT_LOG_FUNCTION"},
+             "DATABASE_REJECTED"),
+            ({"code": "P0001", "message": "SOURCE_DISCOVERY_INVALID_BATCH extra=DO_NOT_LOG"},
+             "DATABASE_REJECTED"),
+        )
+        for payload, expected_category in cases:
+            with self.subTest(payload=payload["code"]):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    self.assertIsNone(bulk_upsert(Db(APIError(payload)), candidate))
+                line = output.getvalue().strip()
+                self.assertEqual(
+                    line,
+                    f"[DISCOVERY_QUEUE_UPSERT_DATABASE_REJECTED] category={expected_category}",
+                )
+                self.assertNotIn("DO_NOT_LOG", line)
+                self.assertNotIn("private.example", line)
 
     def test_large_sitemap_uses_at_most_five_thousand_candidates_per_upsert(self):
         batch_upsert = load_functions(

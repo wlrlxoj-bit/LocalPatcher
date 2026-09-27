@@ -1145,6 +1145,36 @@ def upsert_fling_discovery_candidates(db, candidates):
             print("[DISCOVERY_QUEUE_UPSERT_REJECTED] result=nonboolean")
         return None
     except Exception as exc:
+        # PostgREST가 RPC의 P0001 메시지를 전달할 때만, DB 마이그레이션에서
+        # 정한 짧은 진단 코드로 변환한다. 오류 원문·details·hint·URL은 로그에
+        # 절대 포함하지 않는다.
+        if type(exc).__name__ == "APIError":
+            payload = {}
+            for item in getattr(exc, "args", ()):
+                if isinstance(item, dict):
+                    payload.update(item)
+            code = getattr(exc, "code", None)
+            if code is None:
+                code = payload.get("code")
+            message = getattr(exc, "message", None)
+            if message is None:
+                message = payload.get("message")
+
+            allowed_categories = {
+                "SOURCE_DISCOVERY_UNAUTHORIZED",
+                "SOURCE_DISCOVERY_INVALID_BATCH",
+                "SOURCE_DISCOVERY_INVALID_CANDIDATE",
+                "SOURCE_DISCOVERY_INVALID_LASTMOD",
+            }
+            # 권한 오류는 운영자가 바로 조치할 수 있는 유일한 인프라 범주다.
+            # 함수 누락(PGRST202)과 그 밖의 DB 응답은 모두 상세를 감춘다.
+            category = "DATABASE_REJECTED"
+            if code == "42501":
+                category = "SOURCE_DISCOVERY_UNAUTHORIZED"
+            elif code == "P0001" and message in allowed_categories:
+                category = message
+            print(f"[DISCOVERY_QUEUE_UPSERT_DATABASE_REJECTED] category={category}")
+            return None
         status = getattr(exc, "status_code", None)
         if not isinstance(status, int):
             status = getattr(getattr(exc, "response", None), "status_code", None)
