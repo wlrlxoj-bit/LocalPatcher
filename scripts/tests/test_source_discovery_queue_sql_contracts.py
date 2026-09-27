@@ -6,12 +6,14 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MIGRATION = ROOT / "supabase" / "migrations" / "202609270001_source_discovery_queue.sql"
+DIAGNOSTICS_MIGRATION = ROOT / "supabase" / "migrations" / "202609270002_source_discovery_queue_diagnostics.sql"
 
 
 class SourceDiscoveryQueueSqlContracts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.sql = MIGRATION.read_text(encoding="utf-8").casefold()
+        cls.diagnostics_sql = DIAGNOSTICS_MIGRATION.read_text(encoding="utf-8").casefold()
 
     def test_queue_is_separate_and_accepts_only_canonical_fling_trainer_urls(self):
         self.assertIn("create table if not exists public.source_discovery_queue", self.sql)
@@ -61,6 +63,21 @@ class SourceDiscoveryQueueSqlContracts(unittest.TestCase):
         self.assertIn("revoke all on table public.source_discovery_queue from public, anon, authenticated", self.sql)
         self.assertIn("grant execute on function public.upsert_fling_discovery_candidate", self.sql)
         self.assertNotIn("to anon, authenticated, service_role", self.sql)
+
+    def test_bulk_upsert_reports_safe_categorical_failures(self):
+        bulk_start = self.diagnostics_sql.index(
+            "create or replace function public.upsert_fling_discovery_candidates(p_candidates jsonb)"
+        )
+        bulk_sql = self.diagnostics_sql[bulk_start:]
+
+        self.assertIn("auth.role() <> 'service_role'", bulk_sql)
+        self.assertIn("message = 'source_discovery_unauthorized'", bulk_sql)
+        self.assertIn("message = 'source_discovery_invalid_batch'", bulk_sql)
+        self.assertIn("message = 'source_discovery_invalid_candidate'", bulk_sql)
+        self.assertIn("message = 'source_discovery_invalid_lastmod'", bulk_sql)
+        self.assertEqual(bulk_sql.count("errcode = 'p0001'"), 6)
+        self.assertNotIn("return false;", bulk_sql)
+        self.assertIn("return true;", bulk_sql)
 
 
 if __name__ == "__main__":

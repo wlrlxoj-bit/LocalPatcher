@@ -7,6 +7,7 @@ import zipfile
 import io
 import argparse
 import time
+from datetime import datetime, timedelta, timezone
 import xml.etree.ElementTree as ElementTree
 from urllib.parse import parse_qs, quote, urlparse
 import requests
@@ -1051,6 +1052,30 @@ def normalize_discovery_limit(value, default=DISCOVERY_CLAIM_DEFAULT_LIMIT):
     return min(DISCOVERY_CLAIM_MAX_LIMIT, max(1, parsed))
 
 
+def normalize_fling_sitemap_lastmod(value, *, now=None):
+    """Sitemap lastmod를 DB에 안전하게 저장할 수 있는 ISO 시각으로 제한한다.
+
+    원본 사이트의 날짜 메타데이터는 신뢰하지 않는다. 형식이 잘못됐거나 현재보다
+    하루 이상 미래인 값은 후보 URL 자체를 버리지 않고 ``None``으로 낮춘다.
+    """
+    normalized = (value or "").strip()
+    if not normalized:
+        return None, "missing"
+    try:
+        parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None, "malformed"
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    current_time = now or datetime.now(timezone.utc)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=timezone.utc)
+    if parsed > current_time + timedelta(days=1):
+        return None, "future"
+    return normalized, "valid"
+
+
 def parse_fling_post_sitemap(xml_text):
     """공식 post sitemap의 trainer URL과 lastmod만 안정적으로 추출한다."""
     try:
@@ -1060,14 +1085,24 @@ def parse_fling_post_sitemap(xml_text):
     namespace = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
     candidates = []
     seen_urls = set()
+    sanitized_counts = {"malformed": 0, "future": 0}
     for entry in root.findall(f"{namespace}url"):
         loc = (entry.findtext(f"{namespace}loc") or "").strip()
         normalized_url = loc.rstrip("/")
         if not is_official_fling_trainer_url(loc) or normalized_url in seen_urls:
             continue
         seen_urls.add(normalized_url)
-        lastmod = (entry.findtext(f"{namespace}lastmod") or "").strip() or None
+        lastmod, status = normalize_fling_sitemap_lastmod(
+            entry.findtext(f"{namespace}lastmod")
+        )
+        if status in sanitized_counts:
+            sanitized_counts[status] += 1
         candidates.append({"source_url": normalized_url, "source_lastmod": lastmod})
+    if sanitized_counts["malformed"] or sanitized_counts["future"]:
+        print(
+            "[DISCOVERY_SITEMAP_LASTMOD_SANITIZED] "
+            f"malformed={sanitized_counts['malformed']} future={sanitized_counts['future']}"
+        )
     return candidates
 
 
@@ -1102,9 +1137,23 @@ def upsert_fling_discovery_candidates(db, candidates):
         result = db.rpc("upsert_fling_discovery_candidates", {
             "p_candidates": candidates,
         }).execute()
-        return True if result.data is True else None
-    except Exception:
-        print("[DISCOVERY_QUEUE_UPSERT_FAILED]")
+        if result.data is True:
+            return True
+        if result.data is False:
+            print("[DISCOVERY_QUEUE_UPSERT_REJECTED] result=false")
+        else:
+            print("[DISCOVERY_QUEUE_UPSERT_REJECTED] result=nonboolean")
+        return None
+    except Exception as exc:
+        status = getattr(exc, "status_code", None)
+        if not isinstance(status, int):
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+        safe_status = status if isinstance(status, int) and 100 <= status <= 599 else "unknown"
+        safe_type = re.sub(r"[^A-Za-z0-9_]", "", type(exc).__name__)[:64] or "UnknownError"
+        print(
+            "[DISCOVERY_QUEUE_UPSERT_TRANSPORT_FAILED] "
+            f"exception={safe_type} status={safe_status}"
+        )
         return None
 
 

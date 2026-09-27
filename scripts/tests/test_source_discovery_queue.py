@@ -1,4 +1,5 @@
 import ast
+from datetime import datetime, timezone
 import pathlib
 import unittest
 import xml.etree.ElementTree as ElementTree
@@ -24,9 +25,16 @@ def load_functions(names, namespace=None):
 
 class SourceDiscoveryQueueTests(unittest.TestCase):
     def test_official_sitemap_accepts_only_trainer_paths_and_preserves_lastmod(self):
-        valid_url, parse_sitemap = load_functions(
-            ["is_official_fling_trainer_url", "parse_fling_post_sitemap"],
-            {"urlparse": urlparse, "re": __import__("re"), "ElementTree": ElementTree},
+        valid_url, normalize_lastmod, parse_sitemap = load_functions(
+            [
+                "is_official_fling_trainer_url", "normalize_fling_sitemap_lastmod",
+                "parse_fling_post_sitemap",
+            ],
+            {
+                "urlparse": urlparse, "re": __import__("re"), "ElementTree": ElementTree,
+                "datetime": datetime, "timezone": timezone,
+                "timedelta": __import__("datetime").timedelta,
+            },
         )
         self.assertTrue(valid_url("https://flingtrainer.com/trainer/graveyard-keeper-2-trainer/"))
         self.assertFalse(valid_url("http://flingtrainer.com/trainer/example"))
@@ -44,6 +52,34 @@ class SourceDiscoveryQueueTests(unittest.TestCase):
             "source_url": "https://flingtrainer.com/trainer/graveyard-keeper-2-trainer",
             "source_lastmod": "2026-09-27T01:02:03+00:00",
         }])
+        self.assertEqual(normalize_lastmod("2026-09-27T01:02:03+00:00")[1], "valid")
+
+    def test_sitemap_invalid_or_future_lastmod_keeps_candidate_with_null_metadata(self):
+        _valid_url, _normalize_lastmod, parse_sitemap = load_functions(
+            [
+                "is_official_fling_trainer_url", "normalize_fling_sitemap_lastmod",
+                "parse_fling_post_sitemap",
+            ],
+            {
+                "urlparse": urlparse, "re": __import__("re"), "ElementTree": ElementTree,
+                "datetime": datetime, "timezone": timezone,
+                "timedelta": __import__("datetime").timedelta,
+            },
+        )
+        xml = """<urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>
+          <url><loc>https://flingtrainer.com/trainer/valid/</loc><lastmod>2026-09-27</lastmod></url>
+          <url><loc>https://flingtrainer.com/trainer/bad-date/</loc><lastmod>not-a-date</lastmod></url>
+          <url><loc>https://flingtrainer.com/trainer/future-date/</loc><lastmod>2999-01-01T00:00:00+00:00</lastmod></url>
+        </urlset>"""
+        candidates = parse_sitemap(xml)
+        self.assertEqual([candidate["source_url"] for candidate in candidates], [
+            "https://flingtrainer.com/trainer/valid",
+            "https://flingtrainer.com/trainer/bad-date",
+            "https://flingtrainer.com/trainer/future-date",
+        ])
+        self.assertEqual([candidate["source_lastmod"] for candidate in candidates], [
+            "2026-09-27", None, None,
+        ])
 
     def test_claim_limit_is_bounded_to_safe_small_batch(self):
         normalize_limit = load_functions(
@@ -105,6 +141,32 @@ class SourceDiscoveryQueueTests(unittest.TestCase):
         })])
         self.assertFalse(bulk_upsert(Db(True), [{"source_url": "https://evil.example/trainer/x"}]))
         self.assertTrue(valid_url(candidates[0]["source_url"]))
+
+    def test_bulk_upsert_keeps_null_lastmod_candidates_in_same_batch(self):
+        valid_url, bulk_upsert = load_functions(
+            ["is_official_fling_trainer_url", "upsert_fling_discovery_candidates"],
+            {"urlparse": urlparse, "re": __import__("re"), "DISCOVERY_UPSERT_BATCH_SIZE": 5_000},
+        )
+
+        class Db:
+            def __init__(self):
+                self.calls = []
+
+            def rpc(self, name, params):
+                self.calls.append((name, params))
+                return self
+
+            def execute(self):
+                return SimpleNamespace(data=True)
+
+        candidates = [
+            {"source_url": "https://flingtrainer.com/trainer/valid", "source_lastmod": "2026-09-27"},
+            {"source_url": "https://flingtrainer.com/trainer/bad-date", "source_lastmod": None},
+        ]
+        db = Db()
+        self.assertTrue(bulk_upsert(db, candidates))
+        self.assertEqual(db.calls[0][1]["p_candidates"], candidates)
+        self.assertTrue(all(valid_url(candidate["source_url"]) for candidate in candidates))
 
     def test_large_sitemap_uses_at_most_five_thousand_candidates_per_upsert(self):
         batch_upsert = load_functions(
