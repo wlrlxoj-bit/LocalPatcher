@@ -7,6 +7,7 @@ import zipfile
 import io
 import argparse
 import time
+import xml.etree.ElementTree as ElementTree
 from urllib.parse import parse_qs, quote, urlparse
 import requests
 from bs4 import BeautifulSoup
@@ -71,6 +72,12 @@ FLING_REQUEST_MIN_INTERVAL_SECONDS = min(
 )
 FLING_429_RETRY_MAX_SECONDS = 10
 FLING_RETRY_SLEEP_BUDGET_SECONDS = 60
+# 사이트맵은 전체 원본을 발견하지만, 한 실행에서 실제 파일을 여는 수는 작게
+# 제한한다. URL 발견과 무거운 다운로드/번역 작업을 분리해 FLiNG WAF를 피한다.
+DISCOVERY_CLAIM_DEFAULT_LIMIT = 3
+DISCOVERY_CLAIM_MAX_LIMIT = 5
+DISCOVERY_UPSERT_BATCH_SIZE = 5_000
+FLING_POST_SITEMAP_URL = "https://flingtrainer.com/post-sitemap.xml"
 openai_fallback_requests = 0
 openai_fallback_chars = 0
 last_llm_provider = None
@@ -1014,6 +1021,218 @@ def fetch_recent_trainers():
         print(f"[-] Error scraping FLiNG feed: {e}")
         return []
 
+
+def is_official_fling_trainer_url(source_url):
+    """공식 FLiNG trainer 게시물 URL만 발견 큐에 넣는다.
+
+    sitemap은 외부 입력이므로 URL 쿼리, 다른 호스트, `/trainer/` 밖의 경로는
+    거부한다. 후속 DB RPC는 이 검증을 다시 수행해야 하지만, 수집기 역시
+    허용 목록 밖 URL을 요청하지 않는다.
+    """
+    try:
+        parsed = urlparse((source_url or "").strip())
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc == "flingtrainer.com"
+        and parsed.query == ""
+        and parsed.fragment == ""
+        and bool(re.fullmatch(r"/trainer/[a-z0-9][a-z0-9-]*/?", parsed.path))
+    )
+
+
+def normalize_discovery_limit(value, default=DISCOVERY_CLAIM_DEFAULT_LIMIT):
+    """실행 환경의 발견 처리량을 1~5 사이로 고정한다."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return min(DISCOVERY_CLAIM_MAX_LIMIT, max(1, parsed))
+
+
+def parse_fling_post_sitemap(xml_text):
+    """공식 post sitemap의 trainer URL과 lastmod만 안정적으로 추출한다."""
+    try:
+        root = ElementTree.fromstring(xml_text)
+    except ElementTree.ParseError:
+        return []
+    namespace = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
+    candidates = []
+    seen_urls = set()
+    for entry in root.findall(f"{namespace}url"):
+        loc = (entry.findtext(f"{namespace}loc") or "").strip()
+        normalized_url = loc.rstrip("/")
+        if not is_official_fling_trainer_url(loc) or normalized_url in seen_urls:
+            continue
+        seen_urls.add(normalized_url)
+        lastmod = (entry.findtext(f"{namespace}lastmod") or "").strip() or None
+        candidates.append({"source_url": normalized_url, "source_lastmod": lastmod})
+    return candidates
+
+
+def fetch_fling_post_sitemap():
+    """FLiNG 공식 사이트맵을 pace 규칙을 지켜 가져온다. 실패는 홈 보조 수집으로 넘긴다."""
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    try:
+        response = paced_fling_get(FLING_POST_SITEMAP_URL, headers=headers, timeout=20)
+    except requests.RequestException:
+        print("[DISCOVERY_SITEMAP_FETCH_FAILED] status=network")
+        return None
+    if response.status_code != 200:
+        print(f"[DISCOVERY_SITEMAP_FETCH_FAILED] status={response.status_code}")
+        return None
+    candidates = parse_fling_post_sitemap(response.text)
+    if not candidates:
+        print("[DISCOVERY_SITEMAP_PARSE_FAILED]")
+        return None
+    print(f"[DISCOVERY_SITEMAP_FOUND] candidates={len(candidates)}")
+    return candidates
+
+
+def upsert_fling_discovery_candidates(db, candidates):
+    """검증된 sitemap 후보를 한 번의 DB RPC로 발견 큐에 반영한다."""
+    if (not candidates or len(candidates) > DISCOVERY_UPSERT_BATCH_SIZE or any(
+        not is_official_fling_trainer_url(candidate.get("source_url"))
+        for candidate in candidates
+    )):
+        print("[DISCOVERY_QUEUE_UPSERT_INVALID_INPUT]")
+        return False
+    try:
+        result = db.rpc("upsert_fling_discovery_candidates", {
+            "p_candidates": candidates,
+        }).execute()
+        return True if result.data is True else None
+    except Exception:
+        print("[DISCOVERY_QUEUE_UPSERT_FAILED]")
+        return None
+
+
+def upsert_fling_discovery_candidate_batches(db, candidates):
+    """대형 sitemap은 최대 5,000개 단위 RPC로 반영하고 하나라도 실패하면 중단한다."""
+    for start in range(0, len(candidates), DISCOVERY_UPSERT_BATCH_SIZE):
+        batch = candidates[start:start + DISCOVERY_UPSERT_BATCH_SIZE]
+        if not upsert_fling_discovery_candidates(db, batch):
+            return False
+    return True
+
+
+def claim_fling_discovery_candidates(db, limit):
+    """동시 실행에서 중복 처리하지 않도록 DB RPC로 due 후보를 claim한다."""
+    try:
+        result = db.rpc("claim_fling_discovery_candidates", {
+            "p_limit": normalize_discovery_limit(limit),
+        }).execute()
+        return result.data or []
+    except Exception:
+        print("[DISCOVERY_QUEUE_CLAIM_FAILED]")
+        return None
+
+
+def complete_fling_discovery_candidate(db, source_url, outcome="completed", failure_code=None):
+    """지원 형식 처리 또는 RAR 전용 중립 처리를 큐에서 완료로 닫는다."""
+    try:
+        result = db.rpc("complete_fling_discovery_candidate", {
+            "p_source_url": source_url,
+            "p_outcome": outcome,
+            # 완료 상태에 실패 사유를 함께 보관하면 DB 제약이 이를 실패로 오인한다.
+            # RAR-only도 의도된 중립 완료이므로 로그만 남기고 큐 사유는 비운다.
+            "p_failure_code": None,
+        }).execute()
+        return result.data is True
+    except Exception:
+        print("[DISCOVERY_QUEUE_COMPLETE_FAILED]")
+        return False
+
+
+def defer_fling_discovery_candidate(db, source_url, failure_code, delay_seconds):
+    """FLiNG/WAF·일시 장애는 재시도 시각을 둬서 큐에 되돌린다."""
+    try:
+        result = db.rpc("defer_fling_discovery_candidate", {
+            "p_source_url": source_url,
+            "p_failure_code": failure_code,
+            "p_delay_seconds": max(60, int(delay_seconds)),
+        }).execute()
+        return result.data is True
+    except Exception:
+        print("[DISCOVERY_QUEUE_DEFER_FAILED]")
+        return False
+
+
+def block_fling_discovery_candidate(db, source_url, failure_code):
+    """파서·영구 검증 실패를 숨기지 않고 관리자 점검 대상 상태로 보관한다."""
+    try:
+        result = db.rpc("block_fling_discovery_candidate", {
+            "p_source_url": source_url,
+            "p_failure_code": failure_code,
+        }).execute()
+        return result.data is True
+    except Exception:
+        print("[DISCOVERY_QUEUE_BLOCK_FAILED]")
+        return False
+
+
+def discovery_post_from_candidate(candidate):
+    """페이지 h1이 실제 제목을 확정하기 전 사용할 안전한 최소 post 구조를 만든다."""
+    source_url = candidate["source_url"].rstrip("/")
+    slug = normalize_fling_slug(source_url)
+    return {"title": slug.replace("-", " ").title() + " Trainer", "link": source_url, "slug": slug}
+
+
+def process_claimed_fling_discovery_candidate(db, candidate, *, force=False, languages=None):
+    """claim된 단일 URL을 처리하고 결과를 발견 큐의 완료·보류·차단 상태로 기록한다."""
+    source_url = candidate["source_url"].rstrip("/")
+    report = {}
+
+    def record(outcome, failure_code=None, delay_seconds=None):
+        report["outcome"] = outcome
+        report["failure_code"] = failure_code
+        report["delay_seconds"] = delay_seconds
+
+    succeeded = scrape_and_patch_trainer(
+        discovery_post_from_candidate(candidate), db, force=force,
+        languages=languages, reprocess_existing_unapproved=False,
+        outcome_reporter=record,
+    )
+    outcome = report.get("outcome")
+    if outcome == "deferred":
+        return defer_fling_discovery_candidate(
+            db, source_url, report.get("failure_code") or "UPSTREAM_TEMPORARY",
+            report.get("delay_seconds") or 1800,
+        )
+    if outcome == "blocked":
+        return block_fling_discovery_candidate(
+            db, source_url, report.get("failure_code") or "PROCESSING_FAILED",
+        )
+    if succeeded:
+        return complete_fling_discovery_candidate(
+            db, source_url, outcome="completed", failure_code=None,
+        )
+    return block_fling_discovery_candidate(db, source_url, "PROCESSING_FAILED")
+
+
+def run_sitemap_discovery_queue(db, *, force=False, languages=None, limit=None):
+    """사이트맵 발견→DB upsert→작은 claim 배치를 하나의 예약 실행으로 수행한다."""
+    candidates = fetch_fling_post_sitemap()
+    if candidates is None:
+        return None
+    if not upsert_fling_discovery_candidate_batches(db, candidates):
+        print("[DISCOVERY_QUEUE_UPSERT_FAILED]")
+        return False
+    claimed = claim_fling_discovery_candidates(
+        db, limit if limit is not None else os.environ.get("FLING_DISCOVERY_CLAIM_LIMIT"),
+    )
+    if claimed is None:
+        return False
+    failures = 0
+    for candidate in claimed:
+        if not process_claimed_fling_discovery_candidate(
+            db, candidate, force=force, languages=languages,
+        ):
+            failures += 1
+    print(f"[DISCOVERY_QUEUE_RUN] claimed={len(claimed)} failures={failures}")
+    return failures == 0
+
 def fetch_steam_meta(game_title: str):
     """Queries Steam Store Search and App Details APIs to fetch appid, cover art, and official titles and descriptions."""
     default_meta = {
@@ -1204,6 +1423,7 @@ def scrape_and_patch_trainer(
     languages=None,
     reprocess_existing_unapproved=True,
     target_trainer_id=None,
+    outcome_reporter=None,
 ):
     """FLiNG 원본을 수집한다.
 
@@ -1219,14 +1439,30 @@ def scrape_and_patch_trainer(
     try:
         response = paced_fling_get(post['link'], headers=headers, timeout=10)
         if response.status_code != 200:
+            if response.status_code in {403, 429} and outcome_reporter:
+                outcome_reporter(
+                    "deferred", f"UPSTREAM_HTTP_{response.status_code}", 10_800,
+                )
+                return True
+            if outcome_reporter:
+                outcome_reporter("blocked", f"PAGE_HTTP_{response.status_code}")
             return False
             
         soup = BeautifulSoup(response.text, 'html.parser')
+        # sitemap 후보에는 제목이 없으므로, 페이지의 h1을 실제 게임명 기준으로 쓴다.
+        # 기존 홈 피드 제목도 원본과 다를 수 있으므로 같은 정규화가 안전하다.
+        heading = soup.select_one('h1')
+        if heading:
+            heading_text = heading.get_text(' ', strip=True)
+            if heading_text and len(heading_text) <= 300:
+                post['title'] = heading_text
         
         # Locate all download links (starts with /downloads/)
         download_anchors = soup.select('a[href*="/downloads/"]')
         if not download_anchors:
             print("[-] No download links found on page.")
+            if outcome_reporter:
+                outcome_reporter("blocked", "NO_DOWNLOAD_LINKS")
             return False
             
         # FLiNG DOM은 최신→과거 순으로 링크를 제공한다. 과거 버전까지 연속
@@ -1234,6 +1470,8 @@ def scrape_and_patch_trainer(
         latest_download, rar_skips = latest_supported_download(download_anchors)
         if latest_download is None:
             print("[ARCHIVE_ONLY_PAGE_SKIPPED] no supported executable archive was available")
+            if outcome_reporter:
+                outcome_reporter("completed", "ARCHIVE_RAR_ONLY")
             return True
         skipped_link_count = max(0, len(download_anchors) - 1)
                 
@@ -1247,6 +1485,7 @@ def scrape_and_patch_trainer(
         had_eligible_failure = False
         actionable_downloads = 0
         upstream_deferred = False
+        translation_deferred_failure = None
         # 최신 지원 링크 하나만 처리한다. 선택 함수가 URL 중복과 RAR을 제외한다.
         for download_a in [latest_download]:
             download_url = download_a['href']
@@ -1304,6 +1543,10 @@ def scrape_and_patch_trainer(
                         if not queued:
                             had_eligible_failure = True
                         upstream_deferred = True
+                        if outcome_reporter:
+                            outcome_reporter(
+                                "deferred", f"UPSTREAM_HTTP_{upstream_status}", 10_800,
+                            )
                         continue
                     if strict_download_failures:
                         had_eligible_failure = True
@@ -1488,6 +1731,8 @@ def scrape_and_patch_trainer(
                                 db, trainer_id, language_code, retry_state,
                                 failure_code, delay_seconds,
                             )
+                            if retry_state == "deferred":
+                                translation_deferred_failure = (failure_code, delay_seconds)
                             retry_recorded = True
                             print(f"[locale-failed] trainer={trainer_id} locale={language_code} error={type(locale_error).__name__}")
                             validation = None
@@ -1541,6 +1786,7 @@ def scrape_and_patch_trainer(
                         schedule_translation_retry(
                             db, trainer_id, language_code, "deferred", "TRANSLATION_DB_TEMPORARY", 1800,
                         )
+                        translation_deferred_failure = ("TRANSLATION_DB_TEMPORARY", 1800)
                         trainer_ok = False
                 
                 print(f"[번역 결과] trainer={trainer_id} game={game_id} success={trainer_ok}")
@@ -1549,6 +1795,14 @@ def scrape_and_patch_trainer(
                 any_registered = any_registered or trainer_ok
                 if not trainer_ok:
                     had_eligible_failure = True
+                    if outcome_reporter:
+                        if translation_deferred_failure:
+                            outcome_reporter(
+                                "deferred", translation_deferred_failure[0],
+                                translation_deferred_failure[1],
+                            )
+                        else:
+                            outcome_reporter("blocked", "TRANSLATION_OR_VALIDATION_FAILED")
                 
             except Exception as e:
                 print(f"[-] Error processing download {download_url}: {e}")
@@ -1559,13 +1813,28 @@ def scrape_and_patch_trainer(
         archive_only_skip = rar_skips > 0 and actionable_downloads == 0 and not upstream_deferred
         if archive_only_skip:
             print("[ARCHIVE_ONLY_PAGE_SKIPPED] no supported executable archive was available")
-        return page_result(
+        result = page_result(
             any_registered, approved_skips, had_eligible_failure,
             archive_only_skip=archive_only_skip,
             upstream_deferred=upstream_deferred,
         )
+        if outcome_reporter and result and not upstream_deferred:
+            outcome_reporter(
+                "completed", "ARCHIVE_RAR_ONLY" if archive_only_skip else None,
+            )
+        elif outcome_reporter and not result and not upstream_deferred:
+            if translation_deferred_failure:
+                outcome_reporter(
+                    "deferred", translation_deferred_failure[0],
+                    translation_deferred_failure[1],
+                )
+            else:
+                outcome_reporter("blocked", "PROCESSING_FAILED")
+        return result
     except Exception as e:
         print(f"[-] Error processing page: {e}")
+        if outcome_reporter:
+            outcome_reporter("blocked", "PAGE_PROCESSING_EXCEPTION")
         return False
 
 def page_result(
@@ -1587,6 +1856,8 @@ def main():
     parser.add_argument("--url", type=str, help="Pinpoint scrape a single target FLiNG trainer URL")
     parser.add_argument("--trainer-id", type=int,
                         help="재시도 큐가 claim한 단일 trainer만 처리한다")
+    parser.add_argument("--discovery-limit", type=int,
+                        help="공식 사이트맵에서 claim할 최대 신규/변경 게시물 수(1~5, 기본 3)")
     parser.add_argument(
         "--provider", choices=["gemini", "azure", "openai_paid"], default="gemini",
         help="기본 번역기. gemini는 API/JSON 실패와 검증 실패 때만 GPT 보조 번역을 1회 사용합니다.",
@@ -1650,29 +1921,33 @@ def main():
         )
         return 0 if succeeded else 1
 
+    # 정상 예약 경로는 공식 post-sitemap을 전체 발견 목록으로 사용한다. 홈페이지
+    # 상위 20개 스캔은 원본 sitemap 자체가 일시 실패했을 때만 보조 수단이다.
+    discovery_result = run_sitemap_discovery_queue(
+        db, force=args.force, languages=args.languages, limit=args.discovery_limit,
+    )
+    if discovery_result is None:
+        print("[DISCOVERY_HOME_FALLBACK] official sitemap unavailable")
+        posts = fetch_recent_trainers()
+        if not posts:
+            print("[-] No new updates found.")
+            return 1
+        failed_pages = 0
+        for post in posts[:20]:
+            if not scrape_and_patch_trainer(
+                post,
+                db,
+                force=args.force,
+                languages=args.languages,
+                reprocess_existing_unapproved=False,
+            ):
+                failed_pages += 1
+        if failed_pages:
+            print(f"[*] Batch completed with partial warnings: {failed_pages}/{min(len(posts), 20)} pages")
+        discovery_result = failed_pages == 0
 
-    posts = fetch_recent_trainers()
-    if not posts:
-        print("[-] No new updates found.")
-        return 1
-        
-    # 예약 실행은 신규 바이너리/업데이트만 번역한다. 기존 pending/rejected는
-    # 위의 reprocess_existing_unapproved=False 경로에서 LLM 호출 없이 건너뛴다.
-    failed_pages = 0
-    for post in posts[:20]:
-        if not scrape_and_patch_trainer(
-            post,
-            db,
-            force=args.force,
-            languages=args.languages,
-            reprocess_existing_unapproved=False,
-        ):
-            failed_pages += 1
-    if failed_pages:
-        print(f"[*] Batch completed with partial warnings: {failed_pages}/{min(len(posts), 20)} pages")
-        
     sync_popular_fling_trainers(db)
-    return 1 if failed_pages else 0
+    return 0 if discovery_result else 1
 
 
 
