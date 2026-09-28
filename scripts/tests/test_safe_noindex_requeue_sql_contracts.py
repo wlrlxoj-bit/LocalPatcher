@@ -41,6 +41,19 @@ class SafeNoindexRequeueSqlContracts(unittest.TestCase):
         self.assertIn("coalesce(btrim(mapping.translated_text), '') = ''", self.sql)
         self.assertIn("noindex_safe_recovery", self.sql)
 
+    def test_automatic_mapping_not_exists_is_closed_before_retry_queue_filter(self):
+        # 중첩 not exists의 닫는 괄호가 빠지면 Supabase가 function body incomplete로
+        # 거부한다. 자동 매핑 허용 조건과 retry queue 보존 조건은 별도 predicate다.
+        self.assertIn(
+            "coalesce(btrim(mapping.translated_text), '') = ''\n"
+            "            )\n"
+            "          )\n"
+            "        )\n"
+            "       and not exists (\n"
+            "       -- 이미 작업자가 claim한 lease",
+            self.sql,
+        )
+
     def test_active_or_explicitly_blocked_retry_is_preserved(self):
         safe_start = self.sql.index("safe_candidates as")
         upsert_start = self.sql.index("upserted as")

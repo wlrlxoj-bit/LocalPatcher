@@ -88,7 +88,8 @@ begin
               or coalesce(btrim(mapping.original_text), '') = ''
               or coalesce(btrim(mapping.translated_text), '') = ''
             )
-       )
+          )
+        )
        and not exists (
        -- 이미 작업자가 claim한 lease, 미래 재시도, quota 대기, 차단 항목은 후보
        -- 단계에서 제외한다. 여러 청크 실행 중 같은 PK를 계속 세지 않게 한다.
