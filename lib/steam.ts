@@ -87,7 +87,9 @@ export async function getSteamPlayerCount(appId: number): Promise<number | null>
     const res = await fetch(
       `https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=${appId}`,
       {
-        next: { revalidate: 900 }, // Cache for 15 minutes
+        // 이 함수는 ISR 페이지 렌더링에서 호출하지 않는다. 별도 API 응답의 CDN 캐시가
+        // 짧은 수명을 관리하므로 Next Data Cache 쓰기를 만들지 않는다.
+        cache: 'no-store',
       }
     );
 

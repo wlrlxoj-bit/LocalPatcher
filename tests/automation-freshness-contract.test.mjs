@@ -14,7 +14,7 @@ test('일반 수동 동기화는 수집 뒤 재시도 큐를 처리하고, 단�
   assert.match(workflow, /concurrency:\s*[\s\S]*?cancel-in-progress: false/);
 });
 
-test('자동 저장 성공은 비밀 인증된 내부 ISR 웹훅을 한 번만 요청한다', async () => {
+test('자동 저장·무결성 복구 작업은 비밀 인증된 내부 ISR 웹훅만 요청한다', async () => {
   const [scraper, workflow, route] = await Promise.all([
     read('scripts/scraper.py'),
     read('.github/workflows/scraper.yml'),
@@ -24,7 +24,7 @@ test('자동 저장 성공은 비밀 인증된 내부 ISR 웹훅을 한 번만 �
   assert.match(scraper, /Authorization.*Bearer \{PATCHER_REVALIDATE_SECRET\}/);
   assert.match(scraper, /if trainer_ok:\s*\n\s*revalidate_patcher_after_automation\(trainer_id\)/);
   assert.match(workflow, /PATCHER_REVALIDATE_URL: https:\/\/localpatcher\.com\/api\/internal\/revalidate-patcher/);
-  assert.equal((workflow.match(/PATCHER_REVALIDATE_SECRET: \$\{\{ secrets\.PATCHER_REVALIDATE_SECRET \}\}/g) || []).length, 2);
+  assert.ok((workflow.match(/PATCHER_REVALIDATE_SECRET: \$\{\{ secrets\.PATCHER_REVALIDATE_SECRET \}\}/g) || []).length >= 2);
   assert.match(route, /timingSafeEqual/);
   assert.match(route, /authorization\?\.startsWith\('Bearer '\)/);
   assert.match(route, /typeof trainerId !== 'number' \|\| !Number\.isSafeInteger\(trainerId\) \|\| trainerId <= 0/);

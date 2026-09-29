@@ -27,11 +27,13 @@ test('수동 mapping 저장·승인은 서버 세션과 단일 mapping id만 신
   assert.doesNotMatch(approve, /request\.json\(/);
 });
 
-test('수동 상태 변경은 패처와 sitemap ISR을 즉시 무효화한다', async () => {
+test('수동 상태 변경은 알려진 패처 경로만 무효화하고 sitemap 전체 무효화는 하지 않는다', async () => {
   const source = await read('lib/server/admin/revalidate-patcher.ts');
   assert.match(source, /revalidatePath\(`\/\$\{locale\}\/patcher\/\$\{game\.slug\}`\)/);
-  assert.match(source, /revalidatePath\('\/sitemap\.xml'\)/);
-  assert.match(source, /revalidatePath\('\/\[locale\]\/patcher\/\[game_slug\]', 'page'\)/);
+  assert.doesNotMatch(source, /revalidatePath\('\/sitemap\.xml'\)/);
+  assert.doesNotMatch(source, /revalidatePath\('\/\[locale\]\/patcher\/\[game_slug\]', 'page'\)/);
+  assert.match(source, /trainer_game_lookup_unavailable/);
+  assert.match(source, /retryRequired: true/);
 });
 
 test('DB 수동 저장 RPC도 공백·NUL 본문을 자체 거절하고, API 우회 저장을 허용하지 않는다', async () => {

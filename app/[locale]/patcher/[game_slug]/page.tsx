@@ -32,7 +32,9 @@ import { getTrainerOptionSummary } from '@/lib/trainer-option-summary';
 import { getTrainerProvenance } from '@/lib/trainer-provenance';
 import PatcherVerificationProvenance from '@/components/PatcherVerificationProvenance';
 
-export const revalidate = 3600; // 1 hour ISR cache
+// 페이지 변경은 승인·자동화 이벤트가 정확한 경로만 무효화한다. 시간 기반 재생성은
+// 하루로 제한해 검색 크롤러/일반 방문이 ISR 쓰기를 급증시키지 않게 한다.
+export const revalidate = 86400;
 
 export async function generateStaticParams() {
   const eligibleSlugsByLocale = await Promise.all(
@@ -321,11 +323,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
             <SteamNews steamAppId={steamAppId} locale={currentLocale as Locale} />
           </React.Suspense>
         ) : undefined}
-        playerCountSlot={steamAppId ? (
-          <React.Suspense fallback={<div className="h-12 animate-pulse bg-slate-800/50 rounded-full border border-slate-700/50" />}>
-            <SteamPlayerCount steamAppId={steamAppId} locale={currentLocale as Locale} />
-          </React.Suspense>
-        ) : undefined}
+        playerCountSlot={steamAppId ? <SteamPlayerCount steamAppId={steamAppId} locale={currentLocale as Locale} /> : undefined}
         systemReqSlot={steamAppId ? (
           <React.Suspense fallback={<div className="h-96 animate-pulse bg-slate-800/50 rounded-xl border border-slate-700/50" />}>
             <SystemRequirements steamAppId={steamAppId} locale={currentLocale as Locale} />
