@@ -576,6 +576,7 @@ export default function PatcherClient({
                 fill
                 sizes="80px"
                 priority
+                unoptimized
                 className="object-cover"
               />
             </div>
@@ -744,6 +745,7 @@ export default function PatcherClient({
               fill
               sizes="80px"
               priority
+                unoptimized
               className="object-cover"
             />
           </div>

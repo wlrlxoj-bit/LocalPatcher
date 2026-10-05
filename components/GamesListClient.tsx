@@ -267,7 +267,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
                     optionCount={trainer.count}
                     locale={locale}
                     optionsLabel={pt.optionsCount}
-                    priority={index < 6}
+                    priority={index === 0}
                   />
                 );
               })}
@@ -363,7 +363,7 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
                     optionCount={trainer.count}
                     locale={locale}
                     optionsLabel={pt.optionsCount}
-                    priority={index < 6}
+                    priority={index === 0}
                   />
                 );
               })

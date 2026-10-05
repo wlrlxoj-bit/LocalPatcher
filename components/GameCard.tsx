@@ -43,8 +43,9 @@ export default function GameCard({ game, trainerVersion, optionCount, locale, op
           src={game.cover_image_url}
           alt={game.title_en}
           fill
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          sizes="(max-width: 639px) calc(100vw - 48px), (max-width: 767px) calc((100vw - 72px) / 2), (max-width: 1023px) calc((100vw - 96px) / 3), 296px"
           priority={priority}
+          unoptimized
           className="object-cover z-0"
         />
         <div className="absolute inset-0 bg-slate-950/70 group-hover:bg-slate-950/60 transition-colors duration-300 z-10"></div>
