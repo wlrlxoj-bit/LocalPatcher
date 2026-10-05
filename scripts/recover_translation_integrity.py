@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import io
 import os
+import re
 import sys
 import zipfile
 
@@ -416,6 +417,25 @@ def process_claim(db, claim, provider):
     return True
 
 
+def claim_failure_marker(error):
+    """예외 본문 대신 PostgreSQL·PostgREST의 제한된 오류 코드만 반환한다.
+
+    URL·SQL·키가 섞인 임의 문자열은 정제해서 출력하지 않고 전부 거절한다.
+    알려진 SQLSTATE 5자리 또는 PGRST 3자리 코드가 없으면 기존 표식을 유지한다.
+    """
+    marker = "[INTEGRITY_QUEUE_CLAIM_FAILED]"
+    try:
+        code = getattr(error, "code", None)
+    except Exception:
+        return marker
+    if not isinstance(code, str) or len(code) not in (5, 8) or not code.isascii():
+        return marker
+    code = code.upper()
+    if re.fullmatch(r"(?:[A-Z0-9]{5}|PGRST[0-9]{3})", code, flags=re.ASCII) is None:
+        return marker
+    return f"[INTEGRITY_QUEUE_CLAIM_FAILED code={code}]"
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true")
@@ -433,9 +453,13 @@ def main():
     scraper.translation_usage_db = db
     try:
         queued = db.rpc("enqueue_translation_integrity_recovery_candidates", {"p_limit": 20}).execute().data
-        claims = db.rpc("claim_translation_integrity_recovery_v2", {"p_limit": args.limit}).execute().data or []
     except Exception:
-        print("[INTEGRITY_QUEUE_CLAIM_FAILED]")
+        print("[INTEGRITY_QUEUE_ENQUEUE_FAILED]")
+        return 1
+    try:
+        claims = db.rpc("claim_translation_integrity_recovery_v2", {"p_limit": args.limit}).execute().data or []
+    except Exception as error:
+        print(claim_failure_marker(error))
         return 1
     failures = sum(not process_claim(db, claim, args.provider) for claim in claims)
     print(f"[INTEGRITY_RECOVERY_RUN] queued={int(queued or 0)} claimed={len(claims)} failures={failures}")
