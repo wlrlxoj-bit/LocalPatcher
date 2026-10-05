@@ -29,6 +29,8 @@ type RetryQueueStatus = {
   latestFailureCode: string | null;
 };
 
+type IntegrityQueueStatus = RetryQueueStatus & { completed: number };
+
 function StatusIndicator({ status }: { status: WorkflowStatus | null }) {
   if (!status) return null;
   if (status.tracking === 'awaiting_dispatch_run') {
@@ -86,6 +88,16 @@ function RetryQueueIndicator({ status }: { status: RetryQueueStatus | null }) {
   );
 }
 
+function IntegrityQueueIndicator({ status }: { status: IntegrityQueueStatus | null }) {
+  if (!status) return null;
+  const blocked = status.blocked > 0;
+  return <div className={`rounded-xl border p-3 text-xs ${blocked ? 'border-rose-500/30 bg-rose-950/20' : 'border-slate-800 bg-black/30'}`}>
+    <div className="flex items-center justify-between gap-3"><span className="font-semibold text-slate-200">승인 번역 무결성 복구</span><span className={blocked ? 'text-rose-300' : 'text-emerald-300'}>{blocked ? '안전 차단됨' : '자동 처리 중'}</span></div>
+    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-slate-400"><span>즉시 {status.ready}</span><span>대기 {status.deferred}</span><span>완료 {status.completed}</span><span className={blocked ? 'text-rose-300 font-medium' : ''}>충돌 {status.blocked}</span></div>
+    {status.latestFailureCode && <p className="mt-2 text-slate-500">최근 보호 사유: {status.latestFailureCode}</p>}
+  </div>;
+}
+
 export default function AdminSystemPage() {
   const [running, setRunning] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([
@@ -96,6 +108,7 @@ export default function AdminSystemPage() {
   const [scraperStatus, setScraperStatus] = useState<WorkflowStatus | null>(null);
   const [maintenanceStatus, setMaintenanceStatus] = useState<WorkflowStatus | null>(null);
   const [retryQueueStatus, setRetryQueueStatus] = useState<RetryQueueStatus | null>(null);
+  const [integrityQueueStatus, setIntegrityQueueStatus] = useState<IntegrityQueueStatus | null>(null);
   const [dispatchRequestedAt, setDispatchRequestedAt] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -107,14 +120,16 @@ export default function AdminSystemPage() {
           if (requestedAt) params.set('dispatchRequestedAt', requestedAt);
           return `/api/admin/system/workflow-status?${params.toString()}`;
         };
-        const [scraperRes, maintRes, retryRes] = await Promise.all([
+        const [scraperRes, maintRes, retryRes, integrityRes] = await Promise.all([
           fetch(workflowStatusUrl('scraper.yml'), { cache: 'no-store' }),
           fetch(workflowStatusUrl('maintenance.yml'), { cache: 'no-store' }),
           fetch('/api/admin/system/translation-retry-status', { cache: 'no-store' }),
+          fetch('/api/admin/system/translation-integrity-status', { cache: 'no-store' }),
         ]);
         if (scraperRes.ok) setScraperStatus(await scraperRes.json());
         if (maintRes.ok) setMaintenanceStatus(await maintRes.json());
         if (retryRes.ok) setRetryQueueStatus(await retryRes.json());
+        if (integrityRes.ok) setIntegrityQueueStatus(await integrityRes.json());
       } catch (err) {
         console.error('Failed to fetch workflow status', err);
       }
@@ -249,6 +264,7 @@ export default function AdminSystemPage() {
           </div>
 
           <RetryQueueIndicator status={retryQueueStatus} />
+          <IntegrityQueueIndicator status={integrityQueueStatus} />
 
         </div>
 

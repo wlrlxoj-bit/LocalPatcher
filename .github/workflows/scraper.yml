@@ -97,3 +97,38 @@ jobs:
         PATCHER_REVALIDATE_URL: https://localpatcher.com/api/internal/revalidate-patcher
         PATCHER_REVALIDATE_SECRET: ${{ secrets.PATCHER_REVALIDATE_SECRET }}
       run: python scripts/reprocess_pending_translations.py --apply --provider gemini --limit 4
+
+  integrity-recovery:
+    needs: [crawl, reprocess-ready]
+    # 크롤링과 일반 재번역이 모두 성공한 뒤에만 실행한다. 승인본은 복구 대상이 아니며,
+    # 한 번에 하나만 동일 바이너리 신원 검증 후 누락 언어 슬롯을 보완한다.
+    if: ${{ always() && !cancelled() && needs.crawl.result == 'success' && needs.reprocess-ready.result == 'success' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_url == '')) }}
+    concurrency:
+      group: translation-integrity-recovery-production
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out repository code
+      uses: actions/checkout@v4
+    - name: Set up Python environment
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - name: Install scraper dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests beautifulsoup4 pefile supabase python-dotenv
+    - name: Recover one verified missing translation slot
+      env:
+        NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        GEMINI_MODEL: gemini-2.5-flash
+        GEMINI_MONTHLY_MAX_CHARS: ${{ vars.GEMINI_MONTHLY_MAX_CHARS }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        OPENAI_FALLBACK_MONTHLY_MAX_CHARS: ${{ vars.OPENAI_FALLBACK_MONTHLY_MAX_CHARS }}
+        OPENAI_FALLBACK_MAX_REQUESTS: ${{ vars.OPENAI_FALLBACK_MAX_REQUESTS || '8' }}
+        OPENAI_FALLBACK_MAX_CHARS: ${{ vars.OPENAI_FALLBACK_MAX_CHARS || '12000' }}
+        PATCHER_REVALIDATE_URL: https://localpatcher.com/api/internal/revalidate-patcher
+        PATCHER_REVALIDATE_SECRET: ${{ secrets.PATCHER_REVALIDATE_SECRET }}
+      run: python scripts/recover_translation_integrity.py --apply --provider gemini --limit 1
