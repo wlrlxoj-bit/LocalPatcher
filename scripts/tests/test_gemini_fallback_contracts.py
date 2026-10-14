@@ -76,7 +76,10 @@ class GeminiFallbackContracts(unittest.TestCase):
 
     def test_openai_fallback_budget_blocks_before_network_request(self):
         class QuotaError(RuntimeError):
-            pass
+            def __init__(self, message="TRANSLATION_QUOTA", reason_code="UNKNOWN", status_code=None):
+                self.reason_code = reason_code
+                self.status_code = status_code
+                super().__init__(message)
 
         class Requests:
             def post(self, *_args, **_kwargs):
@@ -100,7 +103,10 @@ class GeminiFallbackContracts(unittest.TestCase):
 
     def test_gemini_reservation_failure_blocks_http_request(self):
         class QuotaError(RuntimeError):
-            pass
+            def __init__(self, message="TRANSLATION_QUOTA", reason_code="UNKNOWN", status_code=None):
+                self.reason_code = reason_code
+                self.status_code = status_code
+                super().__init__(message)
 
         class Requests:
             def post(self, *_args, **_kwargs):
@@ -149,10 +155,15 @@ class GeminiFallbackContracts(unittest.TestCase):
 
     def test_gemini_http_403_or_429_uses_openai_fallback(self):
         class QuotaError(RuntimeError):
-            pass
+            def __init__(self, message="TRANSLATION_QUOTA", reason_code="UNKNOWN", status_code=None):
+                self.reason_code = reason_code
+                self.status_code = status_code
+                super().__init__(message)
 
         translator = load_function("_translate_via_llm_with_fallback", {
             "TranslationQuotaError": QuotaError,
+            "TranslationProviderError": type("TranslationProviderError", (RuntimeError,), {}),
+            "retry_failure_policy": lambda _exc: ("deferred", "TRANSLATION_QUOTA", 86400),
             "_chunk_translation_items": lambda lines: [lines],
             "_build_llm_prompt": lambda *_args: "prompt",
             "print": lambda *_args: None,
@@ -178,10 +189,15 @@ class GeminiFallbackContracts(unittest.TestCase):
 
     def test_gemini_quota_or_reservation_unavailable_uses_openai_fallback(self):
         class QuotaError(RuntimeError):
-            pass
+            def __init__(self, message="TRANSLATION_QUOTA", reason_code="UNKNOWN", status_code=None):
+                self.reason_code = reason_code
+                self.status_code = status_code
+                super().__init__(message)
 
         translator = load_function("_translate_via_llm_with_fallback", {
             "TranslationQuotaError": QuotaError,
+            "TranslationProviderError": type("TranslationProviderError", (RuntimeError,), {}),
+            "retry_failure_policy": lambda _exc: ("deferred", "TRANSLATION_QUOTA", 86400),
             "_chunk_translation_items": lambda lines: [lines],
             "_build_llm_prompt": lambda *_args: "prompt",
             "print": lambda *_args: None,
@@ -207,10 +223,15 @@ class GeminiFallbackContracts(unittest.TestCase):
 
     def test_openai_quota_failure_does_not_continue_to_another_provider(self):
         class QuotaError(RuntimeError):
-            pass
+            def __init__(self, message="TRANSLATION_QUOTA", reason_code="UNKNOWN", status_code=None):
+                self.reason_code = reason_code
+                self.status_code = status_code
+                super().__init__(message)
 
         translator = load_function("_translate_via_llm_with_fallback", {
             "TranslationQuotaError": QuotaError,
+            "TranslationProviderError": type("TranslationProviderError", (RuntimeError,), {}),
+            "retry_failure_policy": lambda _exc: ("deferred", "TRANSLATION_QUOTA", 86400),
             "_chunk_translation_items": lambda lines: [lines],
             "_build_llm_prompt": lambda *_args: "prompt",
             "print": lambda *_args: None,

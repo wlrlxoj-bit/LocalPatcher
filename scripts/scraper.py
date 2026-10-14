@@ -87,7 +87,16 @@ last_fling_request_at = 0.0
 fling_retry_sleep_used_seconds = 0
 
 class TranslationQuotaError(RuntimeError):
-    pass
+    """민감한 외부 세부정보 없이 고정 quota 사유와 선택적 HTTP 상태를 보존한다."""
+
+    def __init__(self, message="TRANSLATION_QUOTA", reason_code="UNKNOWN", status_code=None):
+        self.reason_code = reason_code if reason_code in {
+            "UNKNOWN", "RUN_REQUEST_CAP", "RUN_CHAR_CAP", "MONTHLY_CONFIG_MISSING",
+            "MONTHLY_CONFIG_REJECTED", "MONTHLY_RESERVE_FAILED",
+            "MONTHLY_QUOTA_EXHAUSTED", "MONTHLY_FINALIZE_FAILED", "PROVIDER_HTTP_QUOTA",
+        } else "UNKNOWN"
+        self.status_code = status_code if type(status_code) is int and status_code in (403, 429) else None
+        super().__init__(message)
 
 
 class TranslationProviderError(RuntimeError):
@@ -412,7 +421,9 @@ def _call_openai(lines_to_translate, prompt, temperature):
     }
     res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=30)
     if res.status_code in (403, 429):
-        raise TranslationQuotaError(f"OpenAI 유료 번역 할당량 중단: HTTP {res.status_code}")
+        raise TranslationQuotaError(
+            reason_code="PROVIDER_HTTP_QUOTA", status_code=res.status_code,
+        )
     if res.status_code != 200:
         raise TranslationProviderError(res.status_code)
     text_response = res.json()["choices"][0]["message"]["content"]
@@ -432,24 +443,24 @@ def openai_automation_fallback_available():
 def _reserve_automation_usage(provider, characters, monthly_max_chars):
     """공유 월 사용량을 원자적으로 예약한다. RPC를 사용할 수 없으면 비용 호출을 막는다."""
     if monthly_max_chars <= 0 or translation_usage_db is None:
-        raise TranslationQuotaError(f"{provider} 자동 번역 월 예산이 설정되지 않았습니다")
+        raise TranslationQuotaError(reason_code="MONTHLY_CONFIG_MISSING")
     try:
         configured = translation_usage_db.rpc("configure_translation_usage_limit", {
             "p_provider": provider,
             "p_hard_limit_characters": monthly_max_chars,
         }).execute().data
         if configured is not True:
-            raise TranslationQuotaError(f"{provider} 월 예산을 설정할 수 없습니다")
+            raise TranslationQuotaError(reason_code="MONTHLY_CONFIG_REJECTED")
         reservation = translation_usage_db.rpc("reserve_translation_usage", {
             "p_provider": provider,
             "p_characters": characters,
         }).execute().data
     except TranslationQuotaError:
         raise
-    except Exception as exc:
-        raise TranslationQuotaError(f"{provider} 공유 월 예산을 확인할 수 없습니다") from exc
+    except Exception:
+        raise TranslationQuotaError(reason_code="MONTHLY_RESERVE_FAILED") from None
     if not isinstance(reservation, str) or not reservation:
-        raise TranslationQuotaError(f"{provider} 월 예산을 초과했습니다")
+        raise TranslationQuotaError(reason_code="MONTHLY_QUOTA_EXHAUSTED")
     return reservation
 
 
@@ -461,8 +472,8 @@ def _finalize_automation_usage(reservation_id, consumed):
         }).execute().data
         if completed is not True:
             raise RuntimeError("reservation finalize rejected")
-    except Exception as exc:
-        raise TranslationQuotaError("자동 번역 공유 월 예산 확정에 실패했습니다") from exc
+    except Exception:
+        raise TranslationQuotaError(reason_code="MONTHLY_FINALIZE_FAILED") from None
 
 
 def _call_openai_fallback(lines_to_translate, prompt, temperature):
@@ -470,11 +481,11 @@ def _call_openai_fallback(lines_to_translate, prompt, temperature):
     global openai_fallback_requests, openai_fallback_chars
     request_chars = sum(len(line) for line in lines_to_translate)
     if openai_fallback_requests >= OPENAI_FALLBACK_MAX_REQUESTS:
-        raise TranslationQuotaError("OpenAI 보조 번역 요청 상한에 도달했습니다")
+        raise TranslationQuotaError(reason_code="RUN_REQUEST_CAP")
     if openai_fallback_chars + request_chars > OPENAI_FALLBACK_MAX_CHARS:
-        raise TranslationQuotaError("OpenAI 보조 번역 문자 상한에 도달했습니다")
+        raise TranslationQuotaError(reason_code="RUN_CHAR_CAP")
     if not openai_automation_fallback_available():
-        raise TranslationQuotaError("OpenAI 자동 보조 번역 월 예산이 설정되지 않았습니다")
+        raise TranslationQuotaError(reason_code="MONTHLY_CONFIG_MISSING")
     reservation_id = _reserve_automation_usage(
         "openai_paid", request_chars, OPENAI_FALLBACK_MONTHLY_MAX_CHARS,
     )
@@ -505,7 +516,9 @@ def _call_azure(lines_to_translate, _prompt, _temperature):
             target_language = "ko"
         res = requests.post(f"{AZURE_TRANSLATOR_ENDPOINT}/translate?api-version=3.0&from=en&to={target_language}", headers=headers, json=[{"Text": line} for line in lines_to_translate], timeout=30)
         if res.status_code in (403, 429):
-            raise TranslationQuotaError(f"Azure Translator 할당량 중단: HTTP {res.status_code}")
+            raise TranslationQuotaError(
+                reason_code="PROVIDER_HTTP_QUOTA", status_code=res.status_code,
+            )
         if res.status_code >= 500 and attempt < 2:
             time.sleep(attempt + 1)
             continue
@@ -565,10 +578,19 @@ def _translate_via_llm_with_fallback(lines_to_translate, language, example_trans
         except Exception as exc:
             # 타입·HTTP 상태를 보존하되 공급자 응답과 요청 URL은 출력하지 않는다.
             _state, failure_code, _delay = retry_failure_policy(exc)
-            status = exc.status_code if isinstance(exc, TranslationProviderError) else None
+            raw_status = getattr(exc, "status_code", None)
+            status = raw_status if type(raw_status) is int and 100 <= raw_status <= 599 else None
+            raw_reason = getattr(exc, "reason_code", None)
+            quota_reasons = {
+                "UNKNOWN", "RUN_REQUEST_CAP", "RUN_CHAR_CAP", "MONTHLY_CONFIG_MISSING",
+                "MONTHLY_CONFIG_REJECTED", "MONTHLY_RESERVE_FAILED",
+                "MONTHLY_QUOTA_EXHAUSTED", "MONTHLY_FINALIZE_FAILED", "PROVIDER_HTTP_QUOTA",
+            }
+            quota_reason = raw_reason if isinstance(exc, TranslationQuotaError) and raw_reason in quota_reasons else None
             provider_code = {"Gemini": "GEMINI", "OpenAI Paid Fallback": "OPENAI_FALLBACK",
                              "OpenAI Paid": "OPENAI", "Azure": "AZURE"}.get(provider_name, "UNKNOWN")
-            print(f"[TRANSLATION_PROVIDER_FAILED] provider={provider_code} code={failure_code} status={status or 0}")
+            detail = f" quota_reason={quota_reason}" if quota_reason else ""
+            print(f"[TRANSLATION_PROVIDER_FAILED] provider={provider_code} code={failure_code}{detail} status={status or 0}")
             if isinstance(exc, TranslationQuotaError):
                 # Gemini의 월 예산/예약 실패도 GPT 보조 번역을 시도해야 한다.
                 # 반면 GPT 보조 경로의 예산 실패는 더 비싼 재시도를 만들 수 있으므로
