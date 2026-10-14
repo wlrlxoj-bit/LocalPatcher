@@ -308,21 +308,56 @@ export async function getPatcherSitemapSnapshotEntries(locales: readonly string[
   if (!supabase || validLocales.length === 0) {
     throw new Error('사이트맵 색인 자격 snapshot을 읽을 수 없습니다.');
   }
-  const { data, error } = await supabase.rpc('list_patcher_indexable_sitemap_entries', {
-    p_locales: validLocales,
-  });
-  if (error || !data) throw error || new Error('사이트맵 색인 자격 snapshot 조회에 실패했습니다.');
+  const entries: PatcherSitemapSnapshotEntry[] = [];
+  const seen = new Set<string>();
+  let expectedCount: number | null = null;
 
-  return (data as SitemapSnapshotRow[]).map((row) => {
-    if (!isAutoLocalizationLocale(row.language_code) || !row.canonical_slug || !row.content_updated_at) {
-      throw new Error('사이트맵 색인 자격 snapshot 형식이 올바르지 않습니다.');
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    const { data, error, count } = await supabase
+      .rpc('list_patcher_indexable_sitemap_entries', {
+        p_locales: validLocales,
+      }, { count: 'exact' })
+      .range(from, to);
+    if (error) throw error;
+    if (!Array.isArray(data) || typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) {
+      throw new Error('사이트맵 색인 자격 snapshot 페이지 정보가 올바르지 않습니다.');
     }
-    const contentUpdatedAt = new Date(row.content_updated_at);
-    if (Number.isNaN(contentUpdatedAt.getTime())) {
-      throw new Error('사이트맵 색인 자격 snapshot 시각이 올바르지 않습니다.');
+    if (expectedCount === null) {
+      expectedCount = count;
+      if (expectedCount > PAGE_SIZE * MAX_PAGES) {
+        throw new Error('사이트맵 색인 자격 snapshot이 최대 페이지 수를 초과했습니다.');
+      }
+    } else if (count !== expectedCount) {
+      throw new Error('사이트맵 색인 자격 snapshot 건수가 페이지 사이에 변경되었습니다.');
     }
-    return { locale: row.language_code, slug: row.canonical_slug, contentUpdatedAt };
-  });
+
+    const expectedPageLength = Math.min(PAGE_SIZE, Math.max(0, expectedCount - from));
+    if (data.length !== expectedPageLength) {
+      throw new Error('사이트맵 색인 자격 snapshot 페이지가 완전하지 않습니다.');
+    }
+
+    for (const rawRow of data) {
+      const row = rawRow as SitemapSnapshotRow;
+      if (!row || !isAutoLocalizationLocale(row.language_code) || typeof row.canonical_slug !== 'string'
+          || !row.canonical_slug || typeof row.content_updated_at !== 'string' || !row.content_updated_at) {
+        throw new Error('사이트맵 색인 자격 snapshot 형식이 올바르지 않습니다.');
+      }
+      const key = `${row.language_code}\u0000${row.canonical_slug}`;
+      if (seen.has(key)) throw new Error('사이트맵 색인 자격 snapshot에 중복 항목이 있습니다.');
+      seen.add(key);
+      const contentUpdatedAt = new Date(row.content_updated_at);
+      if (Number.isNaN(contentUpdatedAt.getTime())) {
+        throw new Error('사이트맵 색인 자격 snapshot 시각이 올바르지 않습니다.');
+      }
+      entries.push({ locale: row.language_code, slug: row.canonical_slug, contentUpdatedAt });
+    }
+
+    if (entries.length === expectedCount) return entries;
+  }
+
+  throw new Error('사이트맵 색인 자격 snapshot 조회가 최대 페이지 수에 도달했습니다.');
 }
 
 /**

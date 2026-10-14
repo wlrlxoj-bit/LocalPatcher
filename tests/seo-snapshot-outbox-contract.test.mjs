@@ -16,10 +16,13 @@ test('sitemap은 전체 번역 테이블이 아니라 검증 snapshot과 데이�
   assert.match(sitemap, /lastModified:\s*entry\.contentUpdatedAt/);
   assert.doesNotMatch(sitemap, /getEligiblePatcherSlugsByLocale/);
   assert.match(eligibility, /list_patcher_indexable_sitemap_entries/);
-  assert.match(eligibility, /throw error \|\| new Error\('사이트맵 색인 자격 snapshot 조회에 실패했습니다\.'/);
   const snapshotStart = eligibility.indexOf('export async function getPatcherSitemapSnapshotEntries');
   const snapshot = eligibility.slice(snapshotStart);
   assert.ok(snapshotStart >= 0);
+  assert.match(snapshot, /if \(error\) throw error;/);
+  assert.match(snapshot, /if \(!Array\.isArray\(data\)[\s\S]*?throw new Error\('사이트맵 색인 자격 snapshot 페이지 정보가 올바르지 않습니다\.'/);
+  assert.match(snapshot, /if \(data\.length !== expectedPageLength\)[\s\S]*?throw new Error\('사이트맵 색인 자격 snapshot 페이지가 완전하지 않습니다\.'/);
+  assert.match(snapshot, /100 \* PAGE_SIZE|PAGE_SIZE \* MAX_PAGES/);
   assert.doesNotMatch(snapshot, /빈 목록으로 처리합니다/);
 });
 
