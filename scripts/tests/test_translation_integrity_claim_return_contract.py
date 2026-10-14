@@ -99,7 +99,7 @@ class ClaimFailureObservabilityContracts(unittest.TestCase):
             'create_client': lambda *_: db,
             'scraper': types.SimpleNamespace(),
             'claim_failure_marker': self.marker,
-            'process_claim': lambda *args: processed.append(args) or True,
+            'process_claim': lambda *args: processed.append(args) or 'completed',
         }
         main, = load_functions('recover_translation_integrity.py', ['main'], namespace)
         output = io.StringIO()
@@ -133,7 +133,8 @@ class ClaimFailureObservabilityContracts(unittest.TestCase):
             with self.subTest(claims_count=len(claims or [])):
                 status, output, _calls, processed = self.run_main(claims=claims)
                 self.assertEqual(status, 0)
-                self.assertEqual(output, f'[INTEGRITY_RECOVERY_RUN] queued=3 claimed={len(claims or [])} failures=0\n')
+                completed = len(claims or [])
+                self.assertEqual(output, f'[INTEGRITY_RECOVERY_RUN] queued=3 claimed={completed} completed={completed} deferred=0 blocked=0 failed=0 incomplete=0 failures=0\n')
                 self.assertEqual(len(processed), len(claims or []))
 
 

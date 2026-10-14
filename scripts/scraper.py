@@ -90,14 +90,21 @@ class TranslationQuotaError(RuntimeError):
     pass
 
 
+class TranslationProviderError(RuntimeError):
+    """응답 본문·URL 없이 HTTP 상태만 보존하는 공급자 오류다."""
+
+    def __init__(self, status_code):
+        self.status_code = status_code if type(status_code) is int and 100 <= status_code <= 599 else None
+        super().__init__("TRANSLATION_API_HTTP")
+
+
 def retry_failure_policy(exc):
     """재시도 가능한 공급자 장애와 영구 번역 실패를 안전한 코드로 분리한다."""
     if isinstance(exc, TranslationQuotaError):
         return "deferred", "TRANSLATION_QUOTA", 86400
     if isinstance(exc, (requests.Timeout, requests.ConnectionError)):
         return "deferred", "TRANSLATION_API_TEMPORARY", 1800
-    message = str(exc)
-    if isinstance(exc, RuntimeError) and any(token in message for token in ("HTTP 429", "HTTP 500", "HTTP 502", "HTTP 503", "HTTP 504")):
+    if isinstance(exc, TranslationProviderError) and (exc.status_code == 429 or (exc.status_code is not None and exc.status_code >= 500)):
         return "deferred", "TRANSLATION_API_TEMPORARY", 1800
     return "blocked", "TRANSLATION_PERMANENT", 0
 
@@ -379,7 +386,7 @@ def _call_gemini(lines_to_translate, prompt, _temperature):
         request_started = True
         res = requests.post(url, json=payload, timeout=15)
         if res.status_code != 200:
-            raise RuntimeError(f"Gemini API가 HTTP {res.status_code}을 반환했습니다")
+            raise TranslationProviderError(res.status_code)
         try:
             text_response = res.json()["candidates"][0]["content"]["parts"][0]["text"]
         except (KeyError, IndexError, TypeError, ValueError) as exc:
@@ -407,7 +414,7 @@ def _call_openai(lines_to_translate, prompt, temperature):
     if res.status_code in (403, 429):
         raise TranslationQuotaError(f"OpenAI 유료 번역 할당량 중단: HTTP {res.status_code}")
     if res.status_code != 200:
-        raise RuntimeError(f"OpenAI API가 HTTP {res.status_code}을 반환했습니다")
+        raise TranslationProviderError(res.status_code)
     text_response = res.json()["choices"][0]["message"]["content"]
     return _parse_indexed_translations(text_response, len(lines_to_translate))
 
@@ -503,7 +510,7 @@ def _call_azure(lines_to_translate, _prompt, _temperature):
             time.sleep(attempt + 1)
             continue
         if res.status_code != 200:
-            raise RuntimeError(f"Azure Translator HTTP {res.status_code}")
+            raise TranslationProviderError(res.status_code)
         rows = res.json()
         if not isinstance(rows, list) or len(rows) != len(lines_to_translate):
             actual = len(rows) if isinstance(rows, list) else "invalid"
@@ -548,8 +555,7 @@ def _translate_via_llm_with_fallback(lines_to_translate, language, example_trans
             )
         return translated
 
-    language_label = "한국어" if language == "Korean" else "일본어"
-    last_error = "번역 제공자가 성공적으로 응답하지 않았습니다"
+    last_error = None
     prompt = _build_llm_prompt(lines_to_translate, language, example_translation)
     for provider_name, provider in providers:
         try:
@@ -557,6 +563,12 @@ def _translate_via_llm_with_fallback(lines_to_translate, language, example_trans
             last_llm_provider = provider_name
             return result
         except Exception as exc:
+            # 타입·HTTP 상태를 보존하되 공급자 응답과 요청 URL은 출력하지 않는다.
+            _state, failure_code, _delay = retry_failure_policy(exc)
+            status = exc.status_code if isinstance(exc, TranslationProviderError) else None
+            provider_code = {"Gemini": "GEMINI", "OpenAI Paid Fallback": "OPENAI_FALLBACK",
+                             "OpenAI Paid": "OPENAI", "Azure": "AZURE"}.get(provider_name, "UNKNOWN")
+            print(f"[TRANSLATION_PROVIDER_FAILED] provider={provider_code} code={failure_code} status={status or 0}")
             if isinstance(exc, TranslationQuotaError):
                 # Gemini의 월 예산/예약 실패도 GPT 보조 번역을 시도해야 한다.
                 # 반면 GPT 보조 경로의 예산 실패는 더 비싼 재시도를 만들 수 있으므로
@@ -564,10 +576,13 @@ def _translate_via_llm_with_fallback(lines_to_translate, language, example_trans
                 # 고정 계약이며, 외부 응답 내용은 로그에 기록하지 않는다.
                 if provider_name != "Gemini":
                     raise
-            last_error = str(exc)
-            print(f"[-] {provider_name} {language_label} 일괄 번역 실패: {type(exc).__name__}")
+            last_error = exc
 
-    raise RuntimeError(f"{language_label} 일괄 번역 실패: {last_error}")
+    # 보조 경로가 없거나 모든 공급자가 실패해도 quota·일시 장애를 영구 실패로
+    # 바꾸지 않는다. 알 수 없는 예외 본문은 상위 traceback에도 전달하지 않는다.
+    if isinstance(last_error, (TranslationQuotaError, TranslationProviderError, requests.Timeout, requests.ConnectionError)):
+        raise last_error
+    raise RuntimeError("TRANSLATION_PERMANENT") from None
 
 
 def _split_option_for_translation(line):

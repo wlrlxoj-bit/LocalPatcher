@@ -138,10 +138,14 @@ def finish(db, claim, state, code=None, delay_seconds=0):
             "p_failure_code": safe_code(code) if code else None,
             "p_delay_seconds": delay_seconds,
         }).execute()
-        return result.data is True
+        if result.data is True:
+            print(f"[INTEGRITY_RECOVERY_OUTCOME] state={state} code={safe_code(code) if code else 'NONE'}")
+            return state
     except Exception:
         print("[INTEGRITY_QUEUE_FINISH_FAILED]")
-        return False
+        return "failed"
+    print("[INTEGRITY_QUEUE_FINISH_FAILED]")
+    return "failed"
 
 
 def renew_lease(db, claim):
@@ -158,8 +162,7 @@ def renew_lease(db, claim):
 
 def lease_renewal_failed(db, claim):
     """lease가 유효하면 defer하고, 이미 만료됐으면 DB 변경 없이 즉시 종료한다."""
-    finish(db, claim, "deferred", "LEASE_RENEWAL_FAILED", 1800)
-    return False
+    return finish(db, claim, "deferred", "LEASE_RENEWAL_FAILED", 1800)
 
 
 def get_mappings(db, trainer_id):
@@ -349,7 +352,7 @@ def process_claim(db, claim, provider):
     """한 claim을 처리한다. 승인·수동 행은 어떤 경로에서도 update/delete하지 않는다."""
     trainer_id = claim.get("trainer_id")
     if not isinstance(trainer_id, int) or not claim.get("lease_token") or not scraper.is_official_fling_trainer_url(claim.get("fling_url")):
-        return finish(db, claim, "blocked", "SOURCE_URL_INVALID") if isinstance(trainer_id, int) and claim.get("lease_token") else False
+        return finish(db, claim, "blocked", "SOURCE_URL_INVALID") if isinstance(trainer_id, int) and claim.get("lease_token") else "failed"
     try:
         rows = get_mappings(db, trainer_id)
     except Exception:
@@ -403,8 +406,9 @@ def process_claim(db, claim, provider):
                 db, claim=claim, binary=binary, text_section=text_section,
                 locale=locale, source=source,
             ))
-    except Exception:
-        return finish(db, claim, "deferred", "RECOVERY_WORKER_FAILED", 1800)
+    except Exception as error:
+        state, code, delay = scraper.retry_failure_policy(error)
+        return finish(db, claim, state, code, delay)
     if any(item is None for item in prepared):
         return finish(db, claim, "blocked", "RECOVERY_VALIDATION_FAILED")
     # apply RPC는 lease, 최신 trainer, source/target snapshot을 모두 다시 잠근 뒤
@@ -414,7 +418,8 @@ def process_claim(db, claim, provider):
     if not apply_prepared_batch(db, claim, prepared):
         return finish(db, claim, "deferred", "RECOVERY_BATCH_APPLY_FAILED", 1800)
     scraper.revalidate_patcher_after_automation(trainer_id)
-    return True
+    print("[INTEGRITY_RECOVERY_OUTCOME] state=completed code=NONE")
+    return "completed"
 
 
 def claim_failure_marker(error):
@@ -461,8 +466,21 @@ def main():
     except Exception as error:
         print(claim_failure_marker(error))
         return 1
-    failures = sum(not process_claim(db, claim, args.provider) for claim in claims)
-    print(f"[INTEGRITY_RECOVERY_RUN] queued={int(queued or 0)} claimed={len(claims)} failures={failures}")
+    counts = {state: 0 for state in ("completed", "deferred", "blocked", "failed")}
+    for claim in claims:
+        try:
+            outcome = process_claim(db, claim, args.provider)
+        except Exception:
+            # 예상 밖 worker 오류는 성공으로 집계하지 않으며 비밀 없는 코드만 남긴다.
+            print("[INTEGRITY_RECOVERY_WORKER_FAILED]")
+            outcome = "failed"
+        counts[outcome if isinstance(outcome, str) and outcome in counts else "failed"] += 1
+    failures = counts["failed"]
+    incomplete = counts["deferred"] + counts["blocked"] + failures
+    print(f"[INTEGRITY_RECOVERY_RUN] queued={int(queued or 0)} claimed={len(claims)} "
+          f"completed={counts['completed']} deferred={counts['deferred']} blocked={counts['blocked']} "
+          f"failed={failures} incomplete={incomplete} failures={failures}")
+    # 큐에 안전하게 저장한 보류·차단은 배치 실행 실패가 아니지만 완료도 아니다.
     return 1 if failures else 0
 
 

@@ -2,6 +2,7 @@
 
 import ast
 import pathlib
+import types
 import unittest
 
 
@@ -9,25 +10,23 @@ SCRIPTS = pathlib.Path(__file__).resolve().parents[1]
 
 
 def load_function(name, namespace):
-    source = (SCRIPTS / "scraper.py").read_text(encoding="utf-8")
-    module = ast.parse(source)
-    node = next(
-        item for item in module.body
-        if isinstance(item, ast.FunctionDef) and item.name == name
-    )
-    scope = dict(namespace)
-    exec(compile(ast.Module(body=[node], type_ignores=[]), "scraper.py", "exec"), scope)
-    return scope[name]
+    return load_functions([name], namespace)[0]
 
 
 def load_functions(names, namespace):
     source = (SCRIPTS / "scraper.py").read_text(encoding="utf-8")
     module = ast.parse(source)
+    scope = dict(namespace)
+    scope.setdefault("requests", types.SimpleNamespace(
+        Timeout=type("Timeout", (Exception,), {}),
+        ConnectionError=type("ConnectionError", (Exception,), {}),
+    ))
+    dependencies = {"TranslationQuotaError", "TranslationProviderError", "retry_failure_policy"}
     nodes = [
         item for item in module.body
-        if isinstance(item, ast.FunctionDef) and item.name in names
+        if isinstance(item, (ast.FunctionDef, ast.ClassDef))
+        and (item.name in names or (item.name in dependencies and item.name not in scope))
     ]
-    scope = dict(namespace)
     exec(compile(ast.Module(body=nodes, type_ignores=[]), "scraper.py", "exec"), scope)
     return [scope[name] for name in names]
 
