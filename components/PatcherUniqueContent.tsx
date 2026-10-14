@@ -3,6 +3,8 @@ import { Languages, ListChecks } from 'lucide-react';
 import type { Locale } from '@/lib/i18n/types';
 import PatcherOptionSummary from '@/components/PatcherOptionSummary';
 import type { TrainerOptionSummary } from '@/lib/trainer-option-summary';
+import PatcherOptionTable from '@/components/PatcherOptionTable';
+import type { TrainerOptionTable } from '@/lib/trainer-option-table';
 
 interface PatcherUniqueContentProps {
   locale: Locale;
@@ -15,6 +17,7 @@ interface PatcherUniqueContentProps {
   tags: string[];
   translatedOptionCount: number;
   optionSummary: TrainerOptionSummary | null;
+  optionTable: TrainerOptionTable | null;
   sourceUrl?: string;
 }
 
@@ -47,6 +50,7 @@ export default function PatcherUniqueContent({
   tags,
   translatedOptionCount,
   optionSummary,
+  optionTable,
   sourceUrl,
 }: PatcherUniqueContentProps) {
   const labels = GAME_FACT_LABELS[locale] || GAME_FACT_LABELS.en;
@@ -110,6 +114,7 @@ export default function PatcherUniqueContent({
         </dl>
 
         <PatcherOptionSummary locale={locale} summary={optionSummary} />
+        <PatcherOptionTable locale={locale} table={optionTable} />
       </section>
 
       <nav aria-label={labels.title} className="mt-3 flex flex-wrap gap-4 text-xs text-cyan-400">

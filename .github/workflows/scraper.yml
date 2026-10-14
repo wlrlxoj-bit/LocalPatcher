@@ -18,6 +18,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  drain-patcher-revalidation-outbox:
+    # 수집 결과와 독립적으로 실행한다. 수집 실패가 ready/deferred 항목의 재시도를 막으면 안 된다.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Drain durable patcher revalidation outbox
+        env:
+          PATCHER_REVALIDATE_OUTBOX_URL: https://localpatcher.com/api/internal/drain-patcher-revalidation-outbox
+          PATCHER_REVALIDATE_SECRET: ${{ secrets.PATCHER_REVALIDATE_SECRET }}
+        run: |
+          curl --fail --silent --show-error --request POST \
+            --header "Authorization: Bearer ${PATCHER_REVALIDATE_SECRET}" \
+            "${PATCHER_REVALIDATE_OUTBOX_URL}"
+
   crawl:
     runs-on: ubuntu-latest
 

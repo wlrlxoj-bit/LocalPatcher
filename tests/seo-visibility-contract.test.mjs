@@ -78,7 +78,8 @@ test('색인 자격은 4개 자동 현지화 언어의 최신 승인·완전 번
   assert.match(source, /getPatcherIndexEligibilityByLocales/);
   assert.match(source, /getEligiblePatcherSlugsByLocale/);
   assert.match(source, /빈 목록으로 처리합니다/);
-  assert.doesNotMatch(source, /readStaleCache|snapshot/i);
+  // 상세 페이지 자격은 live fail-closed를 유지한다. sitemap 전용 snapshot과 섞지 않는다.
+  assert.match(source, /getPatcherSitemapSnapshotEntries/);
 });
 
 test('색인 자격 옵션 판정은 번역 검증기와 같은 단축키 형식을 세고 잘못된 줄은 거절한다', async () => {
@@ -121,12 +122,12 @@ test('색인 자격 옵션 판정은 번역 검증기와 같은 단축키 형식
     '병합된 최신 source 트레이너의 번역이 불완전하면 canonical 엘든 링도 noindex여야 합니다.');
 });
 
-test('사이트맵은 영문과 snapshot 재방출을 제외하고 자격 있는 동적 페이지만 담는다', async () => {
+test('사이트맵은 영문을 제외하고 검증 snapshot의 자격 있는 동적 페이지만 담는다', async () => {
   const source = await readFile(sitemapUrl, 'utf8');
   assert.match(source, /const locales = AUTO_LOCALIZATION_LOCALES/);
-  assert.match(source, /getEligiblePatcherSlugsByLocale\(locales\)/);
-  assert.match(source, /빈 목록으로 처리합니다/);
-  assert.doesNotMatch(source, /patchableSnapshot|locales\.en|last-known-good/);
+  assert.match(source, /getPatcherSitemapSnapshotEntries\(locales\)/);
+  assert.match(source, /lastModified:\s*entry\.contentUpdatedAt/);
+  assert.doesNotMatch(source, /locales\.en|last-known-good/);
 });
 
 test('패처 metadata·정적 생성·hreflang은 언어별 승인 자격을 확인한다', async () => {
@@ -182,7 +183,7 @@ test('색인 자격 조회는 sitemap 언어·본문 카드·홈 목록에서 �
   assert.match(eligibility, /getEligiblePatcherSlugsByLocale\(locales: readonly string\[\]\)/);
   assert.match(eligibility, /Promise\.all\(validLocales\.map/);
   assert.match(eligibility, /getEligiblePatcherSlugsForListedGames/);
-  assert.match(sitemap, /getEligiblePatcherSlugsByLocale\(locales\)/);
+  assert.match(sitemap, /getPatcherSitemapSnapshotEntries\(locales\)/);
   assert.doesNotMatch(sitemap, /for \(const locale of locales\)[\s\S]{0,300}getEligiblePatcherSlugs/);
   assert.match(page, /getPatcherIndexEligibilityByGameIds\([\s\S]*popularCandidates\.map[\s\S]*relatedCandidates\.map/);
   assert.match(home, /getEligiblePatcherSlugsForListedGames\(gamesData, locale\)/);

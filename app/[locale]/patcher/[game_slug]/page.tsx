@@ -29,6 +29,7 @@ import {
   getPatcherTrainers,
 } from '@/lib/content-eligibility';
 import { getTrainerOptionSummary } from '@/lib/trainer-option-summary';
+import { getTrainerOptionTable } from '@/lib/trainer-option-table';
 import { getTrainerProvenance } from '@/lib/trainer-provenance';
 import PatcherVerificationProvenance from '@/components/PatcherVerificationProvenance';
 
@@ -257,6 +258,14 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
   const optionSummary = latestTrainer
     ? getTrainerOptionSummary(mappingsMap[latestTrainer.id] || [])
     : null;
+  // 전체 번역 목록은 최신 ID·현재 언어·승인·색인 자격 및 정확한 옵션 수를 다시 검증합니다.
+  const optionTable = latestTrainer ? getTrainerOptionTable({
+    latestTrainerId: latestTrainer.id,
+    locale: currentLocale,
+    optionCount: supportedOptionCount,
+    indexEligible,
+    mappings: mappingsMap[latestTrainer.id] || [],
+  }) : null;
   // getMappingsForTrainers는 승인된 행만 반환한다. provenance 생성기에도 그 경계를
   // 명시해 불완전한 최신 매핑은 서버 본문에서 숨긴다.
   const provenance = getTrainerProvenance({
@@ -312,6 +321,7 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
               sourceUrl={game.fling_url}
               translatedOptionCount={translatedOptionCount}
               optionSummary={optionSummary}
+              optionTable={optionTable}
             />
             {indexEligible && provenance && (
               <PatcherVerificationProvenance locale={currentLocale as Locale} provenance={provenance} />

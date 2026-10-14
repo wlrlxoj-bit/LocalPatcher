@@ -29,7 +29,12 @@ test('수동 mapping 저장·승인은 서버 세션과 단일 mapping id만 신
 
 test('수동 상태 변경은 알려진 패처 경로만 무효화하고 sitemap 전체 무효화는 하지 않는다', async () => {
   const source = await read('lib/server/admin/revalidate-patcher.ts');
-  assert.match(source, /revalidatePath\(`\/\$\{locale\}\/patcher\/\$\{game\.slug\}`\)/);
+  assert.match(source, /rpc\('get_patcher_revalidation_target'/);
+  assert.match(source, /targets\.length !== 1/);
+  assert.match(source, /for \(const locale of PUBLIC_LOCALES\) revalidatePath\(`\/\$\{locale\}\/patcher\/\$\{targets\[0\]\.canonical_slug\}`\)/);
+  assert.match(source, /PUBLIC_LOCALES = \['ko', 'ja', 'de', 'es'\]/);
+  assert.doesNotMatch(source, /revalidatePath\(`\/\$\{locale\}\/patcher\/\$\{game\.slug\}`\)/);
+  assert.doesNotMatch(source, /sitemap: 'complete'/);
   assert.doesNotMatch(source, /revalidatePath\('\/sitemap\.xml'\)/);
   assert.doesNotMatch(source, /revalidatePath\('\/\[locale\]\/patcher\/\[game_slug\]', 'page'\)/);
   assert.match(source, /trainer_game_lookup_unavailable/);

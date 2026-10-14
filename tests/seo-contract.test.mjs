@@ -92,17 +92,17 @@ test('구조화 데이터와 sitemap 변경 시각 신호가 중복되거나 실
   assert.doesNotMatch(sitemapSource, /lastModified:\s*new Date\s*\(/);
 });
 
-test('sitemap은 승인된 URL 생성 루프를 유지하고 홈 링크는 별도로 canonicalize·중복 제거한다', async () => {
+test('sitemap은 검증 snapshot URL 생성 루프를 유지하고 홈 링크는 별도로 canonicalize·중복 제거한다', async () => {
   const [sitemapSource, localeHomeSource] = await Promise.all([
     readFile(sitemapUrl, 'utf8'),
     readFile(localeHomeUrl, 'utf8'),
   ]);
 
-  assert.match(sitemapSource, /getEligiblePatcherSlugsByLocale\(locales\)/);
+  assert.match(sitemapSource, /getPatcherSitemapSnapshotEntries\(locales\)/);
   assert.match(sitemapSource, /const locales = AUTO_LOCALIZATION_LOCALES/);
-  assert.doesNotMatch(sitemapSource, /patchableSnapshot|last-known-good/);
-  assert.match(sitemapSource, /for \(const locale of locales\)[\s\S]*for \(const slug of eligibleSlugs\.get\(locale\) \|\| \[\]\)/);
-  assert.match(sitemapSource, /url:\s*`\$\{SITE_URL\}\/\$\{locale\}\/patcher\/\$\{slug\}`/);
+  assert.match(sitemapSource, /for \(const entry of snapshotEntries\)/);
+  assert.match(sitemapSource, /url:\s*`\$\{SITE_URL\}\/\$\{entry\.locale\}\/patcher\/\$\{entry\.slug\}`/);
+  assert.match(sitemapSource, /lastModified:\s*entry\.contentUpdatedAt/);
 
   assert.match(localeHomeSource, /canonicalizeListedGameSlug\(game\.slug, existingSlugs, titleBySlug\)/);
   assert.match(localeHomeSource, /new Map\(directoryCandidates\.map/);
@@ -144,7 +144,7 @@ test('sitemap과 홈 디렉터리는 제목이 같은 숫자형 별칭만 동일
   assert.match(eligibilitySource, /const titleBySlug = new Map\(games\.map\(\(game\) => \[game\.slug, game\.title_en\]\)\)/);
   assert.match(eligibilitySource, /canonicalizeListedGameSlug\(slug, existingSlugs, titleBySlug\)/);
   assert.match(localeHomeSource, /canonicalizeListedGameSlug\(game\.slug, existingSlugs, titleBySlug\)/);
-  assert.doesNotMatch(sitemapSource, /patchableSnapshot|unavailableTitlesBySlug/);
+  assert.doesNotMatch(sitemapSource, /unavailableTitlesBySlug/);
 
   const canonicalizeFixture = (slug, existingSlugs, titleBySlug) => {
     const numericBase = /-trainer(?:-\d{6,})?$/.test(slug)

@@ -30,6 +30,19 @@ type MappingRow = {
   is_approved: boolean;
 };
 
+/** sitemap 전용으로 DB가 마지막 완전 검증 결과를 공개하는 최소 필드입니다. */
+export type PatcherSitemapSnapshotEntry = {
+  locale: IndexableLocale;
+  slug: string;
+  contentUpdatedAt: Date;
+};
+
+type SitemapSnapshotRow = {
+  language_code: string;
+  canonical_slug: string;
+  content_updated_at: string;
+};
+
 export function isAutoLocalizationLocale(locale: string): locale is IndexableLocale {
   return AUTO_LOCALIZATION_LOCALES.includes(locale as IndexableLocale);
 }
@@ -283,6 +296,33 @@ export async function getEligiblePatcherSlugsByLocale(locales: readonly string[]
     console.warn('사이트맵 색인 자격을 확정하지 못해 빈 목록으로 처리합니다:', error);
     return result;
   }
+}
+
+/**
+ * 공개 sitemap은 전체 games/trainers/mappings를 다시 계산하지 않고, 관리자 자동화가
+ * 원자적으로 publish한 자격 snapshot만 읽는다. 이 조회가 실패하면 호출자가 오류를
+ * 전파해야 한다. 빈 sitemap을 새로 생성하면 마지막 정상 ISR 결과를 덮어쓸 수 있기 때문이다.
+ */
+export async function getPatcherSitemapSnapshotEntries(locales: readonly string[]): Promise<PatcherSitemapSnapshotEntry[]> {
+  const validLocales = [...new Set(locales.filter(isAutoLocalizationLocale))];
+  if (!supabase || validLocales.length === 0) {
+    throw new Error('사이트맵 색인 자격 snapshot을 읽을 수 없습니다.');
+  }
+  const { data, error } = await supabase.rpc('list_patcher_indexable_sitemap_entries', {
+    p_locales: validLocales,
+  });
+  if (error || !data) throw error || new Error('사이트맵 색인 자격 snapshot 조회에 실패했습니다.');
+
+  return (data as SitemapSnapshotRow[]).map((row) => {
+    if (!isAutoLocalizationLocale(row.language_code) || !row.canonical_slug || !row.content_updated_at) {
+      throw new Error('사이트맵 색인 자격 snapshot 형식이 올바르지 않습니다.');
+    }
+    const contentUpdatedAt = new Date(row.content_updated_at);
+    if (Number.isNaN(contentUpdatedAt.getTime())) {
+      throw new Error('사이트맵 색인 자격 snapshot 시각이 올바르지 않습니다.');
+    }
+    return { locale: row.language_code, slug: row.canonical_slug, contentUpdatedAt };
+  });
 }
 
 /**
