@@ -83,7 +83,9 @@ class ReprocessQueueSafetyTests(unittest.TestCase):
 
         def fake_run(command, **kwargs):
             commands.append((command, kwargs))
-            return SimpleNamespace(returncode=0, stdout="")
+            return SimpleNamespace(returncode=0, stdout=(
+                f"[save-outcome] trainer={command[-1]} locale={command[-3]} status=approved"
+            ))
 
         with mock.patch.dict(os.environ, {
             "NEXT_PUBLIC_SUPABASE_URL": "https://example.supabase.co",
@@ -151,6 +153,118 @@ class ReprocessQueueSafetyTests(unittest.TestCase):
         self.assertIn("--requeue-safe-noindex", source)
         self.assertIn("--apply와 함께 단독", source)
         self.assertNotIn("requeue-safe-noindex", workflow)
+
+    def test_child_outcomes_require_exact_trainer_locale_and_never_print_originals(self):
+        details, = load_functions("reprocess_pending_translations.py", ["child_result_details"])
+        cases = [
+            (0, "[save-outcome] trainer=2730 locale=ko status=approved", "approved", "NONE"),
+            (0, "[save-outcome] trainer=2730 locale=ko status=preserved", "preserved", "NONE"),
+            (0, "[RETRY_PROTECTED] trainer=2730 locale=ko", "preserved", "EXISTING_MAPPING_PROTECTED"),
+            (1, "[RETRY_QUEUED] trainer=2730 locale=ko state=deferred code=TRANSLATION_QUOTA", "deferred", "TRANSLATION_QUOTA"),
+            (1, "[RETRY_QUEUED] trainer=2730 locale=ko state=blocked code=VALIDATION_FAILED", "blocked", "VALIDATION_FAILED"),
+            (0, "[ARCHIVE_ONLY_PAGE_SKIPPED] neutral", "skipped", "ARCHIVE_RAR_ONLY"),
+            (0, "", "unconfirmed", "CHILD_RESULT_UNCONFIRMED"),
+            (1, "ModuleNotFoundError: secret module body", "failed", "CHILD_DEPENDENCY_MISSING"),
+            (1, "Authorization: Bearer secret-key\nhttps://secret.example/private", "failed", "REPROCESS_CHILD_FAILED"),
+            (0, "[save-outcome] trainer=2731 locale=ko status=approved", "unconfirmed", "CHILD_RESULT_UNCONFIRMED"),
+            (0, "[save-outcome] trainer=2730 locale=ja status=approved", "unconfirmed", "CHILD_RESULT_UNCONFIRMED"),
+            (1, "[RETRY_QUEUED] trainer=2730 locale=ko state=deferred code=PRIVATE_SECRET", "failed", "REPROCESS_CHILD_FAILED"),
+        ]
+        for rc, output, outcome, code in cases:
+            with self.subTest(output=output):
+                result = details(rc, output, 2730, "ko")
+                self.assertEqual((result["outcome"], result["code"]), (outcome, code))
+                self.assertNotIn("secret", str(result).lower())
+
+    def test_provider_diagnostics_do_not_turn_successful_fallback_into_failure(self):
+        details, = load_functions("reprocess_pending_translations.py", ["child_result_details"])
+        result = details(0, (
+            "[TRANSLATION_PROVIDER_FAILED] provider=GEMINI code=TRANSLATION_PERMANENT status=402\n"
+            "[save-outcome] trainer=2730 locale=ko status=approved\n"
+            "[TRANSLATION_PROVIDER_FAILED] provider=secret code=TRANSLATION_PERMANENT status=402"
+        ), 2730, "ko")
+        self.assertEqual(result["outcome"], "approved")
+        self.assertEqual(result["providers"], [("GEMINI", "TRANSLATION_PERMANENT", "NONE", "402")])
+
+    def test_legacy_recovery_claim_is_explicit_and_not_the_default(self):
+        class Db:
+            def rpc(self, name, payload):
+                self.name, self.payload = name, payload
+                return SimpleNamespace(execute=lambda: SimpleNamespace(data=[]))
+
+        claim, = load_functions("reprocess_pending_translations.py", ["claim_due_retry_targets"], {
+            "urlparse": urlparse, "TARGET_LOCALES": ("ko", "ja", "de", "es"),
+        })
+        db = Db()
+        claim(db, 4, [2730])
+        self.assertEqual(db.name, "claim_legacy_internal_quota_recovery")
+        self.assertEqual(db.payload, {"p_limit": 4, "p_trainer_ids": [2730]})
+        claim(db, 4)
+        self.assertEqual(db.name, "claim_due_translation_retries")
+
+    def test_retry_only_workflow_preserves_scheduled_batch_and_is_shell_safe(self):
+        scripts = pathlib.Path(__file__).resolve().parents[1]
+        workflow = (scripts.parent / ".github/workflows/scraper.yml").read_text(encoding="utf-8")
+        self.assertIn("retry_only:", workflow)
+        self.assertIn("recover_internal_quota_trainer:", workflow)
+        self.assertEqual(workflow.count("github.event.inputs.retry_only != 'true'"), 3)
+        self.assertIn('2730|2731)', workflow)
+        self.assertIn('--recover-internal-quota-trainer "$RECOVERY_TRAINER"', workflow)
+        self.assertNotIn('--recover-internal-quota-trainer "${{', workflow)
+        self.assertIn("--discovery-limit 3", workflow)
+        self.assertIn("recover_translation_integrity.py --apply --provider gemini --limit 1", workflow)
+        self.assertIn("validate-inputs:", workflow)
+        self.assertIn("needs: [validate-inputs, crawl]", workflow)
+        self.assertIn("needs.validate-inputs.result == 'success'", workflow)
+        self.assertIn("[RETRY_ONLY_TARGET_URL_CONFLICT]", workflow)
+
+    def test_retry_target_mismatch_cannot_insert_or_translate(self):
+        """제품의 실제 early-continue 블록을 실행하여 미등록/다른 해시의 외부 쓰기를 막는다."""
+        script = pathlib.Path(__file__).resolve().parents[1] / "scraper.py"
+        tree = ast.parse(script.read_text(encoding="utf-8"))
+        fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "scrape_and_patch_trainer")
+        guard = next(node for node in ast.walk(fn) if isinstance(node, ast.If)
+                     and "retry_identity_mismatch = True" in ast.unparse(node)
+                     and "not any(" in ast.unparse(node.test))
+        guard_line = guard.lineno
+        inserts = [node.lineno for node in ast.walk(fn) if isinstance(node, ast.Call)
+                   and isinstance(node.func, ast.Attribute) and node.func.attr == "insert"]
+        self.assertTrue(inserts and all(line > guard_line for line in inserts))
+        # 실제 guard 뒤에 등록/번역 호출을 배치한 격리 루프이다.
+        module = ast.Module(body=[ast.For(
+            target=ast.Name(id="_", ctx=ast.Store()), iter=ast.Tuple(elts=[ast.Constant(1)], ctx=ast.Load()),
+            body=[guard, ast.Expr(value=ast.Call(func=ast.Name(id="insert", ctx=ast.Load()), args=[], keywords=[])),
+                  ast.Expr(value=ast.Call(func=ast.Name(id="translate", ctx=ast.Load()), args=[], keywords=[]))],
+            orelse=[],
+        )], type_ignores=[])
+        ast.fix_missing_locations(module)
+        for target, rows, calls in [(2730, [], 0), (2730, [{"id": 2731}], 0),
+                                    (2730, [{"id": 2730}], 1), (None, [], 1)]:
+            insert, translate = mock.Mock(), mock.Mock()
+            namespace = {"target_trainer_id": target, "trainer_res": SimpleNamespace(data=rows),
+                         "insert": insert, "translate": translate, "print": lambda *args: None}
+            exec(compile(module, str(script), "exec"), namespace)
+            self.assertEqual(insert.call_count, calls)
+            self.assertEqual(translate.call_count, calls)
+
+    def test_duplicate_hash_selects_exact_target_before_any_game_update(self):
+        """조회 첫 행이 다른 trainer라도 claim 대상의 game_id만 선택한다."""
+        script = pathlib.Path(__file__).resolve().parents[1] / "scraper.py"
+        tree = ast.parse(script.read_text(encoding="utf-8"))
+        fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "scrape_and_patch_trainer")
+        selection = next(node for node in ast.walk(fn) if isinstance(node, ast.Assign)
+                         and any(isinstance(t, ast.Name) and t.id == "matched_trainer_rows" for t in node.targets))
+        module = ast.fix_missing_locations(ast.Module(body=[selection], type_ignores=[]))
+        for target, expected in [(2730, 30), (None, 31)]:
+            namespace = {"target_trainer_id": target, "trainer_res": SimpleNamespace(data=[
+                {"id": 2731, "game_id": 31}, {"id": 2730, "game_id": 30},
+            ])}
+            exec(compile(module, str(script), "exec"), namespace)
+            self.assertEqual(namespace["matched_trainer_rows"][0]["game_id"], expected)
+        source = ast.unparse(fn)
+        self.assertIn("trainer_id = matched_trainer_rows[0]['id']", source)
+        self.assertIn("game_id = matched_trainer_rows[0]['game_id']", source)
+        self.assertNotIn("trainer_id = trainer_res.data[0]['id']", source)
 
 
 if __name__ == "__main__":

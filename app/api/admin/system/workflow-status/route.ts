@@ -98,9 +98,10 @@ export async function GET(req: Request) {
     }
 
     const payload: unknown = await response.json();
-    const workflowRuns = payload && typeof payload === 'object' && Array.isArray((payload as { workflow_runs?: unknown }).workflow_runs)
-      ? (payload as { workflow_runs: GitHubRun[] }).workflow_runs
-      : [];
+    if (!payload || typeof payload !== 'object' || !Array.isArray((payload as { workflow_runs?: unknown }).workflow_runs)) {
+      return NextResponse.json({ error: 'WORKFLOW_STATUS_UNAVAILABLE' }, { status: 502, headers: NO_STORE_HEADERS });
+    }
+    const workflowRuns = (payload as { workflow_runs: GitHubRun[] }).workflow_runs;
     const requestedAt = dispatchReference(requestUrl.searchParams.get('dispatchRequestedAt'));
     const manualRunsAfterDispatch = requestedAt
       ? workflowRuns.filter((run) => stringValue(run.event) === 'workflow_dispatch'
@@ -120,6 +121,9 @@ export async function GET(req: Request) {
       tracking: requestedAt ? (trackedRun ? 'matched_dispatch' : 'awaiting_dispatch_run') : 'latest_run',
       run: runSnapshot(trackedRun ?? latestRun),
       latestSuccess: runSnapshot(latestSuccess),
+      // GitHub 성공은 프로세스 종료 결과이며 번역 승인·공개 여부는 별도 집계다.
+      resultScope: 'workflow_execution',
+      checkedAt: new Date().toISOString(),
     }, { headers: NO_STORE_HEADERS });
   } catch {
     return NextResponse.json({ error: 'WORKFLOW_STATUS_UNAVAILABLE' }, { status: 502, headers: NO_STORE_HEADERS });

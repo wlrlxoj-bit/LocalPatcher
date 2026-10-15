@@ -22,7 +22,12 @@ test('동시 실행을 취소하지 않고, 후속 재시도 처리를 유지한
 
   assert.match(workflow, /group:\s*fling-trainer-scraper-production/);
   assert.match(workflow, /cancel-in-progress:\s*false/);
-  assert.match(workflow, /reprocess-ready:[\s\S]*?needs:\s*crawl/s);
+  // 입력 검증과 crawl의 완료를 함께 기다리되 crawl 실패 후 due 재시도는 유지한다.
+  const retryJob = workflow.match(/  reprocess-ready:([\s\S]*?)(?=\n  [a-z][a-z-]*:|$)/)?.[1];
+  assert.ok(retryJob, '재처리 job이 있어야 한다');
+  assert.match(retryJob, /needs:\s*\[validate-inputs,\s*crawl\]/);
+  assert.match(retryJob, /needs\.validate-inputs\.result == 'success'/);
+  assert.match(retryJob, /always\(\) && !cancelled\(\)/);
   assert.match(workflow, /always\(\) && !cancelled\(\)/);
   assert.match(workflow, /python scripts\/reprocess_pending_translations\.py --apply --provider gemini --limit 4/);
 });

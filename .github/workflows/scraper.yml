@@ -10,6 +10,16 @@ on:
         description: 'Pinpoint scrape a single target FLiNG trainer URL'
         required: false
         default: ''
+      retry_only:
+        description: '수집·무결성 복구 없이 번역 재시도만 한 배치 실행'
+        type: boolean
+        required: false
+        default: false
+      recover_internal_quota_trainer:
+        description: '입증된 과거 내부 한도 복구: 2730 또는 2731 한 게임만(선택)'
+        type: choice
+        options: ['', '2730', '2731']
+        default: ''
 
 # 예약 실행과 관리자가 누른 수동 실행은 같은 DB·외부 번역 quota를 사용한다.
 # 실행 중인 작업을 취소하면 초안/재시도 상태가 반쯤 남을 수 있으므로 새 실행은 대기한다.
@@ -18,7 +28,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate-inputs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate bounded manual recovery inputs before side effects
+        env:
+          RETRY_ONLY: ${{ github.event.inputs.retry_only }}
+          RECOVERY_TRAINER: ${{ github.event.inputs.recover_internal_quota_trainer }}
+          TARGET_URL: ${{ github.event.inputs.target_url }}
+        run: |
+          if [ "$RETRY_ONLY" = "true" ] && [ -n "$TARGET_URL" ]; then
+            echo '[RETRY_ONLY_TARGET_URL_CONFLICT]'
+            exit 1
+          fi
+          if [ -n "$RECOVERY_TRAINER" ]; then
+            if [ "$RETRY_ONLY" != "true" ]; then
+              echo '[RECOVERY_REQUIRES_RETRY_ONLY]'
+              exit 1
+            fi
+            case "$RECOVERY_TRAINER" in
+              2730|2731) ;;
+              *) echo '[RECOVERY_TRAINER_NOT_ALLOWED]'; exit 1 ;;
+            esac
+          fi
+
   drain-patcher-revalidation-outbox:
+    needs: validate-inputs
+    if: ${{ github.event.inputs.retry_only != 'true' }}
     # 수집 결과와 독립적으로 실행한다. 수집 실패가 ready/deferred 항목의 재시도를 막으면 안 된다.
     runs-on: ubuntu-latest
     steps:
@@ -32,6 +68,8 @@ jobs:
             "${PATCHER_REVALIDATE_OUTBOX_URL}"
 
   crawl:
+    needs: validate-inputs
+    if: ${{ github.event.inputs.retry_only != 'true' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -71,11 +109,11 @@ jobs:
         fi
 
   reprocess-ready:
-    needs: crawl
+    needs: [validate-inputs, crawl]
     # 예약 수집과 관리 화면의 일반 동기화는 DB가 claim한 due/ready 항목을 작은
     # 배치로 처리한다. 수동 단일 URL 수집에는 섞지 않는다.
     # 새 수집 일부가 실패해도 기존 due retry가 영구 정지하면 안 된다.
-    if: ${{ always() && !cancelled() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_url == '')) }}
+    if: ${{ always() && !cancelled() && needs.validate-inputs.result == 'success' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_url == '')) }}
     runs-on: ubuntu-latest
 
     steps:
@@ -101,13 +139,28 @@ jobs:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         PATCHER_REVALIDATE_URL: https://localpatcher.com/api/internal/revalidate-patcher
         PATCHER_REVALIDATE_SECRET: ${{ secrets.PATCHER_REVALIDATE_SECRET }}
-      run: python scripts/reprocess_pending_translations.py --apply --provider gemini --limit 4
+        RETRY_ONLY: ${{ github.event.inputs.retry_only }}
+        RECOVERY_TRAINER: ${{ github.event.inputs.recover_internal_quota_trainer }}
+      run: |
+        if [ -n "$RECOVERY_TRAINER" ]; then
+          if [ "$RETRY_ONLY" != "true" ]; then
+            echo '[RECOVERY_REQUIRES_RETRY_ONLY]'
+            exit 1
+          fi
+          case "$RECOVERY_TRAINER" in
+            2730|2731) ;;
+            *) echo '[RECOVERY_TRAINER_NOT_ALLOWED]'; exit 1 ;;
+          esac
+          python scripts/reprocess_pending_translations.py --apply --provider gemini --limit 4 --recover-internal-quota-trainer "$RECOVERY_TRAINER"
+        else
+          python scripts/reprocess_pending_translations.py --apply --provider gemini --limit 4
+        fi
 
   integrity-recovery:
     needs: [crawl, reprocess-ready]
     # 크롤링과 일반 재번역이 모두 성공한 뒤에만 실행한다. 승인본은 복구 대상이 아니며,
     # 한 번에 하나만 동일 바이너리 신원 검증 후 누락 언어 슬롯을 보완한다.
-    if: ${{ always() && !cancelled() && needs.crawl.result == 'success' && needs.reprocess-ready.result == 'success' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_url == '')) }}
+    if: ${{ always() && !cancelled() && github.event.inputs.retry_only != 'true' && needs.crawl.result == 'success' && needs.reprocess-ready.result == 'success' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_url == '')) }}
     concurrency:
       group: translation-integrity-recovery-production
       cancel-in-progress: false

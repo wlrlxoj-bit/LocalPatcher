@@ -15,6 +15,7 @@ export async function GET(request: Request) {
   if (!client) return NextResponse.json({ error: 'RETRY_STATUS_UNAVAILABLE' }, { status: 503, headers: NO_STORE_HEADERS });
 
   try {
+    const checkedAt = new Date().toISOString();
     const countResults = await Promise.all(RETRY_STATES.map(async (state) => {
       const { count, error } = await client.from('translation_retry_queue')
         .select('*', { count: 'exact', head: true })
@@ -23,6 +24,17 @@ export async function GET(request: Request) {
     }));
     if (countResults.some(({ error }) => error)) {
       console.error('Translation retry count request failed');
+      return NextResponse.json({ error: 'RETRY_STATUS_UNAVAILABLE' }, { status: 503, headers: NO_STORE_HEADERS });
+    }
+
+    // ready에는 작업자가 확보한 30분 대기도 포함되므로 실제 기한을 별도로 집계한다.
+    const [dueResult, scheduledResult] = await Promise.all([
+      client.from('translation_retry_queue').select('*', { count: 'exact', head: true })
+        .in('state', ['ready', 'deferred']).lte('next_retry_at', checkedAt),
+      client.from('translation_retry_queue').select('*', { count: 'exact', head: true })
+        .in('state', ['ready', 'deferred']).gt('next_retry_at', checkedAt),
+    ]);
+    if (dueResult.error || scheduledResult.error) {
       return NextResponse.json({ error: 'RETRY_STATUS_UNAVAILABLE' }, { status: 503, headers: NO_STORE_HEADERS });
     }
 
@@ -41,6 +53,9 @@ export async function GET(request: Request) {
       ready: counts.ready,
       deferred: counts.deferred,
       blocked: counts.blocked,
+      due: dueResult.count ?? 0,
+      scheduled: scheduledResult.count ?? 0,
+      checkedAt,
       latestUpdatedAt: typeof latest?.updated_at === 'string' ? latest.updated_at : null,
       latestFailureCode: typeof latest?.last_failure_code === 'string' ? latest.last_failure_code : null,
     }, { headers: NO_STORE_HEADERS });

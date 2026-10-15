@@ -1526,6 +1526,8 @@ def scrape_and_patch_trainer(
             
         any_registered = False
         approved_skips = 0
+        retry_target_matched = False
+        retry_identity_mismatch = False
         had_eligible_failure = False
         actionable_downloads = 0
         upstream_deferred = False
@@ -1630,12 +1632,27 @@ def scrape_and_patch_trainer(
                 
                 # Check if trainer version already exists in DB
                 trainer_res = db.table('trainers').select('id,game_id').eq('original_file_hash', original_file_hash).execute()
+                # 재시도는 claim한 원본 바이너리만 처리한다. 미등록/다른 해시는 신규
+                # trainer 등록이나 번역 API 호출로 넘어가지 않고 다른 다운로드를 찾는다.
+                if target_trainer_id is not None and not any(
+                    row.get('id') == target_trainer_id for row in (trainer_res.data or [])
+                ):
+                    retry_identity_mismatch = True
+                    print(f"[RETRY_SOURCE_MISMATCH] trainer={target_trainer_id}")
+                    continue
+                if target_trainer_id is not None:
+                    retry_target_matched = True
+                # 동일 해시 중복 행이 있어도 조회 첫 행의 다른 게임을 갱신하지 않는다.
+                matched_trainer_rows = [
+                    row for row in (trainer_res.data or [])
+                    if target_trainer_id is None or row.get('id') == target_trainer_id
+                ]
                 approved_locales = set()
                 manual_review_locales = set()
                 effective_force = force
-                if trainer_res.data:
-                    trainer_id = trainer_res.data[0]['id']
-                    game_id = trainer_res.data[0]['game_id']
+                if matched_trainer_rows:
+                    trainer_id = matched_trainer_rows[0]['id']
+                    game_id = matched_trainer_rows[0]['game_id']
                     # 해시가 같은 기존 trainer라도 FLiNG 게시물 URL은 최신으로 보관한다.
                     db.table('games').update({'fling_url': post['link']}).eq('id', game_id).execute()
                     # 재시도 큐는 (trainer, 언어) 단위다. 같은 FLiNG 게시물의 다른
@@ -1659,6 +1676,8 @@ def scrape_and_patch_trainer(
                     protected_locales = approved_locales | manual_review_locales
                     effective_force = force and not manual_review_locales
                     if requested_locales.issubset(protected_locales) and not effective_force:
+                        for protected_locale in sorted(requested_locales):
+                            print(f"[RETRY_PROTECTED] trainer={trainer_id} locale={protected_locale}")
                         print(f"    [*] Skip/Protect: Trainer ID {trainer_id} has approved translation mappings. Skipping overwrite.")
                         approved_skips += 1
                         continue
@@ -1853,6 +1872,12 @@ def scrape_and_patch_trainer(
                 if target_eligible or strict_download_failures:
                     had_eligible_failure = True
                 
+        if retry_identity_mismatch and not retry_target_matched and not upstream_deferred:
+            for requested_locale in sorted(requested_locales):
+                schedule_translation_retry(
+                    db, target_trainer_id, requested_locale, "blocked", "SOURCE_IDENTITY_MISMATCH", 0,
+                )
+            had_eligible_failure = True
         # 지원 URL이 403/429로 보류된 경우에는 RAR 건너뜀으로 오인하지 않는다.
         archive_only_skip = rar_skips > 0 and actionable_downloads == 0 and not upstream_deferred
         if archive_only_skip:

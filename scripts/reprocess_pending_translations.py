@@ -88,13 +88,61 @@ def select_target_batch(targets, limit, offset=None, now=None):
     return targets[:limit], 0
 
 
+def child_result_details(returncode, output, trainer_id, locale):
+    """정확한 대상의 허용된 결과 토큰만 읽는다. 원문·stderr 전문은 반환하지 않는다."""
+    import re
+
+    codes = {
+        "TRANSLATION_QUOTA", "TRANSLATION_API_TEMPORARY", "TRANSLATION_PERMANENT",
+        "TRANSLATION_DB_TEMPORARY", "VALIDATION_FAILED", "VALIDATION_REJECTED",
+        "UPSTREAM_HTTP_403", "UPSTREAM_HTTP_429", "RETRY_LIMIT_EXCEEDED",
+        "SOURCE_URL_MISSING", "SOURCE_IDENTITY_MISMATCH", "REPROCESS_WORKER_FAILED",
+    }
+    detail = {"outcome": "failed", "code": "REPROCESS_CHILD_FAILED", "queued": False}
+    target = rf"trainer={trainer_id} locale={re.escape(locale)}" if trainer_id is not None else r"trainer=\d+ locale=" + re.escape(locale)
+    for line in output.splitlines():
+        queued = re.fullmatch(r"\[RETRY_QUEUED\] " + target + r" state=(ready|deferred|blocked) code=([A-Z0-9_]+)", line)
+        if queued and queued[2] in codes:
+            detail = {"outcome": "blocked" if queued[1] == "blocked" else "deferred",
+                      "code": queued[2], "queued": True}
+        saved = re.fullmatch(r"\[save-outcome\] " + target + r" status=(approved|preserved|rejected|db_error)", line)
+        if saved and saved[1] in {"approved", "preserved"} and returncode == 0:
+            detail = {"outcome": saved[1], "code": "NONE", "queued": False}
+        protected = re.fullmatch(r"\[RETRY_PROTECTED\] " + target, line)
+        if protected and returncode == 0:
+            detail = {"outcome": "preserved", "code": "EXISTING_MAPPING_PROTECTED", "queued": False}
+    if detail["outcome"] == "failed":
+        if returncode == 0 and "[ARCHIVE_ONLY_PAGE_SKIPPED]" in output:
+            detail.update(outcome="skipped", code="ARCHIVE_RAR_ONLY")
+        elif returncode == 0:
+            detail.update(outcome="unconfirmed", code="CHILD_RESULT_UNCONFIRMED")
+        # traceback 메시지는 버리고 널리 알려진 예외 타입만 진단 코드로 쓴다.
+        else:
+            for name in ("ModuleNotFoundError", "ImportError", "SyntaxError", "TimeoutExpired"):
+                if any(line.startswith(name + ":") for line in output.splitlines()):
+                    detail["code"] = {"ModuleNotFoundError": "CHILD_DEPENDENCY_MISSING",
+                                      "ImportError": "CHILD_IMPORT_FAILED", "SyntaxError": "CHILD_SYNTAX_ERROR",
+                                      "TimeoutExpired": "CHILD_TIMEOUT"}[name]
+                    break
+    # 공급자 실패 후 GPT가 성공할 수도 있으므로 진단과 최종 결과를 분리한다.
+    provider_diagnostics = []
+    for line in output.splitlines():
+        event = re.fullmatch(
+            r"\[TRANSLATION_PROVIDER_FAILED\] provider=(GEMINI|OPENAI_FALLBACK|OPENAI|AZURE|UNKNOWN) "
+            r"code=(TRANSLATION_QUOTA|TRANSLATION_API_TEMPORARY|TRANSLATION_PERMANENT)"
+            r"(?: quota_reason=(UNKNOWN|PROVIDER_HTTP_QUOTA|MONTHLY_QUOTA_EXHAUSTED))? status=(0|[1-5][0-9]{2})", line,
+        )
+        if event:
+            provider_diagnostics.append((event[1], event[2], event[3] or "NONE", event[4]))
+    detail["providers"] = provider_diagnostics[:4]
+    return detail
+
+
 def classify_child_result(returncode, output):
-    """하위 수집기의 비밀·응답 전문을 노출하지 않고 종료 원인만 분류한다."""
-    if returncode == 0:
-        return "success"
+    """과거 호출자의 결과 계약을 유지하되 실제 승인은 구조화된 상세 함수로 판별한다."""
     if "error=TranslationQuotaError" in output:
         return "quota_deferred"
-    return "failed"
+    return "success" if returncode == 0 else "failed"
 
 
 def defer_unclassified_targets(db, retry_items):
@@ -114,9 +162,14 @@ def defer_unclassified_targets(db, retry_items):
         return False
 
 
-def claim_due_retry_targets(db, limit):
+def claim_due_retry_targets(db, limit, recovery_trainer_ids=None):
     """DB가 실제로 준비된 재시도 항목만 원자적으로 claim하고 URL별로 묶는다."""
-    rows = (db.rpc("claim_due_translation_retries", {"p_limit": limit}).execute().data or [])
+    rpc_name = "claim_due_translation_retries"
+    payload = {"p_limit": limit}
+    if recovery_trainer_ids:
+        rpc_name = "claim_legacy_internal_quota_recovery"
+        payload["p_trainer_ids"] = recovery_trainer_ids
+    rows = (db.rpc(rpc_name, payload).execute().data or [])
     targets, missing_sources = [], []
     for row in rows:
         target = row.get("fling_url")
@@ -168,6 +221,8 @@ def main():
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument("--offset", type=int, default=None,
                         help="명시 URL을 나눠 실행할 때만 쓰는 시작 위치")
+    parser.add_argument("--recover-internal-quota-trainer", type=int, action="append", default=[],
+                        help="운영 로그로 입증된 2730/2731의 과거 내부 한도 보류만 선별 claim")
     parser.add_argument("--requeue-safe-noindex", action="store_true",
                         help="명시 실행에서만 안전한 noindex 자동 번역 후보를 재큐잉")
     parser.add_argument("--requeue-chunks", type=int, default=1,
@@ -175,6 +230,12 @@ def main():
     parser.add_argument("--provider", choices=["gemini", "azure", "openai_paid"],
                         default=os.getenv("TRANSLATION_PROVIDER", "gemini"))
     args = parser.parse_args()
+    if args.recover_internal_quota_trainer:
+        if (not args.apply or args.url or args.offset is not None or args.requeue_safe_noindex
+                or not 1 <= args.limit <= 4
+                or len(args.recover_internal_quota_trainer) > 2
+                or not set(args.recover_internal_quota_trainer).issubset({2730, 2731})):
+            parser.error("내부 한도 선별 복구는 --apply, limit 1~4 및 입증된 trainer만 허용합니다")
     if args.requeue_safe_noindex:
         if args.url or args.offset is not None or not args.apply:
             parser.error("noindex 재큐잉은 --apply와 함께 단독으로 실행해야 합니다")
@@ -216,7 +277,12 @@ def main():
             print("[REPROCESS_QUEUE_UNAVAILABLE]")
             return 1
         db = create_client(endpoint, key)
-        target_locales, missing_sources = claim_due_retry_targets(db, args.limit)
+        if args.recover_internal_quota_trainer:
+            target_locales, missing_sources = claim_due_retry_targets(
+                db, args.limit, sorted(set(args.recover_internal_quota_trainer)),
+            )
+        else:
+            target_locales, missing_sources = claim_due_retry_targets(db, args.limit)
         try:
             for trainer_id, language_code in missing_sources:
                 if trainer_id is None or language_code not in TARGET_LOCALES:
@@ -239,6 +305,7 @@ def main():
 
     print(f"[대기열] mode={'apply' if args.apply else 'dry-run'} targets={len(targets)}")
     failures = 0
+    counts = {key: 0 for key in ("approved", "preserved", "deferred", "blocked", "skipped", "unconfirmed", "failed")}
 
     for target, trainer_id, locale in targets:
         if not args.apply:
@@ -259,23 +326,31 @@ def main():
             result = subprocess.run(command, check=False, capture_output=True, text=True)
         except Exception:
             failures += 1
-            print("[REPROCESS_CHILD_START_FAILED]")
+            counts["failed"] += 1
+            if trainer_id is not None and not defer_unclassified_targets(db, [(trainer_id, locale)]):
+                failures += 1
+            print(f"[REPROCESS_RESULT] trainer={trainer_id or 0} locale={locale} outcome=failed code=CHILD_START_FAILED exit=none")
             continue
-        outcome = classify_child_result(result.returncode, result.stdout or "")
-        if outcome == "quota_deferred":
-            # 공유 월 예산이 막혔으면 같은 실행의 후속 대상도 호출하지 않는다.
-            # 실패가 아니라 다음 운영자가 큐를 다시 열 때까지의 정상 대기다.
-            print("[REPROCESS_DEFERRED_QUOTA]")
-            break
-        if outcome == "failed":
-            if "[RETRY_QUEUED]" not in (result.stdout or ""):
+        detail = child_result_details(
+            result.returncode, (result.stdout or "") + "\n" + (getattr(result, "stderr", "") or ""),
+            trainer_id, locale,
+        )
+        outcome = detail["outcome"]
+        counts[outcome] += 1
+        print(f"[REPROCESS_RESULT] trainer={trainer_id or 0} locale={locale} outcome={outcome} code={detail['code']} exit={result.returncode}")
+        for provider, code, reason, status in detail["providers"]:
+            print(f"[REPROCESS_PROVIDER] trainer={trainer_id or 0} locale={locale} provider={provider} code={code} reason={reason} status={status}")
+        if outcome in {"failed", "unconfirmed"}:
+            if not detail["queued"]:
                 retry_items = [(trainer_id, locale)] if trainer_id is not None else []
                 if retry_items and not defer_unclassified_targets(db, retry_items):
                     failures += 1
             failures += 1
-            print("[REPROCESS_CHILD_FAILED]")
+        elif outcome == "blocked":
+            failures += 1
 
     print(f"[대기열 결과] targets={len(targets)} failures={failures}")
+    print("[REPROCESS_SUMMARY] " + " ".join(f"{key}={value}" for key, value in counts.items()))
     return reprocess_exit_code(apply=args.apply, failures=failures)
 
 
