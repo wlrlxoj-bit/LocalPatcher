@@ -455,7 +455,6 @@ def main():
         return 1
     db = create_client(endpoint, key)
     scraper.TRANSLATION_PROVIDER = args.provider
-    scraper.translation_usage_db = db
     try:
         queued = db.rpc("enqueue_translation_integrity_recovery_candidates", {"p_limit": 20}).execute().data
     except Exception:

@@ -46,7 +46,6 @@ def environment_nonnegative_int(name, default):
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-GEMINI_MONTHLY_MAX_CHARS = environment_nonnegative_int("GEMINI_MONTHLY_MAX_CHARS", 0)
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 AZURE_TRANSLATOR_KEY = os.environ.get("AZURE_TRANSLATOR_KEY")
 AZURE_TRANSLATOR_REGION = os.environ.get("AZURE_TRANSLATOR_REGION")
@@ -54,11 +53,7 @@ AZURE_TRANSLATOR_ENDPOINT = (os.environ.get("AZURE_TRANSLATOR_ENDPOINT") or "htt
 TRANSLATION_PROVIDER = "gemini"
 
 
-# Gemini가 형식 검증 또는 API 호출에서 실패했을 때만 제한적으로 쓸 GPT 예산이다.
-# 실행 환경의 Secrets나 워크플로 설정만으로 상한을 조절한다.
-OPENAI_FALLBACK_MAX_REQUESTS = environment_nonnegative_int("OPENAI_FALLBACK_MAX_REQUESTS", 8)
-OPENAI_FALLBACK_MAX_CHARS = environment_nonnegative_int("OPENAI_FALLBACK_MAX_CHARS", 12000)
-OPENAI_FALLBACK_MONTHLY_MAX_CHARS = environment_nonnegative_int("OPENAI_FALLBACK_MONTHLY_MAX_CHARS", 0)
+# Gemini 실패 시 GPT 보조 경로의 명시적 활성화 설정은 유지한다.
 OPENAI_AUTOMATION_FALLBACK_ENABLED = os.environ.get(
     "OPENAI_AUTOMATION_FALLBACK_ENABLED", "true"
 ).strip().lower() == "true"
@@ -79,10 +74,7 @@ DISCOVERY_CLAIM_DEFAULT_LIMIT = 3
 DISCOVERY_CLAIM_MAX_LIMIT = 5
 DISCOVERY_UPSERT_BATCH_SIZE = 5_000
 FLING_POST_SITEMAP_URL = "https://flingtrainer.com/post-sitemap.xml"
-openai_fallback_requests = 0
-openai_fallback_chars = 0
 last_llm_provider = None
-translation_usage_db = None
 last_fling_request_at = 0.0
 fling_retry_sleep_used_seconds = 0
 
@@ -381,28 +373,20 @@ def _parse_indexed_translations(text_response, expected_count):
 def _call_gemini(lines_to_translate, prompt, _temperature):
     if not GEMINI_API_KEY:
         raise RuntimeError("Gemini API 환경 변수가 설정되지 않았습니다")
-    reservation_id = _reserve_automation_usage(
-        "gemini", sum(len(line) for line in lines_to_translate), GEMINI_MONTHLY_MAX_CHARS,
-    )
-    request_started = False
     print("[*] Gemini API에 일괄 번역을 요청합니다...")
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"responseMimeType": "application/json"}
     }
+    res = requests.post(url, json=payload, timeout=15)
+    if res.status_code != 200:
+        raise TranslationProviderError(res.status_code)
     try:
-        request_started = True
-        res = requests.post(url, json=payload, timeout=15)
-        if res.status_code != 200:
-            raise TranslationProviderError(res.status_code)
-        try:
-            text_response = res.json()["candidates"][0]["content"]["parts"][0]["text"]
-        except (KeyError, IndexError, TypeError, ValueError) as exc:
-            raise RuntimeError("Gemini API 응답 형식이 올바르지 않습니다") from exc
-        return _parse_indexed_translations(text_response, len(lines_to_translate))
-    finally:
-        _finalize_automation_usage(reservation_id, consumed=request_started)
+        text_response = res.json()["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise RuntimeError("Gemini API 응답 형식이 올바르지 않습니다") from exc
+    return _parse_indexed_translations(text_response, len(lines_to_translate))
 
 
 def _call_openai(lines_to_translate, prompt, temperature):
@@ -431,72 +415,18 @@ def _call_openai(lines_to_translate, prompt, temperature):
 
 
 def openai_automation_fallback_available():
-    """Gemini 실패 시 사용할 GPT 보조 경로의 공유 월 예산 준비 상태를 확인한다."""
+    """월 예산 저장소 없이 GPT 보조 경로의 활성화 설정과 API 키만 확인한다."""
     return bool(
         OPENAI_AUTOMATION_FALLBACK_ENABLED
-        and OPENAI_FALLBACK_MONTHLY_MAX_CHARS > 0
         and OPENAI_API_KEY
-        and translation_usage_db is not None
     )
-
-
-def _reserve_automation_usage(provider, characters, monthly_max_chars):
-    """공유 월 사용량을 원자적으로 예약한다. RPC를 사용할 수 없으면 비용 호출을 막는다."""
-    if monthly_max_chars <= 0 or translation_usage_db is None:
-        raise TranslationQuotaError(reason_code="MONTHLY_CONFIG_MISSING")
-    try:
-        configured = translation_usage_db.rpc("configure_translation_usage_limit", {
-            "p_provider": provider,
-            "p_hard_limit_characters": monthly_max_chars,
-        }).execute().data
-        if configured is not True:
-            raise TranslationQuotaError(reason_code="MONTHLY_CONFIG_REJECTED")
-        reservation = translation_usage_db.rpc("reserve_translation_usage", {
-            "p_provider": provider,
-            "p_characters": characters,
-        }).execute().data
-    except TranslationQuotaError:
-        raise
-    except Exception:
-        raise TranslationQuotaError(reason_code="MONTHLY_RESERVE_FAILED") from None
-    if not isinstance(reservation, str) or not reservation:
-        raise TranslationQuotaError(reason_code="MONTHLY_QUOTA_EXHAUSTED")
-    return reservation
-
-
-def _finalize_automation_usage(reservation_id, consumed):
-    try:
-        completed = translation_usage_db.rpc("finalize_translation_usage", {
-            "p_reservation_id": reservation_id,
-            "p_consumed": consumed,
-        }).execute().data
-        if completed is not True:
-            raise RuntimeError("reservation finalize rejected")
-    except Exception:
-        raise TranslationQuotaError(reason_code="MONTHLY_FINALIZE_FAILED") from None
 
 
 def _call_openai_fallback(lines_to_translate, prompt, temperature):
-    """자동 보조 GPT 호출은 실행 상한과 Supabase 월 예산 예약을 모두 통과해야 한다."""
-    global openai_fallback_requests, openai_fallback_chars
-    request_chars = sum(len(line) for line in lines_to_translate)
-    if openai_fallback_requests >= OPENAI_FALLBACK_MAX_REQUESTS:
-        raise TranslationQuotaError(reason_code="RUN_REQUEST_CAP")
-    if openai_fallback_chars + request_chars > OPENAI_FALLBACK_MAX_CHARS:
-        raise TranslationQuotaError(reason_code="RUN_CHAR_CAP")
+    """활성화된 GPT 보조 경로를 내부 누적 비용 상한 없이 호출한다."""
     if not openai_automation_fallback_available():
-        raise TranslationQuotaError(reason_code="MONTHLY_CONFIG_MISSING")
-    reservation_id = _reserve_automation_usage(
-        "openai_paid", request_chars, OPENAI_FALLBACK_MONTHLY_MAX_CHARS,
-    )
-    openai_fallback_requests += 1
-    openai_fallback_chars += request_chars
-    request_started = False
-    try:
-        request_started = True
-        return _call_openai(lines_to_translate, prompt, temperature)
-    finally:
-        _finalize_automation_usage(reservation_id, consumed=request_started)
+        raise RuntimeError("OpenAI 보조 번역이 비활성화되었거나 API 키가 없습니다")
+    return _call_openai(lines_to_translate, prompt, temperature)
 
 def _call_azure(lines_to_translate, _prompt, _temperature):
     """Azure Translator F0 기본 경로. 항목 25개·유니코드 5000자 이내 배치만 호출한다."""
@@ -592,10 +522,9 @@ def _translate_via_llm_with_fallback(lines_to_translate, language, example_trans
             detail = f" quota_reason={quota_reason}" if quota_reason else ""
             print(f"[TRANSLATION_PROVIDER_FAILED] provider={provider_code} code={failure_code}{detail} status={status or 0}")
             if isinstance(exc, TranslationQuotaError):
-                # Gemini의 월 예산/예약 실패도 GPT 보조 번역을 시도해야 한다.
-                # 반면 GPT 보조 경로의 예산 실패는 더 비싼 재시도를 만들 수 있으므로
-                # 이 실행을 실패로 끝낸다. 제공자 표시는 translation_providers()의
-                # 고정 계약이며, 외부 응답 내용은 로그에 기록하지 않는다.
+                # Gemini 공급자 quota는 GPT 보조 번역을 시도하고, 다른 공급자의
+                # quota는 중단하여 기존 재시도 큐의 대기 정책으로 처리한다.
+                # 외부 응답 내용은 로그에 기록하지 않는다.
                 if provider_name != "Gemini":
                     raise
             last_error = exc
@@ -1546,8 +1475,7 @@ def scrape_and_patch_trainer(
     예약 실행은 이미 존재하는 미승인 번역을 다시 LLM에 보내지 않는다. 수동 URL
     실행만 기존 동작대로 이를 재처리해, 신규 바이너리/업데이트와 재시도 비용을 분리한다.
     """
-    global last_llm_provider, translation_usage_db
-    translation_usage_db = db
+    global last_llm_provider
     print(f"[*] Processing: {post['title']} ({post['link']})")
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     requested_locales = set(languages or ('ko', 'ja', 'de', 'es'))

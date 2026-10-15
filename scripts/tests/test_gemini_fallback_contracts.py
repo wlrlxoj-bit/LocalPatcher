@@ -1,4 +1,4 @@
-"""Gemini 기본 번역과 제한된 GPT 보조 경로의 외부 호출 없는 계약 테스트."""
+"""Gemini 기본 번역과 내부 비용 상한 없는 GPT 보조 경로의 격리 계약 테스트."""
 
 import ast
 import pathlib
@@ -38,11 +38,8 @@ class GeminiFallbackContracts(unittest.TestCase):
             "openai_automation_fallback_available", "translation_providers",
         ], {
             "TRANSLATION_PROVIDER": "gemini",
-            "GEMINI_MONTHLY_MAX_CHARS": 1000,
             "OPENAI_API_KEY": "configured",
             "OPENAI_AUTOMATION_FALLBACK_ENABLED": True,
-            "OPENAI_FALLBACK_MONTHLY_MAX_CHARS": 1000,
-            "translation_usage_db": object(),
             "_call_gemini": gemini,
             "_call_openai_fallback": openai,
             "_call_azure": azure,
@@ -56,76 +53,52 @@ class GeminiFallbackContracts(unittest.TestCase):
             [("OpenAI Paid Fallback", openai)],
         )
 
-    def test_openai_fallback_requires_a_nonzero_monthly_cap(self):
+    def test_openai_fallback_still_requires_enabled_flag_and_key(self):
         gemini, openai, azure = object(), object(), object()
         _available, provider_selector = load_functions([
             "openai_automation_fallback_available", "translation_providers",
         ], {
             "TRANSLATION_PROVIDER": "gemini",
-            "GEMINI_MONTHLY_MAX_CHARS": 1000,
             "OPENAI_API_KEY": "configured",
-            "OPENAI_AUTOMATION_FALLBACK_ENABLED": True,
-            "OPENAI_FALLBACK_MONTHLY_MAX_CHARS": 0,
-            "translation_usage_db": object(),
+            "OPENAI_AUTOMATION_FALLBACK_ENABLED": False,
             "_call_gemini": gemini,
             "_call_openai_fallback": openai,
             "_call_azure": azure,
         })
         self.assertEqual(provider_selector(), [("Gemini", gemini)])
         self.assertEqual(provider_selector(prefer_openai_fallback=True), [])
+        scope = provider_selector.__globals__
+        scope["OPENAI_AUTOMATION_FALLBACK_ENABLED"] = True
+        scope["OPENAI_API_KEY"] = ""
+        self.assertEqual(provider_selector(), [("Gemini", gemini)])
+        self.assertEqual(provider_selector(prefer_openai_fallback=True), [])
 
-    def test_openai_fallback_budget_blocks_before_network_request(self):
-        class QuotaError(RuntimeError):
-            def __init__(self, message="TRANSLATION_QUOTA", reason_code="UNKNOWN", status_code=None):
-                self.reason_code = reason_code
-                self.status_code = status_code
-                super().__init__(message)
+    def test_openai_fallback_exceeds_old_run_caps_without_monthly_config_or_db(self):
+        calls = []
+        _available, caller = load_functions([
+            "openai_automation_fallback_available", "_call_openai_fallback",
+        ], {
+            "OPENAI_API_KEY": "fixture-only",
+            "OPENAI_AUTOMATION_FALLBACK_ENABLED": True,
+            "_call_openai": lambda lines, *_args: calls.append(lines) or ["번역"],
+        })
+        # 각 요청은 기존 청크 크기 이내지만 누적 9회·13,500자로 옛 비용 상한을 넘는다.
+        for _ in range(9):
+            self.assertEqual(caller(["a" * 1500], "prompt", 0.7), ["번역"])
+        self.assertEqual(len(calls), 9)
+        self.assertEqual(sum(len(lines[0]) for lines in calls), 13500)
 
-        class Requests:
-            def post(self, *_args, **_kwargs):
-                raise AssertionError("예산 초과 시 네트워크 요청을 해서는 안 됩니다")
-
+    def test_disabled_openai_fallback_never_calls_provider(self):
+        def unexpected_call(*_args):
+            raise AssertionError("비활성화된 보조 경로는 공급자를 호출해서는 안 됩니다")
         caller = load_function("_call_openai_fallback", {
-            "OPENAI_API_KEY": "configured",
-            "OPENAI_FALLBACK_MAX_REQUESTS": 1,
-            "OPENAI_FALLBACK_MAX_CHARS": 10,
-            "openai_fallback_requests": 1,
-            "openai_fallback_chars": 0,
-            "TranslationQuotaError": QuotaError,
-            "requests": Requests(),
-            "_reserve_openai_fallback_usage": lambda *_args: "reservation",
-            "_finalize_openai_fallback_usage": lambda *_args, **_kwargs: None,
-            "_call_openai": lambda *_args: [],
-            "print": lambda *_args: None,
+            "openai_automation_fallback_available": lambda: False,
+            "_call_openai": unexpected_call,
         })
-        with self.assertRaises(QuotaError):
+        with self.assertRaises(RuntimeError):
             caller(["Infinite Health"], "prompt", 0.7)
 
-    def test_gemini_reservation_failure_blocks_http_request(self):
-        class QuotaError(RuntimeError):
-            def __init__(self, message="TRANSLATION_QUOTA", reason_code="UNKNOWN", status_code=None):
-                self.reason_code = reason_code
-                self.status_code = status_code
-                super().__init__(message)
-
-        class Requests:
-            def post(self, *_args, **_kwargs):
-                raise AssertionError("월 예산 예약 실패 뒤 HTTP 요청을 해서는 안 됩니다")
-
-        caller = load_function("_call_gemini", {
-            "GEMINI_API_KEY": "configured",
-            "GEMINI_MODEL": "gemini-2.5-flash",
-            "GEMINI_MONTHLY_MAX_CHARS": 1000,
-            "TranslationQuotaError": QuotaError,
-            "_reserve_automation_usage": lambda *_args: (_ for _ in ()).throw(QuotaError("budget")),
-            "_finalize_automation_usage": lambda *_args, **_kwargs: None,
-            "requests": Requests(),
-            "print": lambda *_args: None,
-        })
-        with self.assertRaises(QuotaError):
-            caller(["Infinite Health"], "prompt", 0.7)
-
-    def test_gemini_finalizes_shared_reservation_after_request(self):
+    def test_gemini_calls_provider_without_monthly_configuration_or_database(self):
         calls = []
 
         class Response:
@@ -138,20 +111,18 @@ class GeminiFallbackContracts(unittest.TestCase):
         class Requests:
             @staticmethod
             def post(*_args, **_kwargs):
+                calls.append("gemini")
                 return Response()
 
         caller = load_function("_call_gemini", {
             "GEMINI_API_KEY": "configured",
             "GEMINI_MODEL": "gemini-2.5-flash",
-            "GEMINI_MONTHLY_MAX_CHARS": 1000,
-            "_reserve_automation_usage": lambda *_args: "reservation-1",
-            "_finalize_automation_usage": lambda reservation, consumed: calls.append((reservation, consumed)),
             "requests": Requests(),
             "_parse_indexed_translations": lambda text, _count: [text],
             "print": lambda *_args: None,
         })
         self.assertEqual(caller(["Infinite Health"], "prompt", 0.7), ['{"line_0":"무한 체력"}'])
-        self.assertEqual(calls, [("reservation-1", True)])
+        self.assertEqual(calls, ["gemini"])
 
     def test_gemini_http_403_or_429_uses_openai_fallback(self):
         class QuotaError(RuntimeError):
@@ -187,7 +158,7 @@ class GeminiFallbackContracts(unittest.TestCase):
             )
             self.assertEqual(calls, ["openai"])
 
-    def test_gemini_quota_or_reservation_unavailable_uses_openai_fallback(self):
+    def test_gemini_provider_quota_uses_openai_fallback(self):
         class QuotaError(RuntimeError):
             def __init__(self, message="TRANSLATION_QUOTA", reason_code="UNKNOWN", status_code=None):
                 self.reason_code = reason_code
@@ -203,11 +174,11 @@ class GeminiFallbackContracts(unittest.TestCase):
             "print": lambda *_args: None,
             "last_llm_provider": None,
         })
-        for message in ("gemini 월 예산을 초과했습니다", "gemini 공유 월 예산을 확인할 수 없습니다"):
+        for status in (403, 429):
             calls = []
 
-            def gemini(*_args, message=message):
-                raise QuotaError(message)
+            def gemini(*_args, status=status):
+                raise QuotaError(reason_code="PROVIDER_HTTP_QUOTA", status_code=status)
 
             def openai(*_args):
                 calls.append("openai")
@@ -240,7 +211,7 @@ class GeminiFallbackContracts(unittest.TestCase):
         called = []
 
         def openai(*_args):
-            raise QuotaError("OpenAI 보조 번역 요청 상한에 도달했습니다")
+            raise QuotaError(reason_code="PROVIDER_HTTP_QUOTA", status_code=429)
 
         def unexpected_provider(*_args):
             called.append(True)
@@ -257,8 +228,11 @@ class GeminiFallbackContracts(unittest.TestCase):
         self.assertIn("GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}", workflow)
         self.assertIn("GEMINI_MODEL: gemini-2.5-flash", workflow)
         self.assertIn("--provider gemini", workflow)
-        self.assertIn("GEMINI_MONTHLY_MAX_CHARS: ${{ vars.GEMINI_MONTHLY_MAX_CHARS }}", workflow)
-        self.assertIn("OPENAI_FALLBACK_MONTHLY_MAX_CHARS: ${{ vars.OPENAI_FALLBACK_MONTHLY_MAX_CHARS }}", workflow)
+        for removed_setting in (
+            "GEMINI_MONTHLY_MAX_CHARS", "OPENAI_FALLBACK_MONTHLY_MAX_CHARS",
+            "OPENAI_FALLBACK_MAX_REQUESTS", "OPENAI_FALLBACK_MAX_CHARS",
+        ):
+            self.assertNotIn(removed_setting, workflow)
 
     def test_gemini_model_has_safe_default(self):
         scraper = (SCRIPTS / "scraper.py").read_text(encoding="utf-8")

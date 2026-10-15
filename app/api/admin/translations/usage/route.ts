@@ -1,52 +1,30 @@
 import { NextResponse } from 'next/server';
 import { requireTranslationAdmin } from '@/lib/server/translation/admin-auth';
 import { getTranslationAdminClient } from '@/lib/server/translation/db';
-import { isTranslationProvider, type TranslationProvider } from '@/lib/server/translation/types';
-
-const MAX_MONTHLY_CHARACTERS = 1_000_000_000;
-
-function currentMonthStart() {
-  return `${new Date().toISOString().slice(0, 7)}-01`;
-}
+import { isTranslationProvider } from '@/lib/server/translation/types';
 
 export async function GET(request: Request) {
   if (!requireTranslationAdmin(request)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  const client = getTranslationAdminClient();
-  if (!client) return NextResponse.json({ error: 'server_not_configured' }, { status: 503 });
   const provider = new URL(request.url).searchParams.get('provider');
   if (!isTranslationProvider(provider)) return NextResponse.json({ error: 'invalid_request' }, { status: 400 });
-  const { data, error } = await client.from('translation_usage_monthly')
-    .select('used_characters,reserved_characters,hard_limit_characters')
-    .eq('month_start', currentMonthStart())
-    .eq('provider', provider)
-    .maybeSingle();
-  if (error) return NextResponse.json({ error: 'usage_read_failed' }, { status: 503 });
-  const defaultLimit = provider === 'azure' ? 2_000_000 : 0;
-  const used = Number(data?.used_characters || 0);
-  const reserved = Number(data?.reserved_characters || 0);
-  const limit = Number(data?.hard_limit_characters ?? defaultLimit);
-  return NextResponse.json({ provider, used, reserved, limit, remaining: Math.max(0, limit - used - reserved), configured: data !== null || provider === 'azure' });
+  const monthStart = `${new Date().toISOString().slice(0, 7)}-01`;
+  const state = { provider, enforced: false, status: 'unlimited', used: null, reserved: null, limit: null, remaining: null, configured: false };
+  // 집계는 폐기 전 참고 기록이며, 조회 장애도 비강제 정책을 바꾸지 않는다.
+  try {
+    const client = getTranslationAdminClient();
+    if (!client) return NextResponse.json({ ...state, history: null, historyStatus: 'unavailable' });
+    const { data, error } = await client.from('translation_usage_monthly')
+      .select('used_characters,reserved_characters,hard_limit_characters')
+      .eq('month_start', monthStart).eq('provider', provider).maybeSingle();
+    if (error) return NextResponse.json({ ...state, history: null, historyStatus: 'unavailable' });
+    const history = data ? { historical: true, enforced: false, monthStart, used: Number(data.used_characters || 0), reserved: Number(data.reserved_characters || 0), limit: Number(data.hard_limit_characters || 0) } : null;
+    return NextResponse.json({ ...state, history, historyStatus: history ? 'historical' : 'none' });
+  } catch {
+    return NextResponse.json({ ...state, history: null, historyStatus: 'unavailable' });
+  }
 }
 
 export async function PATCH(request: Request) {
   if (!requireTranslationAdmin(request)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  const client = getTranslationAdminClient();
-  if (!client) return NextResponse.json({ error: 'server_not_configured' }, { status: 503 });
-  try {
-    const body = await request.json() as { provider?: TranslationProvider; hardLimitCharacters?: unknown };
-    if (!isTranslationProvider(body.provider)
-      || !Number.isSafeInteger(body.hardLimitCharacters)
-      || (body.hardLimitCharacters as number) < 0
-      || (body.hardLimitCharacters as number) > MAX_MONTHLY_CHARACTERS) {
-      return NextResponse.json({ error: 'invalid_request' }, { status: 400 });
-    }
-    const { data, error } = await client.rpc('configure_translation_usage_limit', {
-      p_provider: body.provider,
-      p_hard_limit_characters: body.hardLimitCharacters,
-    });
-    if (error || data !== true) return NextResponse.json({ error: 'limit_below_reserved_usage' }, { status: 409 });
-    return NextResponse.json({ provider: body.provider, hardLimitCharacters: body.hardLimitCharacters });
-  } catch {
-    return NextResponse.json({ error: 'invalid_request' }, { status: 400 });
-  }
+  return NextResponse.json({ error: 'gone' }, { status: 410 });
 }

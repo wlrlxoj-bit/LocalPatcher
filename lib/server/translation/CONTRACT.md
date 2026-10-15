@@ -20,6 +20,7 @@
 ```
 
 공급자를 호출하지 않고 `previewHash`, 전체 슬롯의 `items`, `batchCount`, `quota`, `sourceSlots`를 반환한다.
+`quota`는 `{enforced:false,status:"unlimited",used:null,reserved:null,limit:null,remaining:null}`이다. 사이트 내부의 월간 문자 한도는 강제하지 않으며, 미리보기와 실행은 과거 월간 집계 조회·예약·확정 RPC에 의존하지 않는다.
 
 `POST /api/admin/translations/run`
 
@@ -34,19 +35,15 @@
 }
 ```
 
-`openai_paid`는 `paidConsent: true`가 필수다. Gemini와 OpenAI 유료 공급자는 월 문자 한도가 설정되기 전까지 실행할 수 없다. 성공 응답은 `{id,status,result,idempotent}` 형태를 유지한다.
+`openai_paid`는 `paidConsent: true`가 필수다. 공급자의 실제 비용·할당량·속도 제한과 429 오류 처리는 그대로 유지하며 Google/OpenAI의 결제·지출 설정을 변경하지 않는다. 성공 응답은 `{id,status,result,idempotent}` 형태를 유지한다. 작업당 500항목·50,000자와 청크당 25항목·5,000자의 요청 크기 안전 제한은 유지한다.
 
-## 월 한도
+## 폐기된 월 한도와 과거 기록
 
-`GET /api/admin/translations/usage?provider=gemini`은 현재 달의 확정·예약·한도 값을 반환한다.
+`GET /api/admin/translations/usage?provider=gemini`은 관리자 인증 후 `enforced:false`, `status:"unlimited"`, `configured:false`를 반환한다. 최상위 `used`, `reserved`, `limit`, `remaining`은 모두 `null`이며 현재 사용량 추적값이 아니다.
 
-`PATCH /api/admin/translations/usage`은 관리자 세션에서 현재 달의 공급자 문자 한도를 설정한다.
+현재 달의 폐기 전 집계가 있으면 `history`에 `historical:true`, `enforced:false`, `monthStart`, `used`, `reserved`, `limit`으로 분리하고 `historyStatus:"historical"`로 표시한다. 기록이 없으면 `history:null`, `historyStatus:"none"`이다. DB 미설정·조회 실패도 HTTP 200의 비강제 상태와 `history:null`, `historyStatus:"unavailable"`을 반환하며 내부 오류 상세는 공개하지 않는다. 기록은 더 이상 갱신되지 않으며 실제 공급자 비용이나 현재 사용량을 나타내지 않는다. 기존 테이블·행·마이그레이션은 삭제하지 않는다.
 
-```json
-{ "provider": "gemini", "hardLimitCharacters": 100000 }
-```
-
-한도는 이미 확정 또는 예약된 문자 수보다 낮게 설정할 수 없다. Gemini와 OpenAI 유료 공급자의 새 달 기본값은 0이므로, 월별로 명시적인 한도 설정이 필요하다.
+`PATCH /api/admin/translations/usage`은 관리자 인증 후 본문 파싱이나 DB/RPC 호출 없이 HTTP 410과 `{error:"gone"}`을 반환한다. 인증되지 않은 GET/PATCH는 모두 HTTP 401이다. 한도 입력·저장 UI와 과거 quota 상태에 따른 실행 차단은 제거했다.
 
 ## 승인
 

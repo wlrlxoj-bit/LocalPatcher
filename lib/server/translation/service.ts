@@ -12,12 +12,9 @@ export async function createTranslationPreview(provider: TranslationProvider, tr
   const source = await loadTranslationSource(trainerId, targetLanguage);
   const characters = validateItems(source.items);
   const previewHash = createPreviewHash(provider, targetLanguage, source.items);
-  const { data: usage } = await source.client.from('translation_usage_monthly').select('used_characters,reserved_characters,hard_limit_characters').eq('provider', provider).eq('month_start', new Date().toISOString().slice(0, 7) + '-01').maybeSingle();
-  const used = Number(usage?.used_characters || 0);
-  const reserved = Number(usage?.reserved_characters || 0);
-  const limit = Number(usage?.hard_limit_characters || (provider === 'azure' ? 2_000_000 : 0));
+  // 과거 월간 집계는 실행 조건이나 현재 사용량 추적기로 사용하지 않는다.
   const pendingSlots = source.targets.map((target) => ({ mappingId: target.id, offsetDec: target.offset_dec, translatedText: target.translated_text, status: target.translation_status, approved: target.is_approved }));
-  return { previewHash, provider, trainerId, targetLanguage, sourceMappingId: source.sourceMappingId, sourceMappingIds: source.sourceMappingIds, sourceVersion: source.sourceVersion, sourceSlots: source.slots, itemCount: source.items.length, characters, batchCount: createBatches(source.items).length, quota: { used, reserved, limit, remaining: Math.max(0, limit - used - reserved), status: limit > used + reserved ? 'available' : 'exhausted' }, items: source.items, pending: pendingSlots[0] ?? null, pendingSlots };
+  return { previewHash, provider, trainerId, targetLanguage, sourceMappingId: source.sourceMappingId, sourceMappingIds: source.sourceMappingIds, sourceVersion: source.sourceVersion, sourceSlots: source.slots, itemCount: source.items.length, characters, batchCount: createBatches(source.items).length, quota: { enforced: false, status: 'unlimited', used: null, reserved: null, limit: null, remaining: null }, items: source.items, pending: pendingSlots[0] ?? null, pendingSlots };
 }
 
 export async function runTranslation(input: { provider: TranslationProvider; trainerId: number; targetLanguage: TargetLanguage; previewHash: string; paidConsent?: boolean; idempotencyKey: string }) {
@@ -60,14 +57,7 @@ export async function runTranslation(input: { provider: TranslationProvider; tra
   const billableCharacters = missing.reduce((sum, item) => sum + countUnicodeCharacters(item.text), 0);
   const { data: job, error: jobError } = await source.client.from('translation_jobs').insert({ provider: input.provider, target_language: input.targetLanguage, trainer_id: input.trainerId, source_mapping_id: source.sourceMappingId, source_snapshot: source.slots, source_version: source.sourceVersion, preview_hash: input.previewHash, idempotency_key: input.idempotencyKey, status: 'running', item_count: source.items.length, character_count: preview.characters, billable_character_count: billableCharacters }).select('id').single();
   if (jobError) throw new TranslationError('conflict', '동일 멱등성 작업이 이미 생성되었습니다.');
-  let reservationId: string | null = null;
-  let usageConsumed = false;
   try {
-    if (billableCharacters > 0) {
-      const { data: reservation, error } = await source.client.rpc('reserve_translation_usage', { p_provider: input.provider, p_characters: billableCharacters });
-      if (error || typeof reservation !== 'string') throw new TranslationError('quota', '월간 번역 사용 한도를 초과했습니다.');
-      reservationId = reservation;
-    }
     const translated = missing.length
       ? input.provider === 'azure'
         ? await translateWithAzure(missing, input.targetLanguage)
@@ -75,11 +65,6 @@ export async function runTranslation(input: { provider: TranslationProvider; tra
           ? await translateWithGemini(missing, input.targetLanguage)
           : await translateWithOpenAIPaid(missing, input.targetLanguage)
       : [];
-    if (reservationId) {
-      const { data: consumed, error: consumeError } = await source.client.rpc('finalize_translation_usage', { p_reservation_id: reservationId, p_consumed: true });
-      if (consumeError || consumed !== true) throw new TranslationError('unavailable', '번역 사용량 확정에 실패했습니다.');
-      usageConsumed = true;
-    }
     results.push(...translated.map((item) => ({ ...item, memoryHit: false })));
     const resultByKey = new Map(results.map((result) => [result.key, result]));
     const ordered = source.items.map((item) => {
@@ -91,9 +76,6 @@ export async function runTranslation(input: { provider: TranslationProvider; tra
     if (completionError) throw new TranslationError('unavailable', '완료 작업을 저장하지 못했습니다.');
     return { id: job.id, status: 'completed', result: ordered, idempotent: false };
   } catch (error) {
-    if (reservationId && !usageConsumed) {
-      await source.client.rpc('finalize_translation_usage', { p_reservation_id: reservationId, p_consumed: false });
-    }
     await source.client.from('translation_jobs').update({ status: 'failed', error_message: error instanceof Error ? error.message.slice(0, 1000) : 'unknown error' }).eq('id', job.id);
     throw error;
   }

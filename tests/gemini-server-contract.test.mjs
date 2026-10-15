@@ -14,7 +14,7 @@ test('Gemini API uses a configured server key and structured JSON output', async
   assert.match(source, /response\.status === 403 \|\| response\.status === 429/);
 });
 
-test('Gemini is a supported provider and automated paid providers remain limit-gated', async () => {
+test('Gemini is supported and historical limit migrations remain preserved without runtime enforcement', async () => {
   const [types, service, migration] = await Promise.all([
     read('lib/server/translation/types.ts'),
     read('lib/server/translation/service.ts'),
@@ -22,6 +22,8 @@ test('Gemini is a supported provider and automated paid providers remain limit-g
   ]);
   assert.match(types, /'gemini'/);
   assert.match(service, /translateWithGemini/);
+  assert.match(service, /enforced: false, status: 'unlimited'/);
+  assert.doesNotMatch(service, /reserve_translation_usage|finalize_translation_usage|translation_usage_monthly/);
   assert.match(migration, /p_provider not in \('azure', 'openai_paid', 'gemini'\)/);
   assert.match(migration, /default_limit := case when p_provider = 'azure' then 2000000 else 0 end/);
   assert.match(migration, /configure_translation_usage_limit/);
