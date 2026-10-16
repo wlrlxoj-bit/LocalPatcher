@@ -9,6 +9,12 @@ const source = readFileSync(new URL('../lib/supabase.ts', import.meta.url), 'utf
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
+// 태그 생성 규칙은 모사하지 않고 실제 모듈을 로드하여 조회 함수의 의존성을 유지합니다.
+const cacheTagExports = {};
+vm.runInNewContext(ts.transpileModule(
+  readFileSync(new URL('../lib/patcher-cache-tags.ts', import.meta.url), 'utf8'),
+  { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+).outputText, { exports: cacheTagExports });
 
 function loadQueries(respond, configured = true) {
   const calls = [];
@@ -37,6 +43,7 @@ function loadQueries(respond, configured = true) {
       if (name === '@supabase/supabase-js') return { createClient: () => client };
       if (name === 'next/cache') return { unstable_cache: fn => fn };
       if (name === '@/lib/game-slug-aliases') return {};
+      if (name === '@/lib/patcher-cache-tags') return cacheTagExports;
       throw new Error(`예상하지 못한 모듈: ${name}`);
     },
   });

@@ -5,6 +5,7 @@ from enum import Enum
 import hashlib
 import json
 import re
+import unicodedata
 from typing import Optional, Tuple
 
 FAILURE_TOKENS = (
@@ -109,6 +110,46 @@ def _same_source(source, translated):
     return bool(comparable) and sum(comparable) / len(comparable) > 0.5
 
 
+def normalize_option_label(label):
+    """공개 옵션 표와 같이 주석을 제외한 라벨의 공백·대소문자를 정규화한다."""
+    label = label.split("**", 1)[0]
+    return " ".join(unicodedata.normalize("NFKC", label).split()).strip().lower()
+
+
+def is_valid_option_label(label):
+    """공개 표의 주석 제외 이름·UTF-16 길이·제어문자 계약을 검사한다."""
+    if not isinstance(label, str) or re.search(r"[\x00-\x08\r\n\x0b\x0c\x0e-\x1f\ufffd]", label):
+        return False
+    visible = label.split("**", 1)[0].strip()
+    try:
+        return bool(visible) and len(visible.encode("utf-16-le", errors="strict")) // 2 <= 180
+    except UnicodeError:
+        return False
+
+
+def option_text_is_publishable(text):
+    """블록별 옵션 이름과 공백 정규화 단축키 중복을 공개 표와 동일하게 거부한다."""
+    if not isinstance(text, str) or re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffd]", text):
+        return False
+    shortcuts = set()
+    for line in text.replace("\r\n", "\n").split("\n"):
+        parsed = parse_option_line(line)
+        if parsed is None:
+            if is_option_candidate(line):
+                return False
+            continue
+        shortcut = re.sub(r"\s+", "", parsed[0]).lower()
+        if shortcut in shortcuts or not is_valid_option_label(parsed[2]):
+            return False
+        shortcuts.add(shortcut)
+    return bool(shortcuts)
+
+
+def is_untranslated_option_label(source_label, translated_label):
+    """주석만 바뀐 옵션도 공개 표와 동일하게 미번역으로 판정한다."""
+    return normalize_option_label(source_label) == normalize_option_label(translated_label)
+
+
 def _safe_api_error_fields(exc):
     """Supabase APIError에서 안전 문자로 된 짧은 code만 추출한다."""
     if type(exc).__name__ != "APIError":
@@ -144,7 +185,8 @@ def _log_save_error(mapping, exc):
 def validate_translation(*, binary: bytes, expected_sha256: str, expected_size: int,
                          text_section: Tuple[int, int], offset: int, max_char_len: int,
                          encoding: str, original_text: str, translated_text: str,
-                         option_count: int, language_code: str) -> ValidationResult:
+                         option_count: int, language_code: str,
+                         expected_complete_block_count: Optional[int] = None) -> ValidationResult:
     """원본 복사본에만 패치를 모의 적용하고 검증 결과를 반환한다."""
     issues = []
     if not binary.startswith(b"MZ"):
@@ -178,6 +220,10 @@ def validate_translation(*, binary: bytes, expected_sha256: str, expected_size: 
 
     src_parts = parse_options(original_text)
     dst_parts = parse_options(translated_text)
+    if not option_text_is_publishable(original_text):
+        issues.append(ValidationIssue("SOURCE_PUBLIC_OPTION_INVALID", "원문 옵션의 이름·단축키가 공개 기준에 맞지 않음"))
+    if not option_text_is_publishable(translated_text):
+        issues.append(ValidationIssue("TRANSLATED_PUBLIC_OPTION_INVALID", "번역 옵션의 이름·단축키가 공개 기준에 맞지 않음"))
     src_unparsed = [
         line for line in original_text.replace("\r\n", "\n").split("\n")
         if is_option_candidate(line) and parse_option_line(line) is None
@@ -191,6 +237,16 @@ def validate_translation(*, binary: bytes, expected_sha256: str, expected_size: 
         "source_patchable_count": len(src_parts),
         "translated_patchable_count": len(dst_parts),
     }
+    if expected_complete_block_count is not None and expected_complete_block_count <= 0:
+        issues.append(ValidationIssue("INVALID_EXPECTED_OPTION_COUNT", "기대 옵션 수가 유효하지 않음"))
+    elif expected_complete_block_count is not None and len(src_parts) != expected_complete_block_count:
+        issues.append(ValidationIssue(
+            "SOURCE_EXPECTED_OPTION_COUNT_MISMATCH", "원문 옵션 수가 표기 수와 다름"
+        ))
+    if expected_complete_block_count is not None and expected_complete_block_count > 0 and len(dst_parts) != expected_complete_block_count:
+        issues.append(ValidationIssue(
+            "TRANSLATED_EXPECTED_OPTION_COUNT_MISMATCH", "번역 옵션 수가 표기 수와 다름"
+        ))
     if src_unparsed:
         issues.append(ValidationIssue(
             "SOURCE_OPTION_PARSE_FAILED",
@@ -215,6 +271,11 @@ def validate_translation(*, binary: bytes, expected_sha256: str, expected_size: 
                     f"옵션 {index + 1}의 단축키 접두부 또는 구분자가 원문과 다름",
                 ))
                 break
+            if is_untranslated_option_label(source[2], translated[2]):
+                issues.append(ValidationIssue(
+                    "UNTRANSLATED_OPTION_LABEL",
+                    f"옵션 {index + 1}의 이름이 원문과 동일",
+                ))
 
     if _same_source(original_text, translated_text):
         issues.append(ValidationIssue("SAME_AS_SOURCE", "번역 대상이 원문과 동일"))

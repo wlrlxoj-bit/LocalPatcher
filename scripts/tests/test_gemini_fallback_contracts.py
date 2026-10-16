@@ -4,9 +4,12 @@ import ast
 import pathlib
 import types
 import unittest
+import sys
 
 
 SCRIPTS = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(SCRIPTS))
+from translation_validation import is_untranslated_option_label, is_valid_option_label
 
 
 def load_function(name, namespace):
@@ -17,6 +20,8 @@ def load_functions(names, namespace):
     source = (SCRIPTS / "scraper.py").read_text(encoding="utf-8")
     module = ast.parse(source)
     scope = dict(namespace)
+    scope.setdefault("is_untranslated_option_label", is_untranslated_option_label)
+    scope.setdefault("is_valid_option_label", is_valid_option_label)
     scope.setdefault("requests", types.SimpleNamespace(
         Timeout=type("Timeout", (Exception,), {}),
         ConnectionError=type("ConnectionError", (Exception,), {}),

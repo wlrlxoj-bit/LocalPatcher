@@ -7,7 +7,15 @@ import unittest
 
 SCRIPTS = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
-from translation_validation import is_option_candidate, parse_option_line, validate_translation
+from translation_validation import (
+    is_option_candidate,
+    is_untranslated_option_label,
+    is_valid_option_label,
+    option_text_is_publishable,
+    parse_option_line,
+    parse_options,
+    validate_translation,
+)
 
 
 def load_functions(filename, names, namespace=None):
@@ -18,11 +26,104 @@ def load_functions(filename, names, namespace=None):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names
     ]
     scope = dict(namespace or {})
+    scope.setdefault("is_valid_option_label", is_valid_option_label)
+    scope.setdefault("option_text_is_publishable", option_text_is_publishable)
     exec(compile(ast.Module(body=selected, type_ignores=[]), filename, "exec"), scope)
     return [scope[name] for name in names]
 
 
 class TranslationChunkTests(unittest.TestCase):
+    def test_source_preflight_blocks_incomplete_slot_and_accepts_section_title(self):
+        checker, = load_functions(
+            "scraper.py", ["source_block_completeness"],
+            {
+                "parse_options": parse_options,
+                "is_option_candidate": is_option_candidate,
+                "parse_option_line": parse_option_line,
+            },
+        )
+        source = "Edit Character\nNum 1 - Infinite Health\nNum 2 - Infinite Ammo"
+        self.assertEqual(checker(source, 50), (False, 2))
+        self.assertEqual(checker(source, 2), (True, 2))
+        self.assertEqual(checker(source + "\nNum 3 = Money", 2), (False, 2))
+        self.assertEqual(checker("Num 1 - Health\nNum 1 - Money", 2), (False, 2))
+        self.assertEqual(checker("Num 1 - **note", 1), (False, 1))
+        self.assertEqual(checker("Num 1 - " + "x" * 181, 1), (False, 1))
+
+    def test_llm_note_only_result_uses_fallback_instead_of_cache(self):
+        import json
+        translate, = load_functions(
+            "scraper.py",
+            ["_translate_via_llm_with_fallback"],
+            {
+                "_chunk_translation_items": lambda lines: [lines],
+                "_build_llm_prompt": lambda *args: "prompt",
+                "is_untranslated_option_label": is_untranslated_option_label,
+                "retry_failure_policy": lambda exc: ("blocked", "INVALID_TRANSLATION", 0),
+                "TranslationQuotaError": type("TranslationQuotaError", (RuntimeError,), {}),
+                "TranslationProviderError": type("TranslationProviderError", (RuntimeError,), {}),
+                "requests": type("Requests", (), {"Timeout": TimeoutError, "ConnectionError": ConnectionError}),
+                "json": json,
+            },
+        )
+        providers = [
+            ("Gemini", lambda *_: ["Money Multiplier **금액 증가"]),
+            ("OpenAI Paid Fallback", lambda *_: ["자금 배율 **금액 증가"]),
+        ]
+        self.assertEqual(
+            translate(["Money Multiplier **Takes effect"], "Korean", "예시", providers),
+            ["자금 배율 **금액 증가"],
+        )
+        for invalid in ("**주석만", "가" * 181, "무한\x01체력", "체력\nNum 2 - 금액"):
+            with self.subTest(invalid=invalid):
+                self.assertEqual(
+                    translate(["Health"], "Korean", "예시", [
+                        ("Gemini", lambda *_, result=invalid: [result]),
+                        ("OpenAI Paid Fallback", lambda *_: ["무한 체력"]),
+                    ]),
+                    ["무한 체력"],
+                )
+
+    def test_dictionary_rejects_unchanged_label_with_translated_note(self):
+        saver, = load_functions(
+            "scraper.py", ["save_new_translations_to_dictionary"],
+            {
+                "parse_option_line": parse_option_line,
+                "is_untranslated_option_label": is_untranslated_option_label,
+                "Client": object,
+            },
+        )
+        class DictionaryDb:
+            def __init__(self):
+                self.calls = []
+            def table(self, name):
+                self.calls.append(name)
+                return self
+            def upsert(self, payload, **kwargs):
+                self.calls.append(payload)
+                return self
+            def execute(self):
+                return None
+        db = DictionaryDb()
+        saver("Num 1 - Money Multiplier **Takes effect",
+              "Num 1 - Money Multiplier **금액 증가", "ko", db)
+        self.assertEqual(db.calls, [])
+        saver("Num 1 - Money Multiplier **Takes effect",
+              "Num 1 - 자금 배율 **금액 증가", "ko", db)
+        self.assertEqual(db.calls[1]["english_term"], "Money Multiplier")
+        self.assertEqual(db.calls[1]["korean_translation"], "자금 배율")
+
+    def test_invalid_memory_dictionary_value_falls_back_to_llm(self):
+        translate, = load_functions(
+            "scraper.py", ["translate_line_ja"],
+            {
+                "parse_option_line": parse_option_line,
+                "is_untranslated_option_label": is_untranslated_option_label,
+                "db_dictionary_ja": {"money multiplier": "Money Multiplier **金額増加"},
+            },
+        )
+        self.assertIsNone(translate("Num 2 - Money Multiplier"))
+
     def test_51_items_are_chunked_25_25_1(self):
         chunker, = load_functions("scraper.py", ["_chunk_translation_items"])
         self.assertEqual([len(chunk) for chunk in chunker(["x"] * 51)], [25, 25, 1])
@@ -100,6 +201,7 @@ class TranslationChunkTests(unittest.TestCase):
             "db_dictionary_ko": {},
             "db_dictionary_ja": {},
             "COMMON_TRANSLATIONS": {},
+            "is_untranslated_option_label": is_untranslated_option_label,
         }
         exec(compile(ast.Module(body=functions, type_ignores=[]), "scraper.py", "exec"), scope)
         # 번역 단계는 특이 단축키 후보를 보존한다. 저장 직전 검증이
@@ -185,6 +287,35 @@ class PendingPaginationTests(unittest.TestCase):
 
 
 class WorkflowContractTests(unittest.TestCase):
+    def test_outbox_drain_scope_matrix_and_input_validation_dependency(self):
+        import re
+        workflow = (SCRIPTS.parent / ".github" / "workflows" / "scraper.yml").read_text(encoding="utf-8")
+        job = workflow.split("  drain-patcher-revalidation-outbox:\n", 1)[1].split("\n  crawl:", 1)[0]
+        self.assertIn("needs: validate-inputs", job)
+        expression = re.search(r"^    if: \$\{\{ (.+) \}\}$", job, re.M).group(1)
+        self.assertNotIn("always()", expression)
+        cases = [
+            ("schedule", "", "", "success", True),
+            ("workflow_dispatch", "", "false", "success", True),
+            ("workflow_dispatch", "https://flingtrainer.com/trainer/example/", "false", "success", False),
+            ("workflow_dispatch", "", "true", "success", False),
+            ("workflow_dispatch", "", "false", "failure", False),
+            ("push", "", "", "success", False),
+        ]
+        for event, target, retry, validated, expected in cases:
+            with self.subTest(event=event, target=target, retry=retry, validated=validated):
+                condition = expression
+                for key, value in {
+                    "github.event.inputs.retry_only": retry,
+                    "github.event.inputs.target_url": target,
+                    "github.event_name": event,
+                }.items():
+                    condition = condition.replace(key, repr(value))
+                condition = condition.replace("&&", " and ").replace("||", " or ")
+                # always() 없는 종속 작업은 Actions의 기본 success() 경계도 적용한다.
+                actual = validated == "success" and eval(condition, {"__builtins__": {}}, {})
+                self.assertEqual(actual, expected)
+
     def test_ready_job_is_bounded_and_runs_only_for_scheduled_crawls(self):
         workflow = (SCRIPTS.parent / ".github" / "workflows" / "scraper.yml").read_text(encoding="utf-8")
         self.assertIn("crawl:", workflow)

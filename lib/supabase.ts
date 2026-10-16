@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { unstable_cache } from 'next/cache';
+import { getPatcherMappingCacheTag, getPatcherTrainerListCacheTag } from '@/lib/patcher-cache-tags';
 import {
   getNumericTrainerBaseSlug,
   hasSameNormalizedGameTitle,
@@ -517,20 +518,24 @@ export function sortTrainersLatestFirst<T extends { id: number; version_str: str
   );
 }
 
-export const getTrainersForGame = unstable_cache(async (gameId: number) => {
-  if (!supabase) throw new Error('트레이너 DB가 설정되지 않았습니다.');
-  try {
-    const { data, error } = await supabase
-      .from('trainers')
-      .select('*')
-      .eq('game_id', gameId);
-    if (error || !data) throw error || new Error('No data');
-    return sortTrainersLatestFirst(data);
-  } catch (err) {
-    console.error('운영 트레이너 조회에 실패했습니다:', err);
-    throw new Error('운영 트레이너 조회에 실패했습니다.', { cause: err });
-  }
-}, ['trainers-for-game'], { revalidate: 3600 });
+/** 게임별 캐시 키·태그를 함께 지정해 신규 버전과 공개 매핑의 갱신 시점을 맞춥니다. */
+export async function getTrainersForGame(gameId: number) {
+  const tag = getPatcherTrainerListCacheTag(gameId);
+  return unstable_cache(async () => {
+    if (!supabase) throw new Error('트레이너 DB가 설정되지 않았습니다.');
+    try {
+      const { data, error } = await supabase
+        .from('trainers')
+        .select('*')
+        .eq('game_id', gameId);
+      if (error || !data) throw error || new Error('No data');
+      return sortTrainersLatestFirst(data);
+    } catch (err) {
+      console.error('운영 트레이너 조회에 실패했습니다:', err);
+      throw new Error('운영 트레이너 조회에 실패했습니다.', { cause: err });
+    }
+  }, ['trainers-for-game', String(gameId)], { revalidate: 3600, tags: [tag] })();
+}
 
 export async function getMappingsForTrainer(trainerId: number, lang: string = 'ko') {
   if (!supabase) throw new Error('번역 매핑 DB가 설정되지 않았습니다.');
@@ -549,7 +554,7 @@ export async function getMappingsForTrainer(trainerId: number, lang: string = 'k
   }
 }
 
-export const getMappingsForTrainers = unstable_cache(async (trainerIds: number[], lang: string = 'ko') => {
+async function loadMappingsForTrainers(trainerIds: number[], lang: string) {
   if (trainerIds.length === 0) return {};
   if (!supabase) throw new Error('번역 매핑 DB가 설정되지 않았습니다.');
   try {
@@ -577,7 +582,15 @@ export const getMappingsForTrainers = unstable_cache(async (trainerIds: number[]
     console.error('운영 번역 매핑 일괄 조회에 실패했습니다:', err);
     throw new Error('운영 번역 매핑 일괄 조회에 실패했습니다.', { cause: err });
   }
-}, ['mappings-for-trainers'], { revalidate: 3600 });
+}
+
+/** 조회 인수는 캐시 키로, 각 트레이너·언어 조합은 개별 무효화 태그로 사용합니다. */
+export function getMappingsForTrainers(trainerIds: number[], lang: string = 'ko') {
+  return unstable_cache(loadMappingsForTrainers, ['mappings-for-trainers'], {
+    tags: [...new Set(trainerIds.map((trainerId) => getPatcherMappingCacheTag(trainerId, lang)))],
+    revalidate: 3600,
+  })(trainerIds, lang);
+}
 
 export type UnapprovedTranslationStatus = 'pending' | 'rejected';
 
@@ -585,10 +598,10 @@ export type UnapprovedTranslationStatus = 'pending' | 'rejected';
  * 트레이너와 언어별로 가장 최근의 미승인 번역 처리 상태를 조회합니다.
  * 승인된 매핑 자체는 기존 조회 함수가 담당하며, 이 함수는 UI 상태 안내에만 사용합니다.
  */
-export const getLatestUnapprovedStatusesForTrainers = unstable_cache(async (
+async function loadLatestUnapprovedStatusesForTrainers(
   trainerIds: number[],
-  lang: string = 'ko'
-): Promise<Record<number, UnapprovedTranslationStatus | null>> => {
+  lang: string,
+): Promise<Record<number, UnapprovedTranslationStatus | null>> {
   const result: Record<number, UnapprovedTranslationStatus | null> = {};
   for (const trainerId of trainerIds) {
     result[trainerId] = null;
@@ -620,4 +633,12 @@ export const getLatestUnapprovedStatusesForTrainers = unstable_cache(async (
     console.error('운영 번역 처리 상태 일괄 조회에 실패했습니다:', err);
     return result;
   }
-}, ['unapproved-statuses'], { revalidate: 3600 });
+}
+
+/** 승인 전 처리 상태도 같은 대상 태그로 갱신해 공개 본문과 상태 안내를 맞춥니다. */
+export function getLatestUnapprovedStatusesForTrainers(trainerIds: number[], lang: string = 'ko') {
+  return unstable_cache(loadLatestUnapprovedStatusesForTrainers, ['unapproved-statuses'], {
+    tags: [...new Set(trainerIds.map((trainerId) => getPatcherMappingCacheTag(trainerId, lang)))],
+    revalidate: 3600,
+  })(trainerIds, lang);
+}

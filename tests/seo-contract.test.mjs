@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import vm from 'node:vm';
+import ts from 'typescript';
 
 const patcherPageUrl = new URL('../app/[locale]/patcher/[game_slug]/page.tsx', import.meta.url);
 const uniqueContentUrl = new URL('../components/PatcherUniqueContent.tsx', import.meta.url);
@@ -110,14 +112,15 @@ test('sitemap은 검증 snapshot URL 생성 루프를 유지하고 홈 링크는
   assert.match(localeHomeSource, /\[canonicalSlug, \{ \.\.\.canonicalGame, slug: canonicalSlug \}\]/);
 });
 
-test('게임별 지원 정보는 매핑 행 수가 아니라 승인된 최신 트레이너의 옵션 수를 표시한다', async () => {
+test('게임별 승인 옵션 수는 매핑 행·메타데이터가 아니라 완전히 검증된 공개 표에서 산출한다', async () => {
   const [pageSource, uniqueContentSource] = await Promise.all([
     readFile(patcherPageUrl, 'utf8'),
     readFile(uniqueContentUrl, 'utf8'),
   ]);
 
-  assert.match(pageSource, /const hasApprovedLatestMapping = latestTrainer[\s\S]*?\.length > 0/);
-  assert.match(pageSource, /const translatedOptionCount = hasApprovedLatestMapping \? supportedOptionCount : 0/);
+  assert.match(pageSource, /const optionTable = latestTrainer \? getTrainerOptionTable\(\{[\s\S]*?latestTrainerId: latestTrainer\.id,[\s\S]*?locale: currentLocale,[\s\S]*?optionCount: supportedOptionCount,[\s\S]*?indexEligible,[\s\S]*?mappings: mappingsMap\[latestTrainer\.id\] \|\| \[\],[\s\S]*?\}\) : null/);
+  assert.match(pageSource, /const translatedOptionCount = optionTable\?\.items\.length \?\? 0/);
+  assert.doesNotMatch(pageSource, /hasApprovedLatestMapping/);
   assert.doesNotMatch(pageSource, /const translatedOptionCount = latestTrainer[\s\S]*?\.length/);
   assert.match(pageSource, /\.map\(\(trainer\) => trainer\.version_str\?\.trim\(\)\)/);
   assert.match(uniqueContentSource, /versions\.length > 0 \? versions\.join\(', '\) : labels\.unavailable/);
@@ -125,12 +128,30 @@ test('게임별 지원 정보는 매핑 행 수가 아니라 승인된 최신 �
     assert.ok(uniqueContentSource.includes(`unavailable: '${localizedFallback}'`));
   }
 
-  const latestTrainer = { option_count: 35 };
-  const approvedMappingRows = [{ translated_text: '전체 번역문' }];
-  const displayedCount = approvedMappingRows.length > 0 && latestTrainer.option_count > 0
-    ? latestTrainer.option_count
-    : 0;
-  assert.equal(displayedCount, 35, '매핑 1행은 번역 옵션 1개가 아니라 전체 35개 옵션의 승인 근거입니다.');
+  // 실제 표 생성기를 실행하여 승인 행의 존재만으로 수량을 과장하는 회귀를 막습니다.
+  const tableExports = {};
+  vm.runInNewContext(ts.transpileModule(
+    await readFile(new URL('../lib/trainer-option-table.ts', import.meta.url), 'utf8'),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+  ).outputText, { exports: tableExports });
+  const shortcuts = [
+    ...Array.from({ length: 24 }, (_, index) => `Ctrl+F${index + 1}`),
+    ...Array.from({ length: 10 }, (_, index) => `Ctrl+Num ${index}`),
+    'Alt+F1',
+  ];
+  const mapping = {
+    trainer_id: 42, language_code: 'ko', is_approved: true, offset_dec: 100,
+    original_text: shortcuts.map((shortcut, index) => `${shortcut} - Source ${index}`).join('\n'),
+    translated_text: shortcuts.map((shortcut, index) => `${shortcut} - 번역 ${index}`).join('\n'),
+  };
+  const input = { latestTrainerId: 42, locale: 'ko', optionCount: 35, indexEligible: true, mappings: [mapping] };
+  const count = (overrides = {}) => tableExports.getTrainerOptionTable({ ...input, ...overrides })?.items.length ?? 0;
+  assert.equal(count(), 35, '완전한 35옵션 번역은 단일 매핑 행이어도 35개로 표시합니다.');
+  assert.equal(count({ optionCount: 50 }), 0, '원본 수량보다 적은 승인 매핑을 완전 번역으로 표시하지 않습니다.');
+  assert.equal(count({ indexEligible: false }), 0, '색인 자격이 없는 번역을 공개 승인 옵션으로 세지 않습니다.');
+  assert.equal(count({ mappings: [] }), 0);
+  assert.equal(count({ mappings: [{ ...mapping, translated_text: mapping.original_text + '** 안내만 번역' }] }), 0,
+    '안내만 번역하고 옵션 라벨을 그대로 둔 매핑은 승인 수량으로 표시하지 않습니다.');
   assert.equal('   '.trim(), '', '공백뿐인 버전은 지원 버전에 노출하지 않습니다.');
 });
 

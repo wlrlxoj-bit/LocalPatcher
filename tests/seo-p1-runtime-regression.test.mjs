@@ -48,7 +48,7 @@ function immediateClient(rawSlug, target, hooks = {}) {
     from(table) {
       assert.equal(table, 'trainers');
       return { select: () => ({ eq: () => ({ maybeSingle: async () => ({
-        data: { games: { slug: rawSlug } }, error: null,
+        data: { game_id: 7, games: { slug: rawSlug } }, error: null,
       }) }) }) };
     },
     async rpc(name, args) {
@@ -74,7 +74,8 @@ test('세 정적 Elden alias 및 숫자형 alias의 즉시 무효화는 snapshot
     if (rawSlug.startsWith('elden-')) assert.equal(aliases.resolveStaticGameSlugAlias(rawSlug), canonicalSlug);
     const paths = [];
     const module = await loadTs('lib/server/admin/revalidate-patcher.ts', {
-      'next/cache': { revalidatePath: (path) => paths.push(path) },
+      'next/cache': { revalidatePath: (path) => paths.push(path), revalidateTag() {} },
+      '@/lib/patcher-cache-tags': await loadTs('lib/patcher-cache-tags.ts'),
     });
     const client = immediateClient(rawSlug, [{ canonical_slug: canonicalSlug }]);
     const result = await module.revalidatePatcherForTrainer(client, 123);
@@ -90,14 +91,16 @@ test('snapshot 경로 누락·복수·조회 실패는 raw slug fallback이나 �
   for (const target of [null, [], [{ canonical_slug: '' }], [{ canonical_slug: 'one' }, { canonical_slug: 'two' }]]) {
     const paths = [];
     const module = await loadTs('lib/server/admin/revalidate-patcher.ts', {
-      'next/cache': { revalidatePath: (path) => paths.push(path) },
+      'next/cache': { revalidatePath: (path) => paths.push(path), revalidateTag() {} },
+      '@/lib/patcher-cache-tags': await loadTs('lib/patcher-cache-tags.ts'),
     });
     const result = await module.revalidatePatcherForTrainer(immediateClient('raw-alias', target), 123);
     assert.equal(result.reason, 'canonical_snapshot_unavailable');
     assert.deepEqual(paths, []);
   }
   const module = await loadTs('lib/server/admin/revalidate-patcher.ts', {
-    'next/cache': { revalidatePath: () => assert.fail('실패한 snapshot 조회 뒤 무효화할 수 없습니다.') },
+    'next/cache': { revalidatePath: () => assert.fail('실패한 snapshot 조회 뒤 무효화할 수 없습니다.'), revalidateTag: () => assert.fail('실패한 snapshot 조회 뒤 태그를 무효화할 수 없습니다.') },
+    '@/lib/patcher-cache-tags': await loadTs('lib/patcher-cache-tags.ts'),
   });
   const client = immediateClient('raw-alias', null, {
     get_patcher_revalidation_target: () => ({ data: null, error: new Error('조회 실패') }),
@@ -108,7 +111,8 @@ test('snapshot 경로 누락·복수·조회 실패는 raw slug fallback이나 �
 test('즉시 cache 오류는 전파되고 worker용 durable 작업을 닫지 않는다', async () => {
   const failure = new Error('cache unavailable');
   const module = await loadTs('lib/server/admin/revalidate-patcher.ts', {
-    'next/cache': { revalidatePath: () => { throw failure; } },
+    'next/cache': { revalidatePath: () => { throw failure; }, revalidateTag() {} },
+    '@/lib/patcher-cache-tags': await loadTs('lib/patcher-cache-tags.ts'),
   });
   const client = immediateClient('raw-alias', [{ canonical_slug: 'canonical' }]);
   await assert.rejects(module.revalidatePatcherForTrainer(client, 123), (error) => error === failure);
@@ -119,13 +123,16 @@ test('worker는 새 세대 fence의 finish false를 완료로 세지 않고 자�
   const paths = [];
   const calls = [];
   const module = await loadTs('lib/server/admin/patcher-revalidation-outbox.ts', {
-    'next/cache': { revalidatePath: (path) => paths.push(path) },
+    'next/cache': { revalidatePath: (path) => paths.push(path), revalidateTag() {} },
+    '@/lib/patcher-cache-tags': await loadTs('lib/patcher-cache-tags.ts'),
   });
-  const client = { async rpc(name, args) {
+  const client = {
+    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { game_id: 7 }, error: null }) }) }) }),
+    async rpc(name, args) {
     calls.push({ name, args });
     if (name === 'bootstrap_patcher_index_eligibility_snapshot') return { data: 0, error: null };
     if (name === 'claim_patcher_revalidation_outbox') return { data: [{
-      id: 1, locale_codes: ['ko', 'de'], reason: 'content_changed',
+      id: 1, trainer_id: 123, game_id: 7, locale_codes: ['ko', 'de'], reason: 'content_changed',
       lease_token: 'original-lease', canonical_slug: 'canonical', attempt_count: 1,
     }], error: null };
     return { data: false, error: null };

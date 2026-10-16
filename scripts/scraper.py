@@ -21,7 +21,11 @@ from fling_utils import (
 )
 from translation_validation import (
     is_option_candidate,
+    is_untranslated_option_label,
+    is_valid_option_label,
+    option_text_is_publishable,
     parse_option_line,
+    parse_options,
     save_validated_draft,
     validate_translation,
 )
@@ -293,14 +297,16 @@ db_dictionary_ko = {}
 db_dictionary_ja = {}
 
 def save_new_translations_to_dictionary(original_line: str, translated_line: str, language_code: str, db: Client):
-    """Extracts clean option labels and inserts/updates them into Supabase 'common_dictionary' table to dynamically train the database dictionary."""
+    """승인 검증을 거친 옵션의 주석 제외 라벨만 공통 사전에 학습한다."""
     try:
         parts_orig = parse_option_line(original_line.strip())
         parts_trans = parse_option_line(translated_line.strip())
         if parts_orig and parts_trans:
-            eng_label = parts_orig[2].strip()
-            trans_label = parts_trans[2].strip()
-            if not eng_label or not trans_label:
+            if parts_orig[:2] != parts_trans[:2]:
+                return
+            eng_label = parts_orig[2].split('**', 1)[0].strip()
+            trans_label = parts_trans[2].split('**', 1)[0].strip()
+            if not is_valid_option_label(eng_label) or not is_valid_option_label(trans_label) or is_untranslated_option_label(eng_label, trans_label):
                 return
                 
             column_name = {
@@ -317,10 +323,19 @@ def save_new_translations_to_dictionary(original_line: str, translated_line: str
                 'english_term': eng_label,
                 column_name: trans_label
             }, on_conflict='english_term').execute()
-            print(f"[+] Dynamic Dictionary Learned ({language_code}): '{eng_label}' -> '{trans_label}'")
+            print(f"[dictionary-learned] locale={language_code}")
     except Exception as e:
         # Silently fail if table doesn't exist or duplicate key error occurs
         pass
+
+
+def learn_approved_option_labels(original_text: str, translated_text: str,
+                                 language_code: str, db: Client):
+    """저장까지 승인된 블록의 옵션만 사전에 반영하고 헤더는 학습하지 않는다."""
+    for source, target in zip(parse_options(original_text), parse_options(translated_text)):
+        source_line = "".join(source)
+        target_line = "".join(target)
+        save_new_translations_to_dictionary(source_line, target_line, language_code, db)
 
 def _build_llm_prompt(lines_to_translate, language, example_translation, extra_prompt=""):
     """중복 원문 줄이 합쳐지지 않도록 인덱스 키 기반 프롬프트를 만든다."""
@@ -503,6 +518,13 @@ def _translate_via_llm_with_fallback(lines_to_translate, language, example_trans
     for provider_name, provider in providers:
         try:
             result = provider(lines_to_translate, prompt, 0.7)
+            if len(result) != len(lines_to_translate) or any(
+                not isinstance(target, str) or not target.strip()
+                or not is_valid_option_label(target)
+                or is_untranslated_option_label(source, target)
+                for source, target in zip(lines_to_translate, result)
+            ):
+                raise ValueError("번역 결과의 옵션 이름이 원문과 동일하거나 응답 수가 다름")
             last_llm_provider = provider_name
             return result
         except Exception as exc:
@@ -543,6 +565,17 @@ def _split_option_for_translation(line):
         return None
     prefix, delimiter, label = parts
     return prefix + delimiter, label
+
+
+def source_block_completeness(original_text: str, option_count: int):
+    """단일 패치 슬롯에 표기된 전체 옵션이 있고 후보 파싱 누락이 없는지 검사한다."""
+    parsed_count = len(parse_options(original_text))
+    has_unparsed = any(
+        is_option_candidate(line) and parse_option_line(line) is None
+        for line in original_text.replace('\r\n', '\n').split('\n')
+    )
+    return (option_count > 0 and parsed_count == option_count and not has_unparsed
+            and option_text_is_publishable(original_text)), parsed_count
 
 
 def translation_providers(prefer_openai_fallback=False):
@@ -599,8 +632,6 @@ def process_translation_block_de(text: str, db: Client, prefer_openai_fallback=F
             parts = _split_option_for_translation(line)
             trans_line = parts[0] + llm_results[llm_index]
             llm_index += 1
-            if trans_line != line:
-                save_new_translations_to_dictionary(line, trans_line, 'de', db)
             
         if len(trans_line) < orig_len:
             trans_line += " " * (orig_len - len(trans_line))
@@ -637,8 +668,6 @@ def process_translation_block_es(text: str, db: Client, prefer_openai_fallback=F
             parts = _split_option_for_translation(line)
             trans_line = parts[0] + llm_results[llm_index]
             llm_index += 1
-            if trans_line != line:
-                save_new_translations_to_dictionary(line, trans_line, 'es', db)
             
         if len(trans_line) < orig_len:
             trans_line += " " * (orig_len - len(trans_line))
@@ -660,7 +689,9 @@ def translate_line(line: str):
     # Check dynamic database dictionary first, then fallback to local static dict
     translated_label = None
     if label_lower in COMMON_TRANSLATIONS:
-        translated_label = COMMON_TRANSLATIONS[label_lower]
+        candidate = COMMON_TRANSLATIONS[label_lower]
+        if is_valid_option_label(candidate) and not is_untranslated_option_label(label, candidate):
+            translated_label = candidate
         
     if translated_label is not None:
         # Force LLM translation if there is an english leak in the details/notes
@@ -730,9 +761,6 @@ def process_translation_block(text: str, db: Client, prefer_openai_fallback=Fals
                 raise RuntimeError("번역 결과와 옵션 줄의 대응 관계가 손상됨")
             trans_line = parts[0] + llm_results[llm_index]
             llm_index += 1
-            # Save newly translated term to dynamic dictionary table for self-learning caching
-            if trans_line != line:
-                save_new_translations_to_dictionary(line, trans_line, 'ko', db)
 
         # Apply Space Padding to synchronize string length in bytes/chars
         if len(trans_line) < orig_len:
@@ -757,7 +785,9 @@ def translate_line_ja(line: str):
     
     translated_label = None
     if label_lower in db_dictionary_ja:
-        translated_label = db_dictionary_ja[label_lower]
+        candidate = db_dictionary_ja[label_lower]
+        if is_valid_option_label(candidate) and not is_untranslated_option_label(label, candidate):
+            translated_label = candidate
         
     if translated_label is not None:
         # Force LLM translation if there is an english leak in the details/notes for Japanese
@@ -871,8 +901,6 @@ def process_translation_block_ja(text: str, db: Client, prefer_openai_fallback=F
                 raise RuntimeError("번역 결과와 옵션 줄의 대응 관계가 손상됨")
             trans_line = parts[0] + llm_results[llm_index]
             llm_index += 1
-            if trans_line != line:
-                save_new_translations_to_dictionary(line, trans_line, 'ja', db)
 
         if len(trans_line) < orig_len:
             trans_line += " " * (orig_len - len(trans_line))
@@ -897,64 +925,87 @@ def parse_pe_binary(exe_bytes: bytes):
         print(f"[-] PE Header parsing failed: {e}")
         return None
 
+def _safe_pe_data_ranges(exe_bytes: bytes):
+    """PE 원시 섹션 범위를 검증하고 읽기 가능한 비실행 초기화 데이터만 반환한다."""
+    if len(exe_bytes) < 64 or exe_bytes[:2] != b'MZ':
+        return []
+    pe_offset = int.from_bytes(exe_bytes[60:64], 'little')
+    if pe_offset < 64 or pe_offset + 24 > len(exe_bytes) or exe_bytes[pe_offset:pe_offset + 4] != b'PE\0\0':
+        return []
+    section_count = int.from_bytes(exe_bytes[pe_offset + 6:pe_offset + 8], 'little')
+    optional_size = int.from_bytes(exe_bytes[pe_offset + 20:pe_offset + 22], 'little')
+    optional = pe_offset + 24
+    magic = int.from_bytes(exe_bytes[optional:optional + 2], 'little')
+    if not 1 <= section_count <= 96 or magic not in (0x10b, 0x20b) or optional_size < (96 if magic == 0x10b else 112):
+        return []
+    table = optional + optional_size
+    table_end = table + section_count * 40
+    if table_end > len(exe_bytes):
+        return []
+    headers_end = int.from_bytes(exe_bytes[optional + 60:optional + 64], 'little')
+    if not table_end <= headers_end <= len(exe_bytes):
+        return []
+    all_ranges, data_ranges = [], []
+    for index in range(section_count):
+        entry = table + index * 40
+        size = int.from_bytes(exe_bytes[entry + 16:entry + 20], 'little')
+        start = int.from_bytes(exe_bytes[entry + 20:entry + 24], 'little')
+        flags = int.from_bytes(exe_bytes[entry + 36:entry + 40], 'little')
+        if not size:
+            continue
+        end = start + size
+        if start < headers_end or end > len(exe_bytes) or any(start < old_end and old_start < end for old_start, old_end in all_ranges):
+            return []
+        all_ranges.append((start, end))
+        if flags & 0x40 and flags & 0x40000000 and not flags & (0x20000000 | 0x20):
+            data_ranges.append((start, end))
+    return data_ranges
+
+
 def scan_cheat_string_offset(exe_bytes: bytes):
-    """Scans binary to detect the offset, encoding, and capacity of the hotkey options block."""
-    # Look for hotkey signatures in both UTF-16LE and ASCII formats
-    patterns = {
-        'UTF-16LE': b'N\x00u\x00m\x00 \x001\x00',
-        'ASCII': b'Num 1'
-    }
-    
-    for encoding, pattern in patterns.items():
-        offset = exe_bytes.find(pattern)
-        if offset != -1:
-            print(f"[+] Found hotkey signature pattern in {encoding} at offset {offset}")
-            
-            # Trace backwards to locate start of string (usually preceded by double newlines or nulls)
-            start_offset = offset
-            limit = max(0, offset - 1000)
-            
-            if encoding == 'UTF-16LE':
-                # Trace back UTF-16LE newlines \n\n (\n is \n\x00)
-                while start_offset > limit:
-                    if exe_bytes[start_offset:start_offset+4] == b'\n\x00\n\x00':
-                        start_offset += 4
-                        break
-                    start_offset -= 2
-            else:
-                while start_offset > limit:
-                    if exe_bytes[start_offset:start_offset+2] == b'\n\n':
-                        start_offset += 2
-                        break
-                    start_offset -= 1
-            
-            # Trace forwards to calculate total string capacity/buffer limit
-            end_offset = offset
-            max_limit = min(len(exe_bytes), offset + 8000)
-            
-            if encoding == 'UTF-16LE':
-                while end_offset < max_limit:
-                    # Check for double null terminal block
-                    if exe_bytes[end_offset:end_offset+4] == b'\x00\x00\x00\x00':
-                        break
-                    end_offset += 2
-            else:
-                while end_offset < max_limit:
-                    if exe_bytes[end_offset:end_offset+2] == b'\x00\x00':
-                        break
-                    end_offset += 1
-                    
-            max_char_len = (end_offset - start_offset) // (2 if encoding == 'UTF-16LE' else 1)
-            raw_bytes = exe_bytes[start_offset:end_offset]
-            original_text = raw_bytes.decode(encoding, errors='ignore').replace('\x00', '').replace('\u0000', '')
-            
-            return {
-                'offset_dec': start_offset,
-                'encoding': encoding,
-                'max_char_len': max_char_len,
-                'original_text': original_text
-            }
-            
+    """최대 64KiB의 완전한 NUL 종료 슬롯만 비실행 PE 데이터에서 엄격히 읽는다.
+
+    종료자를 제외한 실제 문자열만 용량으로 사용하며 실행·오버레이·잘린 문자열은
+    반환하지 않는다. 파일 해시와 기존 승인본 보호는 호출부의 기존 계약을 유지한다.
+    """
+    for encoding, codec, width, pattern in (
+        ('UTF-16LE', 'utf-16-le', 2, b'N\x00u\x00m\x00 \x001\x00'),
+        ('ASCII', 'ascii', 1, b'Num 1'),
+    ):
+        for section_start, section_end in _safe_pe_data_ranges(exe_bytes):
+            search_at = section_start
+            while search_at < section_end:
+                anchor = exe_bytes.find(pattern, search_at, section_end)
+                if anchor < 0:
+                    break
+                search_at = anchor + len(pattern)
+                if width == 2 and anchor % 2:
+                    continue
+                terminator = b'\0' * width
+                start = anchor
+                minimum = max(section_start, anchor - 65536)
+                while start - width >= minimum and exe_bytes[start - width:start] != terminator:
+                    start -= width
+                if start != section_start and (start - width < minimum or exe_bytes[start - width:start] != terminator):
+                    continue
+                end = anchor
+                limit = min(section_end, start + 65536 + width)
+                while end + width <= limit and exe_bytes[end:end + width] != terminator:
+                    end += width
+                if end + width > limit or exe_bytes[end:end + width] != terminator:
+                    continue
+                try:
+                    original_text = exe_bytes[start:end].decode(codec, errors='strict')
+                except UnicodeError:
+                    continue
+                if not option_text_is_publishable(original_text):
+                    continue
+                return {
+                    'offset_dec': start,
+                    'encoding': encoding,
+                    'max_char_len': (end - start) // width,
+                    'original_text': original_text,
+                }
     return None
 
 def fetch_recent_trainers():
@@ -1726,6 +1777,19 @@ def scrape_and_patch_trainer(
                     
                 # Parse version and option count from download link text for accuracy
                 final_version_str, option_count = parse_trainer_version(download_text)
+                clean_orig_text = mapping_details['original_text'].replace('\x00', '').replace('\u0000', '')
+                source_complete, source_count = source_block_completeness(
+                    clean_orig_text, option_count,
+                )
+                # 현재 스캐너는 단일 블록만 패치한다. 전체 옵션이 이 슬롯에 없으면
+                # DB 초안이나 유료 번역 호출 전에 보류한다.
+                if not source_complete:
+                    print(f"[SOURCE_OPTION_INCOMPLETE] trainer={trainer_id or 0} expected={option_count} actual={source_count}")
+                    if strict_download_failures:
+                        had_eligible_failure = True
+                    if outcome_reporter:
+                        outcome_reporter("blocked", "SOURCE_OPTION_INCOMPLETE")
+                    continue
                 
                 if trainer_id is None:
                     game_row = find_game_by_canonical_slug(db, post['slug'], game_title_en)
@@ -1766,7 +1830,6 @@ def scrape_and_patch_trainer(
                 
                 # Run translation engine
                 # 자동 초안은 승인된 기존 매핑을 절대 덮어쓰지 않는 DB RPC로 저장한다.
-                clean_orig_text = mapping_details['original_text'].replace('\x00', '').replace('\u0000', '')
                 trainer_ok = True
                 for language_code, translator in {
                     'ko': process_translation_block, 'ja': process_translation_block_ja,
@@ -1817,6 +1880,7 @@ def scrape_and_patch_trainer(
                             encoding=mapping_details['encoding'], original_text=clean_orig_text,
                             translated_text=mapping['translated_text'], option_count=option_count,
                             language_code=language_code,
+                            expected_complete_block_count=option_count,
                         )
                         if validation.ok or any(issue.structural for issue in validation.issues):
                             break
@@ -1840,6 +1904,10 @@ def scrape_and_patch_trainer(
                     print(f"[save-outcome] trainer={trainer_id} locale={language_code} status={outcome.value}")
                     if outcome.value in {"approved", "preserved"}:
                         complete_translation_retry(db, trainer_id, language_code)
+                        if outcome.value == "approved":
+                            learn_approved_option_labels(
+                                clean_orig_text, mapping['translated_text'], language_code, db,
+                            )
                     elif outcome.value == "rejected":
                         schedule_translation_retry(
                             db, trainer_id, language_code, "blocked", "VALIDATION_REJECTED", 0,

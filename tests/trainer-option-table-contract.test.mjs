@@ -140,6 +140,8 @@ test('서버 페이지는 기존 10개 요약을 유지하고 최신 매핑만 �
   assert.match(page, /getTrainerOptionSummary\(mappingsMap\[latestTrainer\.id\] \|\| \[\]\)/);
   assert.match(page, /getTrainerOptionTable\(\{[\s\S]*?latestTrainerId: latestTrainer\.id,[\s\S]*?locale: currentLocale,[\s\S]*?indexEligible,[\s\S]*?mappings: mappingsMap\[latestTrainer\.id\] \|\| \[\]/);
   assert.match(page, /optionTable=\{optionTable\}/);
+  assert.match(page, /translatedOptionCount = optionTable\?\.items\.length \?\? 0/);
+  assert.doesNotMatch(page, /hasApprovedLatestMapping/);
   assert.match(unique, /<PatcherOptionTable locale=\{locale\} table=\{optionTable\}/);
   assert.doesNotMatch(component, /use client|useState|onClick|dangerouslySetInnerHTML/);
 });

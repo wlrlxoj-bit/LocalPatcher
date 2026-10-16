@@ -54,7 +54,8 @@ jobs:
 
   drain-patcher-revalidation-outbox:
     needs: validate-inputs
-    if: ${{ github.event.inputs.retry_only != 'true' }}
+    # 단일 URL 복구는 다른 대상의 재검증 큐를 소진하지 않는다.
+    if: ${{ github.event.inputs.retry_only != 'true' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_url == '')) }}
     # 수집 결과와 독립적으로 실행한다. 수집 실패가 ready/deferred 항목의 재시도를 막으면 안 된다.
     runs-on: ubuntu-latest
     steps:

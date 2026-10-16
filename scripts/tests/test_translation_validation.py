@@ -46,11 +46,51 @@ class ValidationTests(unittest.TestCase):
     def test_utf16_pass(self):
         self.assertTrue(self.check().ok)
 
-    def test_display_plus_count_does_not_block_actual_one_to_one(self):
+    def test_public_option_contract_rejects_empty_notes_long_control_and_duplicate(self):
+        for label in ("**주석만", "가" * 181, "무한\x01체력"):
+            with self.subTest(label=label):
+                result = self.check(translated_text="Num 1 - " + label)
+                self.assertIn("TRANSLATED_PUBLIC_OPTION_INVALID", result.codes)
+        result = self.check(
+            original_text="Ctrl+Num 1 - Health\nCtrl + Num 1 - Money",
+            translated_text="Ctrl+Num 1 - 체력\nCtrl + Num 1 - 자금",
+        )
+        self.assertIn("SOURCE_PUBLIC_OPTION_INVALID", result.codes)
+        self.assertIn("TRANSLATED_PUBLIC_OPTION_INVALID", result.codes)
+
+    def test_display_count_is_not_an_implicit_per_slot_gate(self):
         result = self.check(option_count=35)
         self.assertTrue(result.ok)
         self.assertEqual(result.counts["display_option_count"], 35)
         self.assertEqual(result.counts["source_patchable_count"], 1)
+
+    def test_explicit_complete_block_count_rejects_incomplete_source(self):
+        result = self.check(
+            option_count=50,
+            expected_complete_block_count=50,
+        )
+        self.assertIn("SOURCE_EXPECTED_OPTION_COUNT_MISMATCH", result.codes)
+        self.assertIn("TRANSLATED_EXPECTED_OPTION_COUNT_MISMATCH", result.codes)
+
+    def test_explicit_complete_block_count_accepts_complete_block(self):
+        result = self.check(expected_complete_block_count=1)
+        self.assertTrue(result.ok)
+
+    def test_note_only_translation_is_rejected_even_when_other_labels_are_translated(self):
+        result = self.check(
+            original_text="Num 1 - Infinite Health\nNum 2 - Money Multiplier **Takes effect after update",
+            translated_text="Num 1 - 무한 체력\nNum 2 - Money Multiplier **수치 갱신 후 적용",
+            expected_complete_block_count=2,
+        )
+        self.assertIn("UNTRANSLATED_OPTION_LABEL", result.codes)
+
+    def test_group_title_is_not_counted_or_compared_as_option(self):
+        result = self.check(
+            original_text="Edit Character\nNum 1 - Infinite Health",
+            translated_text="캐릭터 편집\nNum 1 - 무한 체력",
+            expected_complete_block_count=1,
+        )
+        self.assertTrue(result.ok)
 
     def test_actual_option_mismatch_is_rejected(self):
         result = self.check(

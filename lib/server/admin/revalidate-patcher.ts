@@ -1,10 +1,11 @@
 import 'server-only';
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getPatcherMappingCacheTag, getPatcherTrainerListCacheTag } from '@/lib/patcher-cache-tags';
 
 const PUBLIC_LOCALES = ['ko', 'ja', 'de', 'es'] as const;
-type TrainerGameLookup = { games: { slug: string } | { slug: string }[] | null };
+type TrainerGameLookup = { game_id: number; games: { slug: string } | { slug: string }[] | null };
 type SnapshotTarget = { canonical_slug: string };
 
 export type PatcherRevalidationResult =
@@ -17,14 +18,15 @@ export type PatcherRevalidationResult =
  * 호출자에게 안전한 재시도 상태만 돌려준다. sitemap은 별도 outbox 항목으로 처리한다.
  */
 export async function revalidatePatcherForTrainer(client: SupabaseClient, trainerId: number): Promise<PatcherRevalidationResult> {
-  const { data, error } = await client.from('trainers').select('games(slug)').eq('id', trainerId).maybeSingle();
+  const { data, error } = await client.from('trainers').select('game_id,games(slug)').eq('id', trainerId).maybeSingle();
   if (error) {
     console.warn('[PATCHER_REVALIDATE_RETRY_REQUIRED] trainer_game_lookup_unavailable');
     return { revalidated: false, retryRequired: true, reason: 'trainer_game_lookup_unavailable' };
   }
-  const games = (data as TrainerGameLookup | null)?.games;
+  const trainer = data as TrainerGameLookup | null;
+  const games = trainer?.games;
   const game = Array.isArray(games) ? games[0] : games;
-  if (!game?.slug) {
+  if (!trainer || !game?.slug || !Number.isSafeInteger(trainer.game_id) || trainer.game_id <= 0) {
     console.warn('[PATCHER_REVALIDATE_RETRY_REQUIRED] trainer_game_lookup_missing');
     return { revalidated: false, retryRequired: true, reason: 'trainer_game_lookup_missing' };
   }
@@ -46,6 +48,9 @@ export async function revalidatePatcherForTrainer(client: SupabaseClient, traine
     console.warn('[PATCHER_REVALIDATE_RETRY_REQUIRED] canonical_snapshot_unavailable');
     return { revalidated: false, retryRequired: true, reason: 'canonical_snapshot_unavailable' };
   }
+  // Route Handler에서 정확한 trainer·언어의 데이터 캐시를 먼저 만료시킨 뒤 공개 경로를 갱신합니다.
+  revalidateTag(getPatcherTrainerListCacheTag(trainer.game_id), { expire: 0 });
+  for (const locale of PUBLIC_LOCALES) revalidateTag(getPatcherMappingCacheTag(trainerId, locale), { expire: 0 });
   for (const locale of PUBLIC_LOCALES) revalidatePath(`/${locale}/patcher/${targets[0].canonical_slug}`);
   // 즉시 호출은 lease/세대 소유권이 없다. 이후 enqueue와 경합하는 작업까지 완료하지
   // 않도록 outbox는 닫지 않고 worker가 자기 lease로 canonical 경로를 다시 검증한다.

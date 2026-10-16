@@ -249,11 +249,6 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
     Number.isSafeInteger(latestOptionCount) && latestOptionCount > 0
     ? latestOptionCount
     : 0;
-  const hasApprovedLatestMapping = latestTrainer
-    ? (mappingsMap[latestTrainer.id] || []).length > 0
-    : false;
-  // 매핑 한 행에는 최신 트레이너의 전체 번역문이 들어가므로 행 개수가 아닌 옵션 수를 표시합니다.
-  const translatedOptionCount = hasApprovedLatestMapping ? supportedOptionCount : 0;
   // 최신 트레이너의 승인 매핑에서 원문·번역 단축키가 일치하는 옵션만 SSR 정보로 노출합니다.
   const optionSummary = latestTrainer
     ? getTrainerOptionSummary(mappingsMap[latestTrainer.id] || [])
@@ -266,6 +261,8 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
     indexEligible,
     mappings: mappingsMap[latestTrainer.id] || [],
   }) : null;
+  // 완전하고 검증된 표의 실제 행만 승인 옵션 수로 표시합니다. 메타데이터 수량은 사용하지 않습니다.
+  const translatedOptionCount = optionTable?.items.length ?? 0;
   // getMappingsForTrainers는 승인된 행만 반환한다. provenance 생성기에도 그 경계를
   // 명시해 불완전한 최신 매핑은 서버 본문에서 숨긴다.
   const provenance = getTrainerProvenance({
