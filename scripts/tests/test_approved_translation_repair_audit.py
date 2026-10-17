@@ -146,6 +146,69 @@ class AuditContractTests(unittest.TestCase):
             audit.fetch_public("https://flingtrainer.com/downloads/x", "asset", opener)
         self.assertEqual(opener.open.call_count, 1)
 
+    def test_observed_archive_and_encoded_space_member_routes(self):
+        prefix = "https://flingtrainer.com/wp-content/uploads/trainer-files/2025/04/"
+        archive = prefix + "Legend.Of.Heroes.Three.Kingdoms.Plus.50.Trainer-FLiNG.zip"
+        member = archive + "/Legend%20Of%20Heroes%20Three%20Kingdoms%20Trainer.exe"
+        self.assertEqual(audit.official_url(archive), archive)
+        self.assertEqual(audit.official_url(member), member)
+        direct = "https://flingtrainer.com/wp-content/uploads/2025/04/Public%20Trainer.exe"
+        self.assertEqual(audit.official_url(direct), direct)
+
+    def test_strict_dispatch_requires_actual_redirect_and_one_safe_path(self):
+        target = "/wp-content/uploads/trainer-files/2025/04/Legend.zip/Legend%20Trainer.exe"
+        dispatch = "https://flingtrainer.com/download-trainer.php?path=" + target
+        with self.assertRaisesRegex(audit.AuditBlocked, "URL_REJECTED"):
+            audit.official_url(dispatch)
+        self.assertEqual(audit.official_url(dispatch, allow_dispatch=True), dispatch)
+        for query in ("path=" + target + "&path=" + target, "path=" + target + "&x=1",
+                      "x=1&path=" + target, "path=https://other.test/trainer.exe",
+                      "path=%2Fwp-content/uploads/2025/04/Trainer.exe", "path=/etc/passwd"):
+            with self.assertRaises(audit.AuditBlocked):
+                audit.official_url("https://flingtrainer.com/download-trainer.php?" + query, allow_dispatch=True)
+        first = urllib.error.HTTPError("https://flingtrainer.com/downloads/x", 302, "", {"Location": dispatch}, io.BytesIO())
+        final = io.BytesIO(b"MZpublic")
+        final.code, final.headers = 200, {}
+        opener = Mock()
+        opener.open.side_effect = [first, final]
+        self.assertEqual(audit.fetch_public("https://flingtrainer.com/downloads/x", "asset", opener), b"MZpublic")
+        self.assertEqual(opener.open.call_count, 2)
+
+    def test_asset_path_bypasses_are_rejected(self):
+        prefix = "https://flingtrainer.com/wp-content/uploads/trainer-files/2025/04/"
+        for suffix in ("Legend.zip/Trainer%2f.exe", "Legend.zip/Trainer%5C.exe",
+                       "Legend.zip/Trainer%00.exe", "Legend.zip/Trainer%252f.exe",
+                       "Legend.zip/Trainer%09.exe", "Legend.zip/../Trainer.exe",
+                       "Legend.zip/%2e%2e/Trainer.exe", "Legend.zip/nested/Trainer.exe",
+                       "Legend.zip/Trainer literal.exe", "Legend.zip/Trainer.exe?x=1",
+                       "Legend.rar", "Legend.exe/Trainer.exe", "Legend.zip/Trainer.dll"):
+            with self.assertRaises(audit.AuditBlocked):
+                audit.official_url(prefix + suffix)
+        for url in ("https://user@flingtrainer.com/wp-content/uploads/2025/04/Trainer.exe",
+                    "https://flingtrainer.com:443/wp-content/uploads/2025/04/Trainer.exe",
+                    "https://other.test/wp-content/uploads/2025/04/Trainer.exe",
+                    "https://flingtrainer.com/wp-content/uploads/trainer-files/2025%20/04/Trainer.zip",
+                    "https://flingtrainer.com/wp-content/uploads/2025/04/Trainer.exe#fragment",
+                    "https://flingtrainer.com/wp-content/uploads/2025/04/Trainer\n.exe"):
+            with self.assertRaises(audit.AuditBlocked):
+                audit.official_url(url)
+
+    def test_url_rejection_report_has_only_sanitized_fixed_diagnostics(self):
+        sensitive_url = "https://flingtrainer.com/wp-content/uploads/trainer-files/2025/04/PRIVATE.zip/SECRET%2f.exe"
+        output = io.StringIO()
+        with patch.object(audit, "run_audit", side_effect=lambda *args: audit.official_url(
+                sensitive_url, stage="asset_fetch", hop=2)), redirect_stdout(output):
+            self.assertEqual(audit.main(["--trainer-id", "2731"]), 1)
+        report = json.loads(output.getvalue())
+        self.assertEqual(report["stage"], "asset_fetch")
+        self.assertEqual(report["hop"], 2)
+        self.assertIs(report["host_is_official"], True)
+        self.assertEqual(report["path_bucket"], "trainer_member")
+        self.assertEqual(report["rejection_subcode"], "path_encoding")
+        self.assertNotIn("PRIVATE", output.getvalue())
+        self.assertNotIn("SECRET", output.getvalue())
+        self.assertNotIn(sensitive_url, output.getvalue())
+
     def test_403_and_429_have_no_retry(self):
         for status in (403, 429):
             opener = Mock()

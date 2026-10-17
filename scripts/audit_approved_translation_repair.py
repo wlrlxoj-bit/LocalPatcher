@@ -33,9 +33,10 @@ FIXTURE = pathlib.Path(__file__).with_name("fixtures") / "approved-publication-r
 class AuditBlocked(Exception):
     """고정 사유 코드와 원본 동일성의 미검사·불일치·일치 상태만 전달한다."""
 
-    def __init__(self, reason, identity_matches=None):
+    def __init__(self, reason, identity_matches=None, diagnostics=None):
         super().__init__(reason)
         self.identity_matches = identity_matches
+        self.diagnostics = diagnostics
 
 
 def _block(condition, code):
@@ -43,26 +44,66 @@ def _block(condition, code):
         raise AuditBlocked(code)
 
 
-def official_url(url, kind="asset"):
-    """HTTPS 공식 호스트와 명시적으로 허용한 게시물·전달·자산 경로만 받는다."""
-    _block(isinstance(url, str) and not re.search(r"[\x00-\x20\\]", url), "URL_REJECTED")
-    parsed = urllib.parse.urlsplit(url)
-    _block(parsed.scheme == "https" and parsed.netloc == "flingtrainer.com"
-           and not parsed.fragment, "URL_REJECTED")
+def _path_bucket(path):
+    """파일명이나 토큰을 보존하지 않고 알려진 경로 계열만 분류한다."""
+    if path.startswith("/trainer/"):
+        return "post"
+    if path.startswith("/downloads/"):
+        return "download_link"
+    if path == "/download-trainer.php":
+        return "dispatch"
+    if path.startswith("/wp-content/uploads/trainer-files/"):
+        return "trainer_member" if ".zip/" in path.lower() else "trainer_archive"
+    if path.startswith("/wp-content/uploads/"):
+        return "dated_asset"
+    return "unknown"
+
+
+def _asset_path(path):
+    """공식 날짜별 자산과 관측된 ZIP/단일 EXE 경로만 판정한다."""
+    leaf = r"[A-Za-z0-9_.() +,\-]+"
+    date = r"\d{4}/(?:0[1-9]|1[0-2])"
+    # 공백은 호출부가 %20 인코딩을 확인한 뒤 leaf에서만 허용한다.
+    return bool(re.fullmatch(rf"/wp-content/uploads/{date}/{leaf}\.(?:zip|exe)", path, re.I)
+                or re.fullmatch(rf"/wp-content/uploads/trainer-files/{date}/{leaf}\.zip(?:/{leaf}\.exe)?", path, re.I))
+
+
+def official_url(url, kind="asset", *, allow_dispatch=False, stage="url_validation", hop=0):
+    """HTTPS 공식 호스트와 관측된 명시 경로만 허용하고 %20은 파일 leaf에만 받는다."""
+    diagnostics = {"stage": stage, "hop": hop, "host_is_official": False,
+                   "path_bucket": "unknown", "rejection_subcode": "syntax"}
+
+    def require(condition, subcode):
+        if not condition:
+            raise AuditBlocked("URL_REJECTED", diagnostics=dict(diagnostics, rejection_subcode=subcode))
+
+    require(isinstance(url, str), "syntax")
+    require(not re.search(r"[\x00-\x20\x7f\\]", url), "literal_character")
+    try:
+        parsed = urllib.parse.urlsplit(url)
+    except ValueError:
+        require(False, "syntax")
+    diagnostics["host_is_official"] = parsed.netloc == "flingtrainer.com"
+    diagnostics["path_bucket"] = _path_bucket(parsed.path)
+    require(parsed.scheme == "https" and parsed.netloc == "flingtrainer.com", "origin")
+    require(not parsed.fragment, "fragment")
+    # 분리자·이중 인코딩·컨트롤 문자의 우회는 거부한다. 유일한 예외는 %20이다.
+    require(not re.search(r"%(?!20)", parsed.path, re.I), "path_encoding")
     path = urllib.parse.unquote(parsed.path)
-    _block(".." not in path and not re.search(r"[\x00-\x20\\%]", path), "URL_REJECTED")
+    require(".." not in path and not re.search(r"[\x00-\x1f\x7f\\%?#]", path), "path_character")
     if kind == "post":
-        valid = re.fullmatch(r"/trainer/[a-z0-9-]+/?", path) and not parsed.query
+        require(bool(re.fullmatch(r"/trainer/[a-z0-9-]+/?", path)) and not parsed.query, "post_path")
+    elif path == "/download-trainer.php":
+        require(allow_dispatch, "dispatch_requires_redirect")
+        # 키 중복·추가 query·encoded separator·이중 decoding을 허용하지 않는다.
+        require(parsed.query.startswith("path=") and "&" not in parsed.query
+                and not re.search(r"%(?!20)", parsed.query, re.I), "dispatch_query")
+        target = urllib.parse.unquote(parsed.query[len("path="):])
+        require(".." not in target and _asset_path(target), "dispatch_path")
     else:
-        valid = (re.fullmatch(r"/downloads/[A-Za-z0-9_,.-]+/?", path) and not parsed.query)
-        valid = valid or (re.fullmatch(r"/wp-content/uploads/\d{4}/\d{2}/[^/?#]+\.(?:zip|exe)", path, re.I) and not parsed.query)
-        if path == "/download-trainer.php":
-            query = urllib.parse.parse_qs(parsed.query, strict_parsing=True)
-            values = query.get("path", [])
-            valid = (set(query) == {"path"} and len(values) == 1
-                     and bool(re.fullmatch(r"/wp-content/uploads/\d{4}/\d{2}/[^/\\%?#\x00-\x20]+\.(?:exe|zip)", values[0], re.I))
-                     and ".." not in values[0])
-    _block(bool(valid), "URL_REJECTED")
+        require(not parsed.query, "unexpected_query")
+        valid_download = bool(re.fullmatch(r"/downloads/[A-Za-z0-9_,.-]+/?", path))
+        require(valid_download or _asset_path(path), "asset_path")
     return url
 
 
@@ -75,10 +116,20 @@ def fetch_public(url, kind, opener=None, clock=time.monotonic):
     """자동 리디렉션·재시도 없이 각 홉 검증과 전체 시간·바이트 상한을 적용한다."""
     opener = opener or urllib.request.build_opener(_NoRedirect())
     deadline = clock() + 60
+    stage = "post_fetch" if kind == "post" else "asset_fetch"
+
+    def transport_require(condition, reason):
+        if not condition:
+            raise AuditBlocked(reason, diagnostics={
+                "stage": stage, "hop": hop, "host_is_official": True,
+                "path_bucket": _path_bucket(urllib.parse.urlsplit(url).path),
+                "rejection_subcode": reason.lower(),
+            })
+
     for hop in range(4):
-        official_url(url, kind)
+        official_url(url, kind, allow_dispatch=hop > 0, stage=stage, hop=hop)
         remaining = deadline - clock()
-        _block(remaining > 0, "HTTP_DEADLINE")
+        transport_require(remaining > 0, "HTTP_DEADLINE")
         request = urllib.request.Request(url, headers={"User-Agent": "LocalPatcher-ReadOnly-Audit/1.0", "Accept-Encoding": "identity"})
         try:
             response = opener.open(request, timeout=min(15, remaining))
@@ -87,23 +138,23 @@ def fetch_public(url, kind, opener=None, clock=time.monotonic):
         with response:
             status = response.code
             if status in (301, 302, 303, 307, 308):
-                _block(hop < 3, "HTTP_REDIRECT_LIMIT")
+                transport_require(hop < 3, "HTTP_REDIRECT_LIMIT")
                 location = response.headers.get("Location", "")
-                _block(bool(location), "HTTP_REDIRECT_MISSING")
+                transport_require(bool(location), "HTTP_REDIRECT_MISSING")
                 url = urllib.parse.urljoin(url, location)
                 continue
-            _block(status == 200, "HTTP_FORBIDDEN" if status == 403 else "HTTP_RATE_LIMIT" if status == 429 else "HTTP_STATUS")
+            transport_require(status == 200, "HTTP_FORBIDDEN" if status == 403 else "HTTP_RATE_LIMIT" if status == 429 else "HTTP_STATUS")
             length = response.headers.get("Content-Length")
             if length is not None:
-                _block(length.isdigit() and int(length) <= MAX_BYTES, "HTTP_SIZE_LIMIT")
+                transport_require(length.isdigit() and int(length) <= MAX_BYTES, "HTTP_SIZE_LIMIT")
             output = bytearray()
             while True:
-                _block(clock() < deadline, "HTTP_DEADLINE")
+                transport_require(clock() < deadline, "HTTP_DEADLINE")
                 chunk = response.read(min(65536, MAX_BYTES + 1 - len(output)))
                 if not chunk:
                     break
                 output.extend(chunk)
-                _block(len(output) <= MAX_BYTES, "HTTP_SIZE_LIMIT")
+                transport_require(len(output) <= MAX_BYTES, "HTTP_SIZE_LIMIT")
             return bytes(output)
     raise AuditBlocked("HTTP_REDIRECT_LIMIT")
 
@@ -138,7 +189,7 @@ def select_download(html, post_url):
             continue
         if re.search(r"\.rar(?:\s|$)", label, re.I):
             continue
-        return official_url(url)
+        return official_url(url, stage="download_selection")
     raise AuditBlocked("NO_OFFICIAL_DOWNLOAD")
 
 
@@ -299,6 +350,8 @@ def main(argv=None):
         report = {"status": "blocked", "reason": reason, "trainer_id": args.trainer_id,
                   "identity_checked": error.identity_matches is not None,
                   "identity_matches": error.identity_matches}
+        if error.diagnostics is not None:
+            report.update(error.diagnostics)
         code = 1
     except Exception:
         # 라이브러리 예외에는 URL·응답·원문이 포함될 수 있으므로 절대 출력하지 않는다.
