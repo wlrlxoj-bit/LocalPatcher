@@ -95,11 +95,23 @@ def official_url(url, kind="asset", *, allow_dispatch=False, stage="url_validati
         require(bool(re.fullmatch(r"/trainer/[a-z0-9-]+/?", path)) and not parsed.query, "post_path")
     elif path == "/download-trainer.php":
         require(allow_dispatch, "dispatch_requires_redirect")
-        # 키 중복·추가 query·encoded separator·이중 decoding을 허용하지 않는다.
-        require(parsed.query.startswith("path=") and "&" not in parsed.query
-                and not re.search(r"%(?!20)", parsed.query, re.I), "dispatch_query")
-        target = urllib.parse.unquote(parsed.query[len("path="):])
-        require(".." not in target and _asset_path(target), "dispatch_path")
+        # query 직렬화의 %2F와 자산 경로 leaf의 인코딩 우회를 구분한다.
+        # parse_qs가 느슨하게 보존하는 불완전 escape도 파싱 전에 거부한다.
+        require(not re.search(r"%(?![0-9a-f]{2})", parsed.query, re.I), "dispatch_query_encoding")
+        try:
+            query = urllib.parse.parse_qs(parsed.query, strict_parsing=True,
+                                         keep_blank_values=True, encoding="utf-8", errors="strict")
+        except (ValueError, UnicodeError):
+            require(False, "dispatch_query_parse")
+        require(set(query) == {"path"}, "dispatch_keys")
+        require(len(query["path"]) == 1, "dispatch_path_count")
+        target = query["path"][0]
+        require(bool(target), "dispatch_blank")
+        # 이미 정확히 한 번 decode됐다. 재 unquote 없이 날짜별 경로를 검사한다.
+        require("%" not in target, "dispatch_decoded_encoding")
+        require(".." not in target and not re.search(r"[\x00-\x1f\x7f\\?#]", target),
+                "dispatch_decoded_character")
+        require(_asset_path(target), "dispatch_asset_path")
     else:
         require(not parsed.query, "unexpected_query")
         valid_download = bool(re.fullmatch(r"/downloads/[A-Za-z0-9_,.-]+/?", path))

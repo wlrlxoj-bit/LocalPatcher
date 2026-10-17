@@ -163,7 +163,7 @@ class AuditContractTests(unittest.TestCase):
         self.assertEqual(audit.official_url(dispatch, allow_dispatch=True), dispatch)
         for query in ("path=" + target + "&path=" + target, "path=" + target + "&x=1",
                       "x=1&path=" + target, "path=https://other.test/trainer.exe",
-                      "path=%2Fwp-content/uploads/2025/04/Trainer.exe", "path=/etc/passwd"):
+                      "path=/etc/passwd"):
             with self.assertRaises(audit.AuditBlocked):
                 audit.official_url("https://flingtrainer.com/download-trainer.php?" + query, allow_dispatch=True)
         first = urllib.error.HTTPError("https://flingtrainer.com/downloads/x", 302, "", {"Location": dispatch}, io.BytesIO())
@@ -173,6 +173,58 @@ class AuditContractTests(unittest.TestCase):
         opener.open.side_effect = [first, final]
         self.assertEqual(audit.fetch_public("https://flingtrainer.com/downloads/x", "asset", opener), b"MZpublic")
         self.assertEqual(opener.open.call_count, 2)
+
+    def test_dispatch_standard_query_decodes_exactly_once(self):
+        base = "https://flingtrainer.com/download-trainer.php?path="
+        target = "/wp-content/uploads/trainer-files/2025/04/Legend.zip/Legend Trainer.exe"
+        for encoded in (audit.urllib.parse.quote(target, safe=""),
+                        audit.urllib.parse.quote_plus(target, safe="")):
+            url = base + encoded
+            self.assertEqual(audit.official_url(url, allow_dispatch=True), url)
+        # query의 +는 공백으로, 경로 자체의 +는 문자 그대로 해석된다.
+        literal_plus = "https://flingtrainer.com/wp-content/uploads/2025/04/Trainer+Plus.exe"
+        self.assertEqual(audit.official_url(literal_plus), literal_plus)
+        plus_query = base + audit.urllib.parse.quote("/wp-content/uploads/2025/04/Trainer+Plus.exe", safe="")
+        self.assertEqual(audit.official_url(plus_query, allow_dispatch=True), plus_query)
+        # decode 후 공백이 디렉터리에 생기면 leaf 공백과 달리 거부한다.
+        with self.assertRaises(audit.AuditBlocked):
+            audit.official_url(base + "/wp-content/uploads/2025+/04/Trainer.exe", allow_dispatch=True)
+
+    def test_dispatch_query_rejection_subcodes_are_specific_and_sanitized(self):
+        base = "https://flingtrainer.com/download-trainer.php?"
+        cases = (
+            ("path=%GG", "dispatch_query_encoding"),
+            ("path=%2", "dispatch_query_encoding"),
+            ("path", "dispatch_query_parse"),
+            ("path=%FF", "dispatch_query_parse"),
+            ("other=value", "dispatch_keys"),
+            ("path=/x&other=value", "dispatch_keys"),
+            ("path=/x&path=/x", "dispatch_path_count"),
+            ("path=", "dispatch_blank"),
+            ("path=%252Fwp-content/uploads/2025/04/Trainer.exe", "dispatch_decoded_encoding"),
+            ("path=/wp-content/uploads/2025/04/Trainer%00.exe", "dispatch_decoded_character"),
+            ("path=/wp-content/uploads/2025/04/Trainer%23fragment.exe", "dispatch_decoded_character"),
+            ("path=/wp-content/uploads/2025/04/Trainer%3Fquery.exe", "dispatch_decoded_character"),
+            ("path=/wp-content/uploads/2025/04/%2E%2E/Trainer.exe", "dispatch_decoded_character"),
+            ("path=/wp-content/uploads/2025/04/Trainer%5C.exe", "dispatch_decoded_character"),
+            ("path=https%3A%2F%2Fother.test/trainer.exe", "dispatch_asset_path"),
+            ("path=/wp-content/uploads/2025/04/Trainer%2FExtra.exe", "dispatch_asset_path"),
+        )
+        for query, subcode in cases:
+            with self.assertRaises(audit.AuditBlocked) as caught:
+                audit.official_url(base + query, allow_dispatch=True, stage="asset_fetch", hop=1)
+            diagnostics = caught.exception.diagnostics
+            self.assertEqual(diagnostics, {
+                "stage": "asset_fetch", "hop": 1, "host_is_official": True,
+                "path_bucket": "dispatch", "rejection_subcode": subcode,
+            })
+            # 'path' 입력과 고정 키 'path_bucket'의 문자열 충돌을 피한다.
+            # 키·값은 위에서 전부 고정하고 입력 원문은 값에도 남지 않아야 한다.
+            self.assertNotIn(query, json.dumps(list(diagnostics.values())))
+        for url in (base + "path=/wp-content/uploads/2025/04/Trainer literal.exe",
+                    base + "path=/wp-content/uploads/2025/04/Trainer.exe#fragment"):
+            with self.assertRaises(audit.AuditBlocked):
+                audit.official_url(url, allow_dispatch=True)
 
     def test_asset_path_bypasses_are_rejected(self):
         prefix = "https://flingtrainer.com/wp-content/uploads/trainer-files/2025/04/"
