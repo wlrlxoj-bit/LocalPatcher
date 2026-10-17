@@ -295,17 +295,26 @@ class WorkflowContractTests(unittest.TestCase):
         expression = re.search(r"^    if: \$\{\{ (.+) \}\}$", job, re.M).group(1)
         self.assertNotIn("always()", expression)
         cases = [
-            ("schedule", "", "", "success", True),
-            ("workflow_dispatch", "", "false", "success", True),
-            ("workflow_dispatch", "https://flingtrainer.com/trainer/example/", "false", "success", False),
-            ("workflow_dispatch", "", "true", "success", False),
-            ("workflow_dispatch", "", "false", "failure", False),
-            ("push", "", "", "success", False),
+            ("schedule", "", "", "", "success", True),
+            ("workflow_dispatch", "", "false", "", "success", True),
+            ("workflow_dispatch", "https://flingtrainer.com/trainer/example/", "false", "", "success", False),
+            ("workflow_dispatch", "", "true", "", "success", False),
+            ("workflow_dispatch", "", "false", "", "failure", False),
+            ("push", "", "", "", "success", False),
+            ("workflow_dispatch", "", "false", "2730", "success", False),
+            ("workflow_dispatch", "", "false", "2731", "success", False),
         ]
-        for event, target, retry, validated, expected in cases:
-            with self.subTest(event=event, target=target, retry=retry, validated=validated):
+        cases = [(*case[:4], "refs/heads/main", *case[4:]) for case in cases]
+        cases.extend([
+            ("workflow_dispatch", "", "false", audit, "refs/heads/codex/read-only-audit", "success", False)
+            for audit in ("", "unknown", "2730", "2731")
+        ])
+        for event, target, retry, audit, ref, validated, expected in cases:
+            with self.subTest(event=event, target=target, retry=retry, audit=audit, ref=ref, validated=validated):
                 condition = expression
                 for key, value in {
+                    "github.event.inputs.audit_approved_trainer": audit,
+                    "github.ref": ref,
                     "github.event.inputs.retry_only": retry,
                     "github.event.inputs.target_url": target,
                     "github.event_name": event,

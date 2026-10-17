@@ -1,0 +1,94 @@
+{
+  "snapshot_date": "2026-10-17",
+  "database_read_only": true,
+  "trainers": [
+    {
+      "id": 2730,
+      "option_count": 21,
+      "original_file_size": 1736704,
+      "original_file_hash": "b1db27f5d93b3b411d885f97f6a3532fcb9a4beca2d32e1b019c801ad0296f50",
+      "fling_url": "https://flingtrainer.com/trainer/total-war-shogun-2-complete-edition-trainer"
+    },
+    {
+      "id": 2731,
+      "option_count": 50,
+      "original_file_size": 1797632,
+      "original_file_hash": "24cd73da7684204fcc2208ca4bdee6052435dc4d1710ebec935d205822488cdf",
+      "fling_url": "https://flingtrainer.com/trainer/legend-of-heroes-three-kingdoms-trainer/"
+    }
+  ],
+  "mappings": [
+    {
+      "id": 10865,
+      "trainer_id": 2730,
+      "language_code": "ja",
+      "offset_dec": 1018052,
+      "encoding": "UTF-16LE",
+      "max_char_len": 1424,
+      "is_approved": true,
+      "translation_status": "approved",
+      "original_chars": 1424,
+      "original_md5": "e0da238daddb7f57d746d468603d1d13"
+    },
+    {
+      "id": 10866,
+      "trainer_id": 2730,
+      "language_code": "ko",
+      "offset_dec": 1018052,
+      "encoding": "UTF-16LE",
+      "max_char_len": 1424,
+      "is_approved": true,
+      "translation_status": "approved",
+      "original_chars": 1424,
+      "original_md5": "e0da238daddb7f57d746d468603d1d13"
+    },
+    {
+      "id": 10859,
+      "trainer_id": 2731,
+      "language_code": "de",
+      "offset_dec": 1023268,
+      "encoding": "UTF-16LE",
+      "max_char_len": 4000,
+      "is_approved": true,
+      "translation_status": "approved",
+      "original_chars": 4000,
+      "original_md5": "2aad3ac2500fbe769a80b1fa89043f62"
+    },
+    {
+      "id": 10860,
+      "trainer_id": 2731,
+      "language_code": "es",
+      "offset_dec": 1023268,
+      "encoding": "UTF-16LE",
+      "max_char_len": 4000,
+      "is_approved": true,
+      "translation_status": "approved",
+      "original_chars": 4000,
+      "original_md5": "2aad3ac2500fbe769a80b1fa89043f62"
+    },
+    {
+      "id": 10861,
+      "trainer_id": 2731,
+      "language_code": "ja",
+      "offset_dec": 1023268,
+      "encoding": "UTF-16LE",
+      "max_char_len": 4000,
+      "is_approved": true,
+      "translation_status": "approved",
+      "original_chars": 4000,
+      "original_md5": "2aad3ac2500fbe769a80b1fa89043f62"
+    },
+    {
+      "id": 10862,
+      "trainer_id": 2731,
+      "language_code": "ko",
+      "offset_dec": 1023268,
+      "encoding": "UTF-16LE",
+      "max_char_len": 4000,
+      "is_approved": true,
+      "translation_status": "approved",
+      "original_chars": 4000,
+      "original_md5": "2aad3ac2500fbe769a80b1fa89043f62"
+    }
+  ]
+}
