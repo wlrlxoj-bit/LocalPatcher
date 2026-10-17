@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { resolveStaticGameSlugAlias } from './lib/game-slug-aliases';
 
 const locales = ['en', 'ko', 'ja', 'de', 'es'];
 // LocalPatcher는 한국어를 기본 진입점으로 사용한다. 영어 원문은 FLiNG가 기준이며
@@ -58,20 +59,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url, 308);
   }
 
-  // Intercept legacy -trainer slugs and static aliases in /patcher/ routes
+  // 정확히 등록된 과거 주소만 즉시 이동한다. 일반 별칭은 페이지에서 DB·제목 확인 후 처리한다.
   const patcherMatch = pathname.match(/^\/([a-z]{2})\/patcher\/([^\/]+)$/);
   if (patcherMatch) {
     const [, locale, slug] = patcherMatch;
-    let canonicalSlug = slug;
+    const canonicalSlug = resolveStaticGameSlugAlias(slug);
 
-    // Static Aliases
-    if (slug === 'elden-ring-shadow-of-the-erdtree' || slug.startsWith('elden-ring-shadow-of-the-erdtree-')) {
-      canonicalSlug = 'elden-ring';
-    } else if (/-trainer(-\d{6,})?$/.test(slug)) {
-      canonicalSlug = slug.replace(/-trainer(-\d{6,})?$/, '');
-    }
-
-    if (canonicalSlug !== slug) {
+    if (canonicalSlug && canonicalSlug !== slug) {
       const cleanUrl = new URL(`/${locale}/patcher/${canonicalSlug}`, request.url);
       if (request.nextUrl.search) {
         cleanUrl.search = request.nextUrl.search;
