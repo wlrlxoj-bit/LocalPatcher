@@ -15,6 +15,7 @@ from unittest import mock
 TESTS_DIR = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(TESTS_DIR))
 from test_translation_pipeline_contracts import load_functions
+from test_integrity_workflow_scope import evaluate_condition
 
 
 class ReprocessQueueSafetyTests(unittest.TestCase):
@@ -207,7 +208,31 @@ class ReprocessQueueSafetyTests(unittest.TestCase):
         workflow = (scripts.parent / ".github/workflows/scraper.yml").read_text(encoding="utf-8")
         self.assertIn("retry_only:", workflow)
         self.assertIn("recover_internal_quota_trainer:", workflow)
-        self.assertEqual(workflow.count("github.event.inputs.retry_only != 'true'"), 3)
+        # 기존 두 작업의 차단 조건은 유지한다. 무결성 복구는 새 허용 목록을 실제 식으로 검증한다.
+        self.assertEqual(workflow.count("github.event.inputs.retry_only != 'true'"), 2)
+        for job_name, next_job in (("drain-patcher-revalidation-outbox", "crawl"),
+                                   ("crawl", "reprocess-ready")):
+            job = workflow.split(f"  {job_name}:\n", 1)[1].split(f"\n  {next_job}:\n", 1)[0]
+            condition_line = next(line for line in job.splitlines() if line.startswith("    if: "))
+            self.assertIn("github.event.inputs.retry_only != 'true'", condition_line)
+        integrity = workflow.split("  integrity-recovery:\n", 1)[1]
+        condition_line = next(line for line in integrity.splitlines() if line.startswith("    if: "))
+        expression = condition_line.split("${{ ", 1)[1].rsplit(" }}", 1)[0]
+        context = {
+            "github.ref": "refs/heads/main",
+            "github.event_name": "workflow_dispatch",
+            "github.event.inputs.target_url": "",
+            "github.event.inputs.recover_internal_quota_trainer": "",
+            "needs.validate-inputs.result": "success",
+            "needs.crawl.result": "success",
+            "needs.reprocess-ready.result": "failure",
+            "cancelled()": False,
+        }
+        for retry, expected in (("", True), ("false", True), ("true", False), ("unexpected", False)):
+            with self.subTest(retry=retry):
+                self.assertEqual(evaluate_condition(expression, {
+                    **context, "github.event.inputs.retry_only": retry,
+                }), expected)
         self.assertIn('2730|2731)', workflow)
         self.assertIn('--recover-internal-quota-trainer "$RECOVERY_TRAINER"', workflow)
         self.assertNotIn('--recover-internal-quota-trainer "${{', workflow)

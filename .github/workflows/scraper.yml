@@ -158,10 +158,11 @@ jobs:
         fi
 
   integrity-recovery:
-    needs: [crawl, reprocess-ready]
-    # 크롤링과 일반 재번역이 모두 성공한 뒤에만 실행한다. 승인본은 복구 대상이 아니며,
-    # 한 번에 하나만 동일 바이너리 신원 검증 후 누락 언어 슬롯을 보완한다.
-    if: ${{ always() && !cancelled() && github.event.inputs.retry_only != 'true' && needs.crawl.result == 'success' && needs.reprocess-ready.result == 'success' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_url == '')) }}
+    needs: [validate-inputs, crawl, reprocess-ready]
+    # 일반 main 수집이 성공했다면 재번역 일부 실패와 독립적으로 복구 한 건을 시도한다.
+    # 재번역 실패는 그대로 보고하며 취소·건너뜀·대상 한정 복구에는 실행하지 않는다.
+    # 승인본 제외와 동일 바이너리 신원 검증은 기존 복구 작업에서 유지한다.
+    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && needs.validate-inputs.result == 'success' && needs.crawl.result == 'success' && (needs.reprocess-ready.result == 'success' || needs.reprocess-ready.result == 'failure') && (github.event.inputs.retry_only == '' || github.event.inputs.retry_only == 'false') && github.event.inputs.recover_internal_quota_trainer == '' && github.event.inputs.target_url == '' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
     concurrency:
       group: translation-integrity-recovery-production
       cancel-in-progress: false
