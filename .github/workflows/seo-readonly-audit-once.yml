@@ -1,0 +1,61 @@
+name: seo-audit-approval-20261020-01
+
+on:
+  push:
+    branches: [codex/seo-readonly-audit-once-20261020]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: seo-audit-approval-20261020-01
+  cancel-in-progress: false
+
+jobs:
+  offline:
+    if: >-
+      github.repository == 'wlrlxoj-bit/LocalPatcher' &&
+      github.ref == 'refs/heads/codex/seo-readonly-audit-once-20261020' &&
+      github.event.created == true && github.event.forced == false &&
+      github.event.deleted == false && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: 최초 승인 실행 이력 확인
+        run: node scripts/seo-readonly-audit-gate.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUDIT_APPROVAL_ID: seo-audit-approval-20261020-01
+          AUDIT_ENVIRONMENT: seo-readonly-audit-20261020
+      - name: 의존성 설치 (스크립트 실행 금지)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: 비밀값 없는 오프라인 감사 계약 검증
+        run: >-
+          node --test tests/seo-readonly-audit-once.test.mjs
+          tests/patcher-publication-audit.test.mjs tests/patcher-publication-input.test.mjs
+          tests/patcher-trainer-candidates.test.mjs scripts/patcher-publication.test.mjs
+
+  audit:
+    needs: offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: seo-readonly-audit-20261020
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: 의존성 설치 (서비스 자격 없음)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: 승인된 3개 sample 읽기 감사 (재시도 없음)
+        timeout-minutes: 2
+        run: node scripts/seo-readonly-audit-once.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUDIT_APPROVAL_ID: seo-audit-approval-20261020-01
+          AUDIT_ENVIRONMENT: seo-readonly-audit-20261020
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
