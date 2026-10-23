@@ -16,8 +16,8 @@ export async function POST(req: Request) {
     revalidatePath('/', 'layout');
     
     return NextResponse.json({ success: true, message: 'All Next.js caches purged successfully.' });
-  } catch (error: any) {
-    console.error('Failed to purge cache:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('[CACHE_PURGE_FAILED]', { category: error instanceof Error ? 'exception' : 'non_error' });
+    return NextResponse.json({ error: 'cache_purge_failed' }, { status: 500 });
   }
 }

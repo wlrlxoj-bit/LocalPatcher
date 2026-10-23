@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Languages, Search, Save, Loader2, Gamepad2, CheckCircle2 } from 'lucide-react';
 import TranslationJobPanel from '@/components/admin/translation/TranslationJobPanel';
 
@@ -17,6 +17,7 @@ interface Trainer {
 
 interface Mapping {
   id: number;
+  language_code: string;
   offset_dec: number;
   encoding: string;
   original_text: string;
@@ -26,6 +27,9 @@ interface Mapping {
   translation_status: string | null;
   translation_provider: string | null;
 }
+
+// 수동 쓰기 RPC 응답에는 조회 전용 언어 필드가 포함되지 않을 수 있다.
+type MappingWriteResult = Omit<Mapping, 'language_code'> & { language_code?: string };
 
 export default function AdminTranslationsPage() {
   const [games, setGames] = useState<Game[]>([]);
@@ -42,8 +46,22 @@ export default function AdminTranslationsPage() {
   
   const [loading, setLoading] = useState(false);
   const [mappingsLoading, setMappingsLoading] = useState(false);
+  const mounted = useRef(true);
+  const gameRequest = useRef(0);
+  const selectionGeneration = useRef(0);
+  const writeRequests = useRef<Record<number, number>>({});
+
+  // 선택 세대는 이벤트 시점에 갱신하여 이전 조회·쓰기의 후속 UI 변경을 차단한다.
+  const resetMappings = () => {
+    setMappings([]);
+    setMappingEdits({});
+    setMappingMessages({});
+    setMappingBusy({});
+    setMappingsLoading(false);
+  };
 
   useEffect(() => {
+    mounted.current = true;
     let cancelled = false;
     async function loadGames() {
       try {
@@ -56,32 +74,46 @@ export default function AdminTranslationsPage() {
       }
     }
     void loadGames();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      mounted.current = false;
+      gameRequest.current += 1;
+      selectionGeneration.current += 1;
+    };
   }, []);
 
   const handleGameSelect = async (gameId: number) => {
+    const request = ++gameRequest.current;
+    selectionGeneration.current += 1;
+    const isCurrent = () => mounted.current && request === gameRequest.current;
     setSelectedGameId(gameId);
     setSelectedTrainerId(null);
-    setMappings([]);
+    setTrainers([]);
+    resetMappings();
     setLoading(true);
     try {
       const response = await fetch(`/api/admin/translations/trainers?gameId=${encodeURIComponent(String(gameId))}`, { cache: 'no-store' });
       const payload = await response.json() as { trainers?: Trainer[]; error?: string };
+      if (!isCurrent()) return;
       if (!response.ok) throw new Error(payload.error || 'trainers_read_failed');
       setTrainers(payload.trainers || []);
     } catch (err) {
-      console.error(err);
+      if (isCurrent()) console.error(err);
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   };
 
   const handleTrainerSelect = async (trainerId: number) => {
+    const generation = ++selectionGeneration.current;
+    const isCurrent = () => mounted.current && generation === selectionGeneration.current;
     setSelectedTrainerId(trainerId);
+    resetMappings();
     setMappingsLoading(true);
     try {
       const response = await fetch(`/api/admin/translations/mappings?trainerId=${encodeURIComponent(String(trainerId))}`, { cache: 'no-store' });
       const payload = await response.json() as { mappings?: Mapping[]; error?: string };
+      if (!isCurrent()) return;
       if (!response.ok) throw new Error(payload.error || 'mappings_read_failed');
       const data = payload.mappings || [];
       setMappings(data);
@@ -91,13 +123,17 @@ export default function AdminTranslationsPage() {
       (data || []).forEach(m => { edits[m.id] = m.translated_text; });
       setMappingEdits(edits);
     } catch (err) {
-      console.error(err);
+      if (isCurrent()) console.error(err);
     } finally {
-      setMappingsLoading(false);
+      if (isCurrent()) setMappingsLoading(false);
     }
   };
 
   const saveMapping = async (id: number) => {
+    const generation = selectionGeneration.current;
+    const request = (writeRequests.current[id] || 0) + 1;
+    writeRequests.current[id] = request;
+    const isCurrent = () => mounted.current && generation === selectionGeneration.current && request === writeRequests.current[id];
     setMappingBusy((current) => ({ ...current, [id]: true }));
     setMappingMessages((current) => ({ ...current, [id]: '' }));
     try {
@@ -106,33 +142,43 @@ export default function AdminTranslationsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ translatedText: mappingEdits[id] }),
       });
-      const payload = await response.json() as { mapping?: Mapping; error?: string };
-      if (!response.ok || !payload.mapping) throw new Error(payload.error || 'mapping_update_failed');
-      setMappings((current) => current.map((mapping) => mapping.id === id ? payload.mapping! : mapping));
-      setMappingEdits((current) => ({ ...current, [id]: payload.mapping!.translated_text }));
+      const payload = await response.json() as { mapping?: MappingWriteResult; error?: string };
+      if (!isCurrent()) return;
+      if (!response.ok || !payload.mapping || payload.mapping.id !== id) throw new Error(payload.error || 'mapping_update_failed');
+      const updated = payload.mapping;
+      setMappings((current) => current.map((mapping) => mapping.id === id ? { ...mapping, ...updated, id: mapping.id, language_code: mapping.language_code } : mapping));
+      setMappingEdits((current) => ({ ...current, [id]: updated.translated_text }));
       setMappingMessages((current) => ({ ...current, [id]: '검수 대기 중 — 승인 전에는 페이지 색인 대상이 아닙니다.' }));
     } catch (err) {
+      if (!isCurrent()) return;
       console.error(err);
       setMappingMessages((current) => ({ ...current, [id]: '저장하지 못했습니다. 내용을 새로고침해 다시 확인하세요.' }));
     } finally {
-      setMappingBusy((current) => ({ ...current, [id]: false }));
+      if (isCurrent()) setMappingBusy((current) => ({ ...current, [id]: false }));
     }
   };
 
   const approveManualMapping = async (id: number) => {
+    const generation = selectionGeneration.current;
+    const request = (writeRequests.current[id] || 0) + 1;
+    writeRequests.current[id] = request;
+    const isCurrent = () => mounted.current && generation === selectionGeneration.current && request === writeRequests.current[id];
     setMappingBusy((current) => ({ ...current, [id]: true }));
     setMappingMessages((current) => ({ ...current, [id]: '' }));
     try {
       const response = await fetch(`/api/admin/translations/mappings/${id}/approve`, { method: 'POST' });
-      const payload = await response.json() as { mapping?: Mapping; error?: string };
-      if (!response.ok || !payload.mapping) throw new Error(payload.error || 'mapping_approval_failed');
-      setMappings((current) => current.map((mapping) => mapping.id === id ? payload.mapping! : mapping));
+      const payload = await response.json() as { mapping?: MappingWriteResult; error?: string };
+      if (!isCurrent()) return;
+      if (!response.ok || !payload.mapping || payload.mapping.id !== id) throw new Error(payload.error || 'mapping_approval_failed');
+      const updated = payload.mapping;
+      setMappings((current) => current.map((mapping) => mapping.id === id ? { ...mapping, ...updated, id: mapping.id, language_code: mapping.language_code } : mapping));
       setMappingMessages((current) => ({ ...current, [id]: '승인 완료 — 공개 및 색인 자격에 반영됩니다.' }));
     } catch (err) {
+      if (!isCurrent()) return;
       console.error(err);
       setMappingMessages((current) => ({ ...current, [id]: '승인하지 못했습니다. 이미 변경되었는지 새로고침해 확인하세요.' }));
     } finally {
-      setMappingBusy((current) => ({ ...current, [id]: false }));
+      if (isCurrent()) setMappingBusy((current) => ({ ...current, [id]: false }));
     }
   };
 
@@ -184,7 +230,7 @@ export default function AdminTranslationsPage() {
           ) : (
             <div className="space-y-6">
               {/* Job Panel Component for Approval Workflow */}
-              {selectedTrainerId && <TranslationJobPanel trainerId={selectedTrainerId} />}
+              {selectedTrainerId && <TranslationJobPanel key={selectedTrainerId} trainerId={selectedTrainerId} />}
 
               {/* Trainers List */}
               <div className="flex gap-2 overflow-x-auto pb-2">
@@ -215,6 +261,7 @@ export default function AdminTranslationsPage() {
                             <span>Max: {m.max_char_len}</span>
                           </div>
                           <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                            <span className="rounded bg-cyan-500/10 px-2 py-1 font-bold text-cyan-300">{m.language_code}</span>
                             {m.is_approved ? <span className="rounded bg-emerald-500/15 px-2 py-1 font-bold text-emerald-300">승인 완료</span>
                               : m.translation_provider === 'manual' && m.translation_status === 'pending' ? <span className="rounded bg-amber-500/15 px-2 py-1 font-bold text-amber-200">검수 대기 중</span>
                                 : <span className="rounded bg-slate-700/70 px-2 py-1 text-slate-300">자동 번역 검증 및 재시도 중</span>}
@@ -241,7 +288,12 @@ export default function AdminTranslationsPage() {
                               </div>
                               <textarea
                                 value={mappingEdits[m.id] || ''}
-                                onChange={(e) => setMappingEdits({ ...mappingEdits, [m.id]: e.target.value })}
+                                disabled={mappingBusy[m.id]}
+                                onChange={(e) => {
+                                  if (mappingBusy[m.id]) return;
+                                  const value = e.target.value;
+                                  setMappingEdits((current) => ({ ...current, [m.id]: value }));
+                                }}
                                 className="w-full p-2.5 rounded bg-slate-950 border border-slate-800 text-xs text-white font-mono focus:border-cyan-500 outline-none resize-y min-h-[60px]"
                               />
                             </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import SearchBar from '@/components/SearchBar';
 import GameCard from '@/components/GameCard';
 import { Locale, getCommonDict, getPatcherDict, getGamesDict, getGameTitle } from '@/lib/i18n';
@@ -39,6 +39,7 @@ function normalizeText(str: string): string {
   return str
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFC')
     .replace(/ß/g, 'ss')
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]/gu, '');
@@ -156,11 +157,6 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
   const [searchQuery, setSearchQuery] = useState('');
   const [visibleCount, setVisibleCount] = useState(18);
 
-  // 검색어가 변경되면 표시 개수를 초기값(18)으로 리셋
-  useEffect(() => {
-    setVisibleCount(18);
-  }, [searchQuery]);
-
   // Find the trainer for a specific game
   const getTrainerInfo = (gameId: number) => {
     const trainer = trainers.find(t => t.game_id === gameId);
@@ -188,9 +184,9 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
       const normQuery = normalizeText(searchQuery);
       const querySynonyms = getSynonyms(searchQuery);
       const queryChosung = getChosung(normQuery);
-      const queryKatakana = hiraganaToKatakana(searchQuery.toLowerCase());
-      const queryHiragana = katakanaToHiragana(searchQuery.toLowerCase());
-      const queryRomaji = kanaToRomaji(searchQuery.toLowerCase());
+      const queryKatakana = hiraganaToKatakana(normQuery);
+      const queryHiragana = katakanaToHiragana(normQuery);
+      const queryRomaji = kanaToRomaji(normQuery);
 
       const normEn = normalizeText(game.title_en);
       const normKo = normalizeText(game.title_ko);
@@ -247,7 +243,10 @@ export default function GamesListClient({ games, trainers, locale }: GamesListCl
         
         <SearchBar 
           value={searchQuery}
-          onChange={setSearchQuery}
+          onChange={(query) => {
+            setSearchQuery(query);
+            setVisibleCount(18);
+          }}
           placeholder={gt.searchPlaceholder}
         />
       </div>

@@ -8,14 +8,7 @@ import {
 import { TrendingUp, AlertTriangle, PlayCircle, Loader2, Users } from 'lucide-react';
 import Link from 'next/link';
 import AiReportButton from '@/components/AiReportButton';
-
-interface Game {
-  id: number;
-  title_en: string;
-  title_ko: string;
-  slug: string;
-  download_count: number;
-}
+import type { AdminDashboardStats, AdminDashboardMetrics, AdminTopGame } from '@/lib/admin-dashboard-types';
 
 interface PendingTranslation {
   gameTitle: string;
@@ -25,13 +18,13 @@ interface PendingTranslation {
 }
 
 export default function AdminDashboardHome() {
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<AdminDashboardStats>({
     totalGames: 0,
     totalTrainers: 0,
     totalDownloads: 0,
   });
-  const [topGames, setTopGames] = useState<Game[]>([]);
-  const [monthlyMetrics, setMonthlyMetrics] = useState<any>(null);
+  const [topGames, setTopGames] = useState<AdminTopGame[]>([]);
+  const [monthlyMetrics, setMonthlyMetrics] = useState<AdminDashboardMetrics | null>(null);
   const [pendingTranslations, setPendingTranslations] = useState<PendingTranslation[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -43,7 +36,7 @@ export default function AdminDashboardHome() {
       try {
         const response = await fetch('/api/admin/metrics');
         if (response.ok) {
-          const data = await response.json();
+          const data: AdminDashboardMetrics = await response.json();
           setMonthlyMetrics(data);
         }
       } catch (err) {
@@ -145,19 +138,19 @@ export default function AdminDashboardHome() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
         <div className="p-6 rounded-2xl border border-indigo-500/20 bg-indigo-950/10">
           <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center"><Users className="w-3 h-3 mr-1" /> Daily Visitors</div>
-          <div className="text-3xl font-extrabold text-white mt-4 font-outfit">{monthlyMetrics?.dailyActiveUsers?.toLocaleString() || 0}</div>
+          <div className="text-3xl font-extrabold text-white mt-4 font-outfit">{monthlyMetrics?.dailyActiveUsers == null ? '측정 불가' : monthlyMetrics.dailyActiveUsers.toLocaleString()}</div>
         </div>
         <div className="p-6 rounded-2xl border border-indigo-500/20 bg-indigo-950/10">
           <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center"><Users className="w-3 h-3 mr-1" /> Weekly Visitors</div>
-          <div className="text-3xl font-extrabold text-white mt-4 font-outfit">{monthlyMetrics?.weeklyActiveUsers?.toLocaleString() || 0}</div>
+          <div className="text-3xl font-extrabold text-white mt-4 font-outfit">{monthlyMetrics?.weeklyActiveUsers == null ? '측정 불가' : monthlyMetrics.weeklyActiveUsers.toLocaleString()}</div>
         </div>
         <div className="p-6 rounded-2xl border border-indigo-500/20 bg-indigo-950/10">
           <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center"><Users className="w-3 h-3 mr-1" /> Monthly Visitors</div>
-          <div className="text-3xl font-extrabold text-white mt-4 font-outfit">{monthlyMetrics?.monthlyActiveUsers?.toLocaleString() || 0}</div>
+          <div className="text-3xl font-extrabold text-white mt-4 font-outfit">{monthlyMetrics?.monthlyActiveUsers == null ? '측정 불가' : monthlyMetrics.monthlyActiveUsers.toLocaleString()}</div>
         </div>
         <div className="p-6 rounded-2xl border border-indigo-500/20 bg-indigo-950/10">
           <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center"><Users className="w-3 h-3 mr-1" /> All-Time Visitors</div>
-          <div className="text-3xl font-extrabold text-white mt-4 font-outfit">{monthlyMetrics?.totalActiveUsers?.toLocaleString() || 0}</div>
+          <div className="text-3xl font-extrabold text-white mt-4 font-outfit">{monthlyMetrics?.totalActiveUsers == null ? '측정 불가' : monthlyMetrics.totalActiveUsers.toLocaleString()}</div>
         </div>
       </div>
 
@@ -244,7 +237,7 @@ export default function AdminDashboardHome() {
                 </tr>
               </thead>
               <tbody>
-                {monthlyMetrics.topPages.slice(0, 10).map((page: any, idx: number) => (
+                {monthlyMetrics.topPages.slice(0, 10).map((page, idx) => (
                   <tr key={idx} className="border-b border-slate-900 hover:bg-slate-900/10 text-slate-300">
                     <td className="py-3.5 px-4 text-center font-semibold text-slate-500">{idx + 1}</td>
                     <td className="py-3.5 px-4 font-mono text-slate-400">{page.path}</td>

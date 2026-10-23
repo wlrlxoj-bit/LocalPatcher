@@ -850,7 +850,7 @@ def _translate_via_llm_ja_legacy(lines_to_translate):
                 if len(translated_array) == len(lines_to_translate):
                     return dict(zip(lines_to_translate, translated_array))
         except Exception as e:
-            print(f"[-] OpenAI API translation failed: {e}")
+            print("[LEGACY_TRANSLATION_FAILED] code=PROVIDER_EXCEPTION")
 
     return {}
 
@@ -922,7 +922,7 @@ def parse_pe_binary(exe_bytes: bytes):
                 break
         return text_section
     except Exception as e:
-        print(f"[-] PE Header parsing failed: {e}")
+        print("[PE_HEADER_PARSE_FAILED] code=INVALID_EXECUTABLE")
         return None
 
 def _safe_pe_data_ranges(exe_bytes: bytes):
@@ -1036,7 +1036,7 @@ def fetch_recent_trainers():
                 })
         return trainer_posts
     except Exception as e:
-        print(f"[-] Error scraping FLiNG feed: {e}")
+        print("[FLING_FEED_FAILED] code=FETCH_OR_PARSE_EXCEPTION")
         return []
 
 
@@ -1343,7 +1343,7 @@ def fetch_steam_meta(game_title: str):
         'description_es': ''
     }
     try:
-        print(f"[*] Searching Steam store details for: {game_title}...")
+        print("[STEAM_META_SEARCH_STARTED]")
         search_url = f"https://store.steampowered.com/api/storesearch/?term={requests.utils.quote(game_title)}&l=english&cc=US"
         res = requests.get(search_url, timeout=5)
         if res.status_code == 200:
@@ -1397,10 +1397,10 @@ def fetch_steam_meta(game_title: str):
                 except:
                     meta['cover_url'] = '/images/default_cover.jpg'
                     
-                print(f"[+] Found Steam AppID: {appid}, Cover: {meta['cover_url']}")
+                print("[STEAM_META_FOUND]")
                 return meta
     except Exception as e:
-        print(f"[-] Steam search failed: {e}")
+        print("[STEAM_META_FAILED] code=FETCH_OR_PARSE_EXCEPTION")
     return default_meta
 
 def official_archive_from_redirect(response):
@@ -1527,7 +1527,7 @@ def scrape_and_patch_trainer(
     실행만 기존 동작대로 이를 재처리해, 신규 바이너리/업데이트와 재시도 비용을 분리한다.
     """
     global last_llm_provider
-    print(f"[*] Processing: {post['title']} ({post['link']})")
+    print("[PAGE_PROCESSING_STARTED]")
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     requested_locales = set(languages or ('ko', 'ja', 'de', 'es'))
     
@@ -1587,9 +1587,8 @@ def scrape_and_patch_trainer(
         for download_a in [latest_download]:
             download_url = download_a['href']
             download_text = download_a.text.strip()
-            print(f"[*] Version download link found: {download_url} ({download_text})")
             print(
-                f"[DOWNLOAD_SELECTED] url={download_url} version={download_text!r} "
+                "[DOWNLOAD_SELECTED] "
                 f"skipped_links={skipped_link_count} fallback=disabled"
             )
             target_eligible = False
@@ -1629,7 +1628,10 @@ def scrape_and_patch_trainer(
                             None, dl_attempt, max_delay_seconds=FLING_429_RETRY_MAX_SECONDS,
                         ))
                 if not file_bytes:
-                    print(f"[-] Failed to download binary from {download_url} reason={download_failure}")
+                    print(
+                        "[BINARY_DOWNLOAD_FAILED] code=DOWNLOAD_FAILED "
+                        f"status={upstream_status if type(upstream_status) is int and 100 <= upstream_status <= 599 else 0}"
+                    )
                     if upstream_status in {403, 429}:
                         # 기존 등록 trainer만 언어별 재시도 큐로 보류한다. 새 URL은
                         # 게임/트레이너를 만들지 않아 upstream 차단을 성공으로 위장하지 않는다.
@@ -1653,7 +1655,7 @@ def scrape_and_patch_trainer(
                 exe_bytes = None
 
                 if is_rar_archive(download_url, file_bytes):
-                    print(f"[ARCHIVE_RAR_SKIPPED] url={download_url} source=magic_bytes")
+                    print("[ARCHIVE_RAR_SKIPPED] source=magic_bytes")
                     rar_skips += 1
                     continue
 
@@ -1679,7 +1681,7 @@ def scrape_and_patch_trainer(
                 # Calculate file specs
                 original_file_size = len(exe_bytes)
                 original_file_hash = hashlib.sha256(exe_bytes).hexdigest()
-                print(f"[+] Size: {original_file_size} bytes, Hash: {original_file_hash}")
+                print(f"[BINARY_INSPECTED] size_bytes={original_file_size}")
                 
                 # Check if trainer version already exists in DB
                 trainer_res = db.table('trainers').select('id,game_id').eq('original_file_hash', original_file_hash).execute()
@@ -1936,7 +1938,7 @@ def scrape_and_patch_trainer(
                             outcome_reporter("blocked", "TRANSLATION_OR_VALIDATION_FAILED")
                 
             except Exception as e:
-                print(f"[-] Error processing download {download_url}: {e}")
+                print("[DOWNLOAD_PROCESSING_FAILED] code=PROCESSING_EXCEPTION")
                 if target_eligible or strict_download_failures:
                     had_eligible_failure = True
                 
@@ -1969,7 +1971,7 @@ def scrape_and_patch_trainer(
                 outcome_reporter("blocked", "PROCESSING_FAILED")
         return result
     except Exception as e:
-        print(f"[-] Error processing page: {e}")
+        print("[PAGE_PROCESSING_FAILED] code=PAGE_PROCESSING_EXCEPTION")
         if outcome_reporter:
             outcome_reporter("blocked", "PAGE_PROCESSING_EXCEPTION")
         return False
@@ -2035,10 +2037,10 @@ def main():
             dictionary_offset += dictionary_page_size
         print(f"[+] DB 사전에서 한국어 {len(db_dictionary_ko)}개, 일본어 {len(db_dictionary_ja)}개를 불러왔습니다.")
     except Exception as e:
-        print(f"[*] 동적 사전 테이블을 찾지 못해 로컬 사전을 사용합니다. 오류: {e}")
+        print("[DICTIONARY_LOAD_FAILED] code=DATABASE_EXCEPTION fallback=local")
         
     if args.url:
-        print(f"[*] Pinpoint scrape target URL: {args.url}")
+        print("[PINPOINT_SCRAPE_STARTED]")
         clean_url = args.url.strip().rstrip('/')
         game_slug = normalize_fling_slug(clean_url)
         game_title = game_slug.replace('-', ' ').title() + " Trainer"
@@ -2130,7 +2132,7 @@ def sync_popular_fling_trainers(db: Client):
         print('[+] Successfully synced popular trainers.')
         
     except Exception as e:
-        print(f'[-] Error syncing popular trainers: {e}')
+        print('[POPULAR_TRAINERS_SYNC_FAILED] code=FETCH_OR_DATABASE_EXCEPTION')
 
 if __name__ == "__main__":
     raise SystemExit(main())

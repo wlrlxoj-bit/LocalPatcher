@@ -2,11 +2,12 @@
 
 import React, { useState } from 'react';
 import { Copy, Check, Bot } from 'lucide-react';
+import type { AdminDashboardStats, AdminDashboardMetrics, AdminTopGame } from '@/lib/admin-dashboard-types';
 
 interface AiReportButtonProps {
-  stats: any;
-  metrics: any;
-  topGames: any[];
+  stats: AdminDashboardStats;
+  metrics: AdminDashboardMetrics | null;
+  topGames: AdminTopGame[];
 }
 
 export default function AiReportButton({ stats, metrics, topGames }: AiReportButtonProps) {
@@ -22,7 +23,7 @@ export default function AiReportButton({ stats, metrics, topGames }: AiReportBut
     report += `- Total Trainers: ${stats?.totalTrainers || 0}\n`;
     report += `- Total Downloads (Supabase): ${stats?.totalDownloads?.toLocaleString() || 0}\n\n`;
     
-    if (metrics) {
+    if (metrics?.status === 'available') {
       report += `## 2. Visitors (GA4)\n`;
       report += `- Daily Active Users: ${metrics.dailyActiveUsers || 0}\n`;
       report += `- Weekly Active Users: ${metrics.weeklyActiveUsers || 0}\n`;
@@ -31,7 +32,7 @@ export default function AiReportButton({ stats, metrics, topGames }: AiReportBut
       
       if (metrics.topPages && metrics.topPages.length > 0) {
         report += `## 3. Top Pages (Last 29 Days)\n`;
-        metrics.topPages.slice(0, 10).forEach((page: any, i: number) => {
+        metrics.topPages.slice(0, 10).forEach((page, i) => {
           report += `${i + 1}. ${page.path} - ${page.views} views\n`;
         });
         report += `\n`;
@@ -49,8 +50,11 @@ export default function AiReportButton({ stats, metrics, topGames }: AiReportBut
         report += `## 5. Price Widget Metrics (Since ${metrics.pricePlacement.measurementStartDate})\n`;
         report += `- Widget Views: ${metrics.pricePlacement.recentViews || 0}\n`;
         report += `- Clicks (Merchant/Affiliate): ${metrics.pricePlacement.allMerchantClicks || 0} / ${metrics.pricePlacement.affiliateClicks || 0}\n`;
-        report += `- Click Through Rate: ${metrics.pricePlacement.clickThroughRate?.toFixed(2)}%\n`;
+        report += `- Click Through Rate: ${metrics.pricePlacement.clickThroughRate === null ? '측정 불가' : `${metrics.pricePlacement.clickThroughRate.toFixed(2)}%`}\n`;
       }
+    } else {
+      report += `## 2. Visitors (GA4)\n`;
+      report += `- 측정 불가\n\n`;
     }
     
     report += `\n**[Request for AI]**\n`;

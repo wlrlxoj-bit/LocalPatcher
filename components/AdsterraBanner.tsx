@@ -68,7 +68,7 @@ export default function AdsterraBanner({ locale, enabled = adsterraEnabledByDefa
     <a href={`/${locale}/privacy`} className="mt-2 inline-block text-xs text-cyan-400 underline">{t.privacy}</a>
     <div ref={container} className="mx-auto mt-3 w-full max-w-[300px] overflow-hidden">
       {allowed && <div style={{ height: 250 * scale }}>
-        <iframe title={t.label} width="300" height="250" srcDoc={bannerDocument}
+        <iframe title={t.label} width="300" height="250" srcDoc={bannerDocument} sandbox="allow-scripts"
           style={{ border: 0, transform: `scale(${scale})`, transformOrigin: 'top left' }} />
       </div>}
     </div>

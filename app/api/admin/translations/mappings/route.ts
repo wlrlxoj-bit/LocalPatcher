@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   const client = getAdminClient();
   if (!client) return NextResponse.json({ error: 'server_not_configured' }, { status: 503 });
   const { data, error } = await client.from('translation_mappings')
-    .select('id,offset_dec,encoding,original_text,translated_text,max_char_len,is_approved,translation_status,translation_provider')
+    .select('id,language_code,offset_dec,encoding,original_text,translated_text,max_char_len,is_approved,translation_status,translation_provider')
     .eq('trainer_id', trainerId)
     .order('offset_dec', { ascending: true });
   if (error) return NextResponse.json({ error: 'mappings_read_failed' }, { status: 503 });

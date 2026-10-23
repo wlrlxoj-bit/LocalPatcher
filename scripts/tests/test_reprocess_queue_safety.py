@@ -70,6 +70,7 @@ class ReprocessQueueSafetyTests(unittest.TestCase):
             "argparse": argparse,
             "os": os,
             "subprocess": subprocess,
+            "time": SimpleNamespace(monotonic=lambda: 0),
             "sys": sys,
             "__file__": str(script),
             "urlparse": urlparse,
@@ -102,9 +103,104 @@ class ReprocessQueueSafetyTests(unittest.TestCase):
             [sys.executable, str(script.parent / "scraper.py"), "--provider", "gemini",
              "--url", "https://flingtrainer.com/a", "--languages", "ja", "--trainer-id", "2"],
         ])
-        self.assertTrue(all(kwargs == {
-            "check": False, "capture_output": True, "text": True
-        } for _, kwargs in commands))
+        self.assertEqual([kwargs for _, kwargs in commands], [
+            {"check": False, "capture_output": True, "text": True, "timeout": 870.0},
+            {"check": False, "capture_output": True, "text": True, "timeout": 1740.0},
+        ])
+
+    def test_child_failures_preserve_unknown_or_terminal_queue_state_and_continue(self):
+        """시간 초과·시작 실패는 큐를 덮어쓰지 않고 다음 claim을 한 번 처리한다."""
+        script = TESTS_DIR.parent / "reprocess_pending_translations.py"
+        functions = [node for node in ast.parse(script.read_text(encoding="utf-8")).body
+                     if isinstance(node, ast.FunctionDef)]
+        cases = [
+            ("", "unknown"),
+            ("[save-outcome] trainer=1 locale=ko status=approved", "approved"),
+            ("[save-outcome] trainer=1 locale=ko status=preserved", "preserved"),
+            ("[RETRY_QUEUED] trainer=1 locale=ko state=blocked code=SOURCE_IDENTITY_MISMATCH", "blocked"),
+            ("[RETRY_QUEUED] trainer=1 locale=ko state=deferred code=TRANSLATION_QUOTA", "deferred"),
+        ]
+        failures = []
+        for partial, confirmed in cases:
+            for as_bytes in (False, True):
+                text = partial + "\n원문 secret-token https://private.example"
+                failures.append((subprocess.TimeoutExpired(
+                    ["secret-command"], 870, output=text.encode() if as_bytes else text,
+                    stderr=b"private-stderr-token\xff",
+                ), "CHILD_TIMEOUT", confirmed))
+        failures.append((OSError("원문 secret-token private-command"), "CHILD_START_FAILED", None))
+        for failure, code, confirmed in failures:
+            with self.subTest(code=code, confirmed=confirmed):
+                db = mock.Mock()
+                run = mock.Mock(side_effect=[failure, SimpleNamespace(
+                    returncode=0, stdout="[save-outcome] trainer=2 locale=ja status=approved", stderr="",
+                )])
+                scope = {
+                    "argparse": argparse, "os": os, "sys": sys, "__file__": str(script),
+                    "subprocess": SimpleNamespace(run=run, TimeoutExpired=subprocess.TimeoutExpired),
+                    "time": SimpleNamespace(monotonic=mock.Mock(side_effect=[100, 100, 200])),
+                    "create_client": lambda *args: db,
+                }
+                exec(compile(ast.Module(body=functions, type_ignores=[]), str(script), "exec"), scope)
+                claim = mock.Mock(return_value=([
+                    ("https://flingtrainer.com/a", 1, "ko"),
+                    ("https://flingtrainer.com/a", 2, "ja"),
+                ], []))
+                scope["claim_due_retry_targets"] = claim
+                with mock.patch.dict(os.environ, {
+                    "NEXT_PUBLIC_SUPABASE_URL": "https://example.supabase.co",
+                    "SUPABASE_SERVICE_ROLE_KEY": "test-only",
+                }, clear=True), mock.patch.object(sys, "argv", [str(script), "--apply"]), \
+                        mock.patch("builtins.print") as output:
+                    self.assertEqual(scope["main"](), 1)
+                claim.assert_called_once_with(db, 20)
+                db.rpc.assert_not_called()
+                self.assertEqual(run.call_count, 2)
+                self.assertEqual([call.args[0][-1] for call in run.call_args_list], ["1", "2"])
+                self.assertEqual([call.kwargs for call in run.call_args_list], [
+                    {"check": False, "capture_output": True, "text": True, "timeout": 870.0},
+                    {"check": False, "capture_output": True, "text": True, "timeout": 1640.0},
+                ])
+                lines = [call.args[0] for call in output.call_args_list]
+                first = next(line for line in lines if "trainer=1 " in line)
+                self.assertIn(f"outcome=failed code={code}", first)
+                if confirmed is not None:
+                    self.assertIn(f"confirmed={confirmed}", first)
+                self.assertTrue(any("trainer=2 locale=ja outcome=approved" in line for line in lines))
+                self.assertIn("[REPROCESS_SUMMARY] approved=1 preserved=0 deferred=0 blocked=0 skipped=0 unconfirmed=0 failed=1", lines)
+                for secret in ("원문", "secret-token", "secret-command", "private-stderr-token", "private.example"):
+                    self.assertNotIn(secret, "\n".join(lines))
+
+    def test_exhausted_claim_lease_budget_classifies_all_targets_without_spawning(self):
+        """30분 lease의 정리 여유가 끝나면 자식·큐 재쓰기 없이 실패를 노출한다."""
+        script = TESTS_DIR.parent / "reprocess_pending_translations.py"
+        functions = [node for node in ast.parse(script.read_text(encoding="utf-8")).body
+                     if isinstance(node, ast.FunctionDef)]
+        db, run = mock.Mock(), mock.Mock()
+        scope = {
+            "argparse": argparse, "os": os, "sys": sys, "__file__": str(script),
+            "subprocess": SimpleNamespace(run=run, TimeoutExpired=subprocess.TimeoutExpired),
+            "time": SimpleNamespace(monotonic=mock.Mock(side_effect=[100, 1840, 1841])),
+            "create_client": lambda *args: db,
+        }
+        exec(compile(ast.Module(body=functions, type_ignores=[]), str(script), "exec"), scope)
+        scope["claim_due_retry_targets"] = lambda *args: ([
+            ("https://flingtrainer.com/a", 1, "ko"),
+            ("https://flingtrainer.com/a", 2, "ja"),
+        ], [])
+        with mock.patch.dict(os.environ, {
+            "NEXT_PUBLIC_SUPABASE_URL": "https://example.supabase.co",
+            "SUPABASE_SERVICE_ROLE_KEY": "test-only",
+        }, clear=True), mock.patch.object(sys, "argv", [str(script), "--apply"]), \
+                mock.patch("builtins.print") as output:
+            self.assertEqual(scope["main"](), 1)
+        run.assert_not_called()
+        db.rpc.assert_not_called()
+        lines = [call.args[0] for call in output.call_args_list]
+        self.assertEqual(sum("code=TIME_BUDGET_EXHAUSTED" in line for line in lines), 2)
+        self.assertIn("[REPROCESS_SUMMARY] approved=0 preserved=0 deferred=0 blocked=0 skipped=0 unconfirmed=0 failed=2", lines)
+        sql = (TESTS_DIR.parent.parent / "supabase/migrations/202609190001_translation_retry_queue.sql").read_text(encoding="utf-8")
+        self.assertIn("next_retry_at = now() + interval '30 minutes'", sql)
 
     def test_reprocessor_uses_all_four_locales_and_never_runs_on_schedule(self):
         scripts = pathlib.Path(__file__).resolve().parents[1]
@@ -186,6 +282,109 @@ class ReprocessQueueSafetyTests(unittest.TestCase):
         ), 2730, "ko")
         self.assertEqual(result["outcome"], "approved")
         self.assertEqual(result["providers"], [("GEMINI", "TRANSLATION_PERMANENT", "NONE", "402")])
+
+    def test_provider_quota_diagnostics_match_only_scraper_fixed_reason_codes(self):
+        """생성자·출력부와 같은 고정 사유만 허용하고 외부 원문은 거절한다."""
+        details, = load_functions("reprocess_pending_translations.py", ["child_result_details"])
+        reasons = {
+            "UNKNOWN", "RUN_REQUEST_CAP", "RUN_CHAR_CAP", "MONTHLY_CONFIG_MISSING",
+            "MONTHLY_CONFIG_REJECTED", "MONTHLY_RESERVE_FAILED",
+            "MONTHLY_QUOTA_EXHAUSTED", "MONTHLY_FINALIZE_FAILED", "PROVIDER_HTTP_QUOTA",
+        }
+        scraper = ast.parse((TESTS_DIR.parent / "scraper.py").read_text(encoding="utf-8"))
+        quota_class = next(node for node in scraper.body
+                           if isinstance(node, ast.ClassDef) and node.name == "TranslationQuotaError")
+        class_reasons = next(node for node in ast.walk(quota_class) if isinstance(node, ast.Set))
+        self.assertEqual(ast.literal_eval(class_reasons), reasons)
+        output_reasons = next(node.value for node in ast.walk(scraper)
+                              if isinstance(node, ast.Assign) and any(
+                                  isinstance(target, ast.Name) and target.id == "quota_reasons"
+                                  for target in node.targets))
+        self.assertEqual(ast.literal_eval(output_reasons), reasons)
+        for reason in sorted(reasons):
+            with self.subTest(reason=reason):
+                output = ("[TRANSLATION_PROVIDER_FAILED] provider=GEMINI "
+                          f"code=TRANSLATION_QUOTA quota_reason={reason} status=429")
+                self.assertEqual(details(1, output, 1, "ko")["providers"], [
+                    ("GEMINI", "TRANSLATION_QUOTA", reason, "429"),
+                ])
+        for reason in ("PRIVATE_SECRET", "unknown", "UNKNOWN extra=secret", "원문_비밀"):
+            output = ("[TRANSLATION_PROVIDER_FAILED] provider=GEMINI "
+                      f"code=TRANSLATION_QUOTA quota_reason={reason} status=429")
+            self.assertEqual(details(1, output, 1, "ko")["providers"], [])
+
+    def test_unconfirmed_completed_child_preserves_committed_state_and_claim_lease(self):
+        """완료된 자식의 출력이 불확실해도 부모는 종결 상태·lease를 덮어쓰지 않는다."""
+        script = TESTS_DIR.parent / "reprocess_pending_translations.py"
+        functions = [node for node in ast.parse(script.read_text(encoding="utf-8")).body
+                     if isinstance(node, ast.FunctionDef)]
+        cases = [
+            (0, "", "unconfirmed"),
+            (0, "[save-outcome] trainer=3 locale=ko status=approved", "unconfirmed"),
+            (0, "[save-outcome] trainer=1 locale=ja status=approved", "unconfirmed"),
+            (1, "", "failed"),
+            (1, "[save-outcome] trainer=1 locale=ko status=approved", "failed"),
+            (0, "[RETRY_QUEUED] trainer=1 locale=ko state=blocked code=UNKNOWN_CODE", "unconfirmed"),
+            (1, "[RETRY_QUEUED] trainer=1 locale=ko state=deferred code=UNKNOWN_CODE", "failed"),
+        ]
+        for returncode, stdout, outcome in cases:
+            for committed_state in ("blocked", "approved", "leased"):
+                with self.subTest(returncode=returncode, outcome=outcome, state=committed_state):
+                    # 자식이 이미 blocked를 저장하거나 승인 후 큐를 삭제한 상황과
+                    # 아직 claim lease만 남은 상황을 외부 연결 없이 모사한다.
+                    initial_queue = None if committed_state == "approved" else {
+                        "state": "blocked" if committed_state == "blocked" else "deferred",
+                        "next_retry_at": 1800,
+                    }
+                    db = mock.Mock()
+                    db.queue = initial_queue.copy() if initial_queue is not None else None
+
+                    def overwrite_queue(*args, **kwargs):
+                        db.queue = {"state": "deferred", "next_retry_at": 3600}
+                        return SimpleNamespace(execute=lambda: SimpleNamespace(data=True))
+
+                    db.rpc.side_effect = overwrite_queue
+                    run = mock.Mock(side_effect=[
+                        SimpleNamespace(returncode=returncode, stdout=stdout, stderr=""),
+                        SimpleNamespace(returncode=0, stdout=(
+                            "[save-outcome] trainer=2 locale=ja status=approved"
+                        ), stderr=""),
+                    ])
+                    scope = {
+                        "argparse": argparse, "os": os, "sys": sys, "__file__": str(script),
+                        "subprocess": SimpleNamespace(run=run, TimeoutExpired=subprocess.TimeoutExpired),
+                        "time": SimpleNamespace(monotonic=lambda: 0),
+                        "create_client": lambda *args: db,
+                    }
+                    exec(compile(ast.Module(body=functions, type_ignores=[]), str(script), "exec"), scope)
+                    claim = mock.Mock(return_value=([
+                        ("https://flingtrainer.com/a", 1, "ko"),
+                        ("https://flingtrainer.com/a", 2, "ja"),
+                    ], []))
+                    scope["claim_due_retry_targets"] = claim
+                    with mock.patch.dict(os.environ, {
+                        "NEXT_PUBLIC_SUPABASE_URL": "https://example.supabase.co",
+                        "SUPABASE_SERVICE_ROLE_KEY": "test-only",
+                    }, clear=True), mock.patch.object(sys, "argv", [str(script), "--apply"]), \
+                            mock.patch("builtins.print") as output:
+                        self.assertEqual(scope["main"](), 1)
+                    claim.assert_called_once_with(db, 20)
+                    db.rpc.assert_not_called()
+                    self.assertEqual(db.queue, initial_queue)
+                    self.assertEqual(run.call_count, 2)
+                    self.assertEqual([call.args[0][-1] for call in run.call_args_list], ["1", "2"])
+                    self.assertEqual([call.kwargs for call in run.call_args_list], [
+                        {"check": False, "capture_output": True, "text": True, "timeout": 870.0},
+                        {"check": False, "capture_output": True, "text": True, "timeout": 1740.0},
+                    ])
+                    lines = [call.args[0] for call in output.call_args_list]
+                    self.assertTrue(any(f"trainer=1 locale=ko outcome={outcome}" in line for line in lines))
+                    self.assertTrue(any("trainer=2 locale=ja outcome=approved" in line for line in lines))
+                    self.assertIn(
+                        "[REPROCESS_SUMMARY] approved=1 preserved=0 deferred=0 blocked=0 skipped=0 "
+                        f"unconfirmed={int(outcome == 'unconfirmed')} failed={int(outcome == 'failed')}",
+                        lines,
+                    )
 
     def test_legacy_recovery_claim_is_explicit_and_not_the_default(self):
         class Db:
