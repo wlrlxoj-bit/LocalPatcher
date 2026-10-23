@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { AlertOctagon, Ban, ChevronDown, HelpCircle, Lock } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 import { Locale } from '@/lib/i18n/index';
 import { getFaqContent } from '@/lib/i18n/index';
@@ -22,10 +23,7 @@ export default function FAQPage({ params }: { params: Promise<{ locale: string }
       </header>
 
       <div className="space-y-4">
-        {t.items.map((item, i: number) => {
-          const Icon = item[0] as any;
-          const q = item[1] as string;
-          const a = item[2] as string;
+        {(t.items as [LucideIcon, string, string][]).map(([Icon, q, a], i) => {
           const buttonId = `faq-button-${i}`;
           const panelId = `faq-panel-${i}`;
           const isOpen = open === i;

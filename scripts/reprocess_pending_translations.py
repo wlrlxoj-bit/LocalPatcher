@@ -4,6 +4,7 @@ import argparse
 import os
 import subprocess
 import sys
+import time
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -130,7 +131,9 @@ def child_result_details(returncode, output, trainer_id, locale):
         event = re.fullmatch(
             r"\[TRANSLATION_PROVIDER_FAILED\] provider=(GEMINI|OPENAI_FALLBACK|OPENAI|AZURE|UNKNOWN) "
             r"code=(TRANSLATION_QUOTA|TRANSLATION_API_TEMPORARY|TRANSLATION_PERMANENT)"
-            r"(?: quota_reason=(UNKNOWN|PROVIDER_HTTP_QUOTA|MONTHLY_QUOTA_EXHAUSTED))? status=(0|[1-5][0-9]{2})", line,
+            r"(?: quota_reason=(UNKNOWN|RUN_REQUEST_CAP|RUN_CHAR_CAP|MONTHLY_CONFIG_MISSING|"
+            r"MONTHLY_CONFIG_REJECTED|MONTHLY_RESERVE_FAILED|MONTHLY_QUOTA_EXHAUSTED|"
+            r"MONTHLY_FINALIZE_FAILED|PROVIDER_HTTP_QUOTA))? status=(0|[1-5][0-9]{2})", line,
         )
         if event:
             provider_diagnostics.append((event[1], event[2], event[3] or "NONE", event[4]))
@@ -143,23 +146,6 @@ def classify_child_result(returncode, output):
     if "error=TranslationQuotaError" in output:
         return "quota_deferred"
     return "success" if returncode == 0 else "failed"
-
-
-def defer_unclassified_targets(db, retry_items):
-    """하위 작업이 결과 코드를 남기지 못한 일시 장애도 제한된 backoff로 되돌린다."""
-    try:
-        for trainer_id, language_code in retry_items:
-            db.rpc("schedule_translation_retry", {
-                "p_trainer_id": trainer_id,
-                "p_language_code": language_code,
-                "p_state": "deferred",
-                "p_failure_code": "REPROCESS_WORKER_FAILED",
-                "p_delay_seconds": 1800,
-            }).execute()
-        return True
-    except Exception:
-        print("[REPROCESS_QUEUE_WRITE_FAILED]")
-        return False
 
 
 def claim_due_retry_targets(db, limit, recovery_trainer_ids=None):
@@ -262,6 +248,7 @@ def main():
         return 0
 
     if args.url:
+        retry_deadline = time.monotonic() + 1740
         target_locales, missing_sources = [
             (target, None, locale)
             for target in dict.fromkeys(args.url)
@@ -277,6 +264,9 @@ def main():
             print("[REPROCESS_QUEUE_UNAVAILABLE]")
             return 1
         db = create_client(endpoint, key)
+        # claim의 30분 lease에서 결과 정리용 60초를 남긴다. 비용 한도가 아니라
+        # 이미 claim한 배치의 하위 프로세스 대기 예산이며 원격 요청 취소는 보장하지 않는다.
+        retry_deadline = time.monotonic() + 1740
         if args.recover_internal_quota_trainer:
             target_locales, missing_sources = claim_due_retry_targets(
                 db, args.limit, sorted(set(args.recover_internal_quota_trainer)),
@@ -307,9 +297,17 @@ def main():
     failures = 0
     counts = {key: 0 for key in ("approved", "preserved", "deferred", "blocked", "skipped", "unconfirmed", "failed")}
 
-    for target, trainer_id, locale in targets:
+    for target_index, (target, trainer_id, locale) in enumerate(targets):
         if not args.apply:
             continue
+        remaining = retry_deadline - time.monotonic()
+        if remaining <= 0:
+            failures += 1
+            counts["failed"] += 1
+            print(f"[REPROCESS_RESULT] trainer={trainer_id or 0} locale={locale} outcome=failed code=TIME_BUDGET_EXHAUSTED exit=none")
+            continue
+        # 남은 대상마다 한 번의 기회를 남기며 같은 대상의 자동 재실행은 하지 않는다.
+        child_timeout = remaining / (len(targets) - target_index)
         command = [
             sys.executable,
             os.path.join(os.path.dirname(__file__), "scraper.py"),
@@ -323,12 +321,27 @@ def main():
         if trainer_id is not None:
             command.extend(["--trainer-id", str(trainer_id)])
         try:
-            result = subprocess.run(command, check=False, capture_output=True, text=True)
+            result = subprocess.run(command, check=False, capture_output=True, text=True,
+                                    timeout=child_timeout)
+        except subprocess.TimeoutExpired as exc:
+            failures += 1
+            counts["failed"] += 1
+            # timeout의 출력은 bytes일 수도 있다. 예외·명령·원문은 출력하지 않고
+            # 이미 기록된 고정 결과만 진단한다. 알 수 없는 상태는 lease를 보존한다.
+            partial = "\n".join(
+                value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value or ""
+                for value in (exc.stdout, exc.stderr)
+            )
+            detail = child_result_details(0, partial, trainer_id, locale)
+            confirmed = detail["outcome"] if detail["outcome"] in {
+                "approved", "preserved", "blocked", "deferred",
+            } else "unknown"
+            print(f"[REPROCESS_RESULT] trainer={trainer_id or 0} locale={locale} outcome=failed code=CHILD_TIMEOUT confirmed={confirmed} exit=none")
+            continue
         except Exception:
             failures += 1
             counts["failed"] += 1
-            if trainer_id is not None and not defer_unclassified_targets(db, [(trainer_id, locale)]):
-                failures += 1
+            # 자식의 commit 직후 종료 여부를 알 수 없으므로 상태를 덮어쓰지 않는다.
             print(f"[REPROCESS_RESULT] trainer={trainer_id or 0} locale={locale} outcome=failed code=CHILD_START_FAILED exit=none")
             continue
         detail = child_result_details(
@@ -341,10 +354,8 @@ def main():
         for provider, code, reason, status in detail["providers"]:
             print(f"[REPROCESS_PROVIDER] trainer={trainer_id or 0} locale={locale} provider={provider} code={code} reason={reason} status={status}")
         if outcome in {"failed", "unconfirmed"}:
-            if not detail["queued"]:
-                retry_items = [(trainer_id, locale)] if trainer_id is not None else []
-                if retry_items and not defer_unclassified_targets(db, retry_items):
-                    failures += 1
+            # 출력 유실·모순만으로 자식의 commit 여부를 판단할 수 없다.
+            # 부모는 terminal 상태와 claim의 30분 lease를 그대로 보존한다.
             failures += 1
         elif outcome == "blocked":
             failures += 1

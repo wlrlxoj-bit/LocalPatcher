@@ -23,14 +23,14 @@ export default async function SystemRequirements({ steamAppId, locale }: SystemR
 
   const pt = getPatcherDict(locale);
 
-  // Helper to sanitize/clean up Steam's messy HTML strings a bit
-  // Steam usually prepends "<strong>Minimum:</strong><br>" which we want to hide if we are using our own headers.
-  const cleanHtml = (html: string, keywordToStrip: string) => {
-    let clean = html;
-    // Attempt to remove the prefixed header (e.g. <strong>Minimum:</strong><br>)
-    clean = clean.replace(/<strong>.*?<\/strong><br\s*\/?>/i, '');
-    return clean;
-  };
+  // 외부 HTML은 실행 가능한 마크업으로 삽입하지 않고 React가 이스케이프하는 텍스트로 표시합니다.
+  // 중복 제목과 태그를 제거하되 줄바꿈·목록 구분은 보존합니다. 링크·굵게 서식은 적용하지 않습니다.
+  const requirementText = (html: string) => html
+    .replace(/^\s*<strong>.*?<\/strong>\s*<br\s*\/?>/i, '')
+    .replace(/<br\b[^>]*>|<\/?(?:ul|ol|li|p|div)\b[^>]*>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/\n[\t ]*\n+/g, '\n')
+    .trim();
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.05)]">
@@ -45,9 +45,8 @@ export default async function SystemRequirements({ steamAppId, locale }: SystemR
             <div className="flex flex-col space-y-3">
               <h4 className="text-sm font-bold text-emerald-400 font-mono border-b border-slate-800 pb-2">{pt.minimum}</h4>
               <div 
-                className="text-xs text-slate-400 space-y-2 [&_ul]:list-disc [&_ul]:pl-4 [&_ul_li]:mb-1 [&_strong]:text-slate-300 [&_a]:text-cyan-400 leading-relaxed font-sans"
-                dangerouslySetInnerHTML={{ __html: cleanHtml(minimum, 'Minimum') }}
-              />
+                className="text-xs text-slate-400 whitespace-pre-line leading-relaxed font-sans"
+              >{requirementText(minimum)}</div>
             </div>
           )}
           
@@ -55,9 +54,8 @@ export default async function SystemRequirements({ steamAppId, locale }: SystemR
             <div className="flex flex-col space-y-3">
               <h4 className="text-sm font-bold text-cyan-400 font-mono border-b border-slate-800 pb-2">{pt.recommended}</h4>
               <div 
-                className="text-xs text-slate-400 space-y-2 [&_ul]:list-disc [&_ul]:pl-4 [&_ul_li]:mb-1 [&_strong]:text-slate-300 [&_a]:text-cyan-400 leading-relaxed font-sans"
-                dangerouslySetInnerHTML={{ __html: cleanHtml(recommended, 'Recommended') }}
-              />
+                className="text-xs text-slate-400 whitespace-pre-line leading-relaxed font-sans"
+              >{requirementText(recommended)}</div>
             </div>
           )}
         </div>

@@ -2,10 +2,11 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, CheckCircle2, AlertTriangle, Loader2, Info, Download } from 'lucide-react';
-import { Locale, getCommonDict, getPatcherDict, getLocaleSuffix } from '@/lib/i18n/index';
+import { Locale, getPatcherDict, getLocaleSuffix } from '@/lib/i18n/index';
 import { ZipWriter, BlobWriter, BlobReader } from '@zip.js/zip.js';
 import { supabase } from '@/lib/supabase';
 import { trackAnalyticsEvent } from '@/lib/analytics';
+import { patchTrainerBinary } from '@/lib/trainer-binary-patch';
 
 interface DropZoneProps {
   locale: Locale;
@@ -43,7 +44,6 @@ class PatchFailureError extends Error {
   }
 }
 export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainers, mappingsMap, onTrainerDetected }: DropZoneProps) {
-  const t = getCommonDict(locale);
   const pt = getPatcherDict(locale);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -55,6 +55,17 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
   const [bypassCheck, setBypassCheck] = useState(false);
   const [patchedFileUrl, setPatchedFileUrl] = useState<string | null>(null);
   const [patchedFileName, setPatchedFileName] = useState('');
+  const generationRef = useRef(0);
+  const busyRef = useRef(false);
+  const mountedRef = useRef(true);
+  const urlRef = useRef<string | null>(null);
+
+  const clearArtifact = () => {
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+    urlRef.current = null;
+    setPatchedFileUrl(null);
+    setPatchedFileName('');
+  };
   // 퍼널 비교를 위해 첫 시도만 집계합니다. 성공/실패 재시도 횟수는 별도 지표에 섞지 않습니다.
   const fileSelectionAttemptTrackedRef = useRef(false);
   const fileSelectedTrackedRef = useRef(false);
@@ -70,29 +81,17 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
     source_page: 'patcher',
   };
 
+  // 해제된 화면과 이전 작업은 URL·상태·분석 이벤트를 확정할 수 없습니다.
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (status === 'packaging') {
-      setProgress(0);
-      const duration = 5000; // 5초
-      const intervalTime = 50; // 50ms마다
-      const step = (intervalTime / duration) * 100;
-      
-      interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            setStatus('success');
-            return 100;
-          }
-          return Math.min(prev + step, 100);
-        });
-      }, intervalTime);
-    }
+    mountedRef.current = true;
     return () => {
-      if (interval) clearInterval(interval);
+      mountedRef.current = false;
+      generationRef.current++;
+      busyRef.current = false;
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+      urlRef.current = null;
     };
-  }, [status]);
+  }, []);
 
   // Calculate SHA-256 of file buffer
   const calculateSHA256 = async (buffer: ArrayBuffer): Promise<string> => {
@@ -103,6 +102,12 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
 
   // Perform binary patch process
   const processFile = async (file: File, inputMethod: 'drag_and_drop' | 'file_picker') => {
+    if (busyRef.current || !mountedRef.current) return;
+    busyRef.current = true;
+    const generation = ++generationRef.current;
+    const isCurrent = () => mountedRef.current && generationRef.current === generation;
+    clearArtifact();
+    setProgress(0);
     if (!fileSelectionAttemptTrackedRef.current) {
       fileSelectionAttemptTrackedRef.current = true;
       trackAnalyticsEvent('file_selection_attempted', {
@@ -135,213 +140,32 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
 
       const buffer = await file.arrayBuffer();
 
-      // PE Header Parsing & Executable Code Protection
-      let textSectionOffset = 0;
-      let textSectionSize = 0;
-      let isPE = false;
-
-      if (buffer.byteLength >= 64) {
-        const dosHeader = new DataView(buffer);
-        if (dosHeader.getUint16(0, true) === 0x5A4D) { // 'MZ'
-          const peHeaderOffset = dosHeader.getUint32(0x3C, true);
-          if (peHeaderOffset + 24 <= buffer.byteLength) {
-            if (dosHeader.getUint32(peHeaderOffset, true) === 0x00004550) { // 'PE\0\0'
-              isPE = true;
-              const numSections = dosHeader.getUint16(peHeaderOffset + 6, true);
-              const sizeOfOptionalHeader = dosHeader.getUint16(peHeaderOffset + 20, true);
-              const sectionTableOffset = peHeaderOffset + 24 + sizeOfOptionalHeader;
-              if (sectionTableOffset + numSections * 40 <= buffer.byteLength) {
-                const uint8View = new Uint8Array(buffer);
-                for (let i = 0; i < numSections; i++) {
-                  const offset = sectionTableOffset + i * 40;
-                  let name = '';
-                  for (let j = 0; j < 8; j++) {
-                    const charCode = uint8View[offset + j];
-                    if (charCode === 0) break;
-                    name += String.fromCharCode(charCode);
-                  }
-                  if (name === '.text') {
-                    textSectionSize = dosHeader.getUint32(offset + 16, true);
-                    textSectionOffset = dosHeader.getUint32(offset + 20, true);
-                    break;
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-
+      if (!isCurrent()) return;
       let activeMappings = mappingsMap[trainer.id] || [];
-
-      // If bypassCheck is false, enforce PE validity and protect executable code section
+      let detectedTrainerId = trainer.id;
       if (!bypassCheck) {
-        if (!isPE) {
-          console.warn('Uploaded file is not a valid PE executable.');
-          throw new PatchFailureError('not_pe', pt.errNotPe);
-        }
-
-        // 1. Check if the uploaded file's size matches the currently selected trainer.original_file_size
-        if (file.size !== trainer.original_file_size) {
-          console.warn(`File size mismatch. Expected: ${trainer.original_file_size} bytes, Got: ${file.size} bytes`);
-          
-          // Search the allTrainers array to find a trainer t whose original_file_size matches file.size
-          const sizeMatchingTrainers = allTrainers.filter(t => t.original_file_size === file.size);
-          if (sizeMatchingTrainers.length > 0) {
-            const fileHash = await calculateSHA256(buffer);
-            const matchingTrainer = sizeMatchingTrainers.find(t => t.original_file_hash === fileHash);
-            if (matchingTrainer) {
-              console.log(`Auto-detected matching version: ${matchingTrainer.version_str} (ID: ${matchingTrainer.id})`);
-              onTrainerDetected(matchingTrainer.id);
-              activeMappings = mappingsMap[matchingTrainer.id] || [];
-            } else {
-              console.warn(`No trainer version matches file hash ${fileHash}.`);
-              throw new PatchFailureError('unsupported_version', pt.errNotPe);
-            }
-          } else {
-            console.warn(`No trainer version matches file size ${file.size} bytes.`);
-            throw new PatchFailureError('unsupported_version', pt.errNotPe);
-          }
-        } else {
-          // File size matches the currently selected trainer
-          const fileHash = await calculateSHA256(buffer);
-          if (fileHash !== trainer.original_file_hash) {
-            console.warn(`Hash mismatch with selected trainer. Expected: ${trainer.original_file_hash}, Got: ${fileHash}. Checking other versions...`);
-            
-            // Check if another version matches before throwing the error
-            const otherTrainer = allTrainers.find(t => t.original_file_size === file.size && t.original_file_hash === fileHash);
-            if (otherTrainer) {
-              console.log(`Auto-detected matching version: ${otherTrainer.version_str} (ID: ${otherTrainer.id})`);
-              onTrainerDetected(otherTrainer.id);
-              activeMappings = mappingsMap[otherTrainer.id] || [];
-            } else {
-              console.warn(`No trainer version matches file size and hash.`);
-              throw new PatchFailureError('unsupported_version', pt.errNotPe);
-            }
-          } else {
-            // Perfect match with currently selected trainer
-            activeMappings = mappingsMap[trainer.id] || [];
-          }
-        }
+        const fileHash = await calculateSHA256(buffer);
+        if (!isCurrent()) return;
+        // 같은 크기의 다른 버전도 반드시 해시까지 일치하는 매핑을 선택합니다.
+        const matchingTrainer = [trainer, ...allTrainers].find(candidate =>
+          candidate.original_file_size === file.size && candidate.original_file_hash === fileHash);
+        if (!matchingTrainer) throw new PatchFailureError('unsupported_version', pt.errNotPe);
+        detectedTrainerId = matchingTrainer.id;
+        activeMappings = mappingsMap[matchingTrainer.id] || [];
       }
 
-      // PE Header Executable Code Protection: Block patch if any mapping offset falls within the .text section
-      if (isPE && textSectionSize > 0) {
-        for (const mapping of activeMappings) {
-          const { offset_dec } = mapping;
-          if (offset_dec >= textSectionOffset && offset_dec < textSectionOffset + textSectionSize) {
-            console.warn(`Blocked attempt to patch executable code in .text section at offset: ${offset_dec} (range: [${textSectionOffset}, ${textSectionOffset + textSectionSize}))`);
-            throw new PatchFailureError('unsupported_version', pt.errNotPe);
-          }
-        }
+      // 개발자 일치 검사 우회도 PE·인코딩·슬롯 보호는 우회하지 않습니다.
+      let bytes: Uint8Array<ArrayBuffer>;
+      try {
+        bytes = patchTrainerBinary(buffer, activeMappings);
+      } catch {
+        throw new PatchFailureError('not_pe', pt.errNotPe);
       }
+      if (!isCurrent()) return;
+      setStatus('packaging');
+      setProgress(0);
 
-      // 4. Overwrite text bytes at offset locations
-      const bytes = new Uint8Array(buffer);
-
-      for (const mapping of activeMappings) {
-        const { offset_dec, encoding, original_text, translated_text, max_char_len } = mapping;
-
-        // Perform automatic line-by-line length synchronization if multiline text is detected
-        let processedText = translated_text;
-        if (original_text.includes('\n')) {
-          const originalLines = original_text.split('\n');
-          const translatedLines = translated_text.split('\n');
-          const paddedLines: string[] = [];
-
-          const encoder = new TextEncoder();
-
-          for (let i = 0; i < originalLines.length; i++) {
-            const origLine = originalLines[i];
-            const transLine = i < translatedLines.length ? translatedLines[i] : '';
-
-            if (encoding === 'UTF-16LE') {
-              // UTF-16LE: 1 char = 2 bytes consistently. Character count padding is safe.
-              const origLen = origLine.length;
-              const transLen = transLine.length;
-              if (transLen > origLen) {
-                paddedLines.push(transLine.slice(0, origLen));
-              } else {
-                paddedLines.push(transLine + ' '.repeat(origLen - transLen));
-              }
-            } else {
-              // UTF-8 / ASCII: Measure byte lengths
-              const origByteLen = encoder.encode(origLine).length;
-              
-              // Calculate how much text we can fit
-              let fitText = "";
-              let currentByteLen = 0;
-              for (const char of transLine) {
-                const charByteLen = encoder.encode(char).length;
-                if (currentByteLen + charByteLen <= origByteLen) {
-                  fitText += char;
-                  currentByteLen += charByteLen;
-                } else {
-                  break; // Stop to prevent memory overflow
-                }
-              }
-              
-              // Pad remaining bytes with spaces
-              const paddingSpaces = ' '.repeat(origByteLen - currentByteLen);
-              paddedLines.push(fitText + paddingSpaces);
-            }
-          }
-          processedText = paddedLines.join('\n');
-        }
-
-        let patchBytes: Uint8Array;
-
-        if (encoding === 'UTF-16LE') {
-          // UTF-16LE uses 2 bytes per character
-          patchBytes = new Uint8Array(max_char_len * 2);
-          
-          // Pre-fill with spaces (0x0020)
-          for (let i = 0; i < max_char_len; i++) {
-            patchBytes[i * 2] = 0x20;
-            patchBytes[i * 2 + 1] = 0x00;
-          }
-
-          // Copy characters
-          for (let i = 0; i < processedText.length && i < max_char_len; i++) {
-            const charCode = processedText.charCodeAt(i);
-            patchBytes[i * 2] = charCode & 0xFF;
-            patchBytes[i * 2 + 1] = (charCode >> 8) & 0xFF;
-          }
-
-          // Add Null terminator
-          if (processedText.length < max_char_len) {
-            const termIndex = processedText.length;
-            patchBytes[termIndex * 2] = 0x00;
-            patchBytes[termIndex * 2 + 1] = 0x00;
-          }
-
-        } else {
-          // ASCII / UTF-8 fallback
-          patchBytes = new Uint8Array(max_char_len);
-          
-          // Pre-fill with spaces (0x20)
-          patchBytes.fill(0x20);
-
-          // Copy characters
-          const encoder = new TextEncoder();
-          const encoded = encoder.encode(processedText);
-          
-          for (let i = 0; i < encoded.length && i < max_char_len; i++) {
-            patchBytes[i] = encoded[i];
-          }
-
-          // Add Null terminator
-          if (encoded.length < max_char_len) {
-            const termIndex = encoded.length;
-            patchBytes[termIndex] = 0x00;
-          }
-        }
-
-        // Apply overwrite to the original buffer
-        bytes.set(patchBytes, offset_dec);
-      }
-
-      // 5. Package the patched executable into a password-protected ZIP archive to bypass Defender quarantine
+      // 검증된 별도 복제본만 ZIP으로 포장합니다.
       const zipWriter = new ZipWriter(new BlobWriter("application/zip"));
       
       const suffix = getLocaleSuffix(locale);
@@ -356,18 +180,23 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
       
       // Generate the ZIP blob client-side
       const zippedContent = await zipWriter.close();
+      if (!isCurrent()) return;
       const downloadUrl = URL.createObjectURL(zippedContent);
       const targetZipName = file.name.replace(/\.exe$/i, `${suffix}.zip`);
 
+      urlRef.current = downloadUrl;
       setPatchedFileUrl(downloadUrl);
       setPatchedFileName(targetZipName);
       if (!patchCompletedTrackedRef.current && !patchFailedTrackedRef.current) {
         patchCompletedTrackedRef.current = true;
         trackAnalyticsEvent('patch_completed', analyticsContext);
       }
-      setStatus('packaging');
+      setProgress(100);
+      setStatus('success');
+      if (detectedTrainerId !== trainer.id) onTrainerDetected(detectedTrainerId);
     } catch (err: unknown) {
-      console.error(err);
+      if (!isCurrent()) return;
+      clearArtifact();
       const reason = err instanceof PatchFailureError ? err.reason : 'processing_error';
       if (!patchFailedTrackedRef.current && !patchCompletedTrackedRef.current) {
         patchFailedTrackedRef.current = true;
@@ -377,17 +206,20 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
         });
       }
       setStatus('error');
-      setErrorMsg(err instanceof Error ? err.message : pt.errUnknown);
+      setErrorMsg(err instanceof PatchFailureError ? err.message : pt.errUnknown);
+    } finally {
+      if (isCurrent()) busyRef.current = false;
     }
   };
 
   const handleReset = () => {
-    if (patchedFileUrl) {
-      URL.revokeObjectURL(patchedFileUrl);
-    }
-    setPatchedFileUrl(null);
-    setPatchedFileName('');
+    generationRef.current++;
+    busyRef.current = false;
+    clearArtifact();
     setStatus('idle');
+    setProgress(0);
+    setErrorMsg('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDownloadClick = async () => {
@@ -563,7 +395,7 @@ export default function DropZone({ locale, gameId, gameSlug, trainer, allTrainer
               {errorMsg}
             </p>
             <button
-              onClick={() => setStatus('idle')}
+              onClick={handleReset}
               className="mt-6 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 transition-colors"
             >
               {pt.retryBtnText}
