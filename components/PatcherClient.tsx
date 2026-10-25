@@ -7,6 +7,7 @@ import { ChevronLeft, ArrowRight, AlertTriangle, Share2 } from 'lucide-react';
 import { Locale, getCommonDict, getGamesDict, getPatcherDict, getGameTitle } from '@/lib/i18n';
 import DropZone from '@/components/DropZone';
 import GameCard from '@/components/GameCard';
+import type { GameCardData } from '@/components/GameCard';
 import AdSenseUnit from '@/components/AdSenseUnit';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 import type { UnapprovedTranslationStatus } from '@/lib/supabase';
@@ -52,8 +53,8 @@ interface PatcherClientProps {
   /** 서버 SEO 자격 판정과 같은 값입니다. 대기·미승인 페이지는 광고 네트워크를 렌더하지 않습니다. */
   showAds: boolean;
   locale: Locale;
-  popularGames?: any[];
-  relatedGames?: any[];
+  popularGames?: GameCardData[];
+  relatedGames?: GameCardData[];
   gameInfoSlot?: React.ReactNode;
   steamNewsSlot?: React.ReactNode;
   playerCountSlot?: React.ReactNode;
@@ -63,7 +64,7 @@ interface PatcherClientProps {
 interface PartnerStoreWidgetProps {
   game: Game;
   locale: Locale;
-  t: any;
+  t: ReturnType<typeof getGamesDict>;
   trainerId?: number;
 }
 
@@ -684,7 +685,7 @@ export default function PatcherClient({
                   <div className="h-px flex-1 bg-gradient-to-r from-slate-800 to-transparent"></div>
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {popularGames.slice(0, 6).map((pg: any) => {
+                  {popularGames.slice(0, 6).map((pg) => {
                     const trainer = pg.trainers?.[0];
                     return (
                       <GameCard
@@ -1000,14 +1001,14 @@ export default function PatcherClient({
                       <div className="h-px flex-1 bg-gradient-to-r from-slate-800 to-transparent"></div>
                     </div>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {relatedGames.map((rg: any) => {
+                      {relatedGames.map((rg) => {
                         const trainer = rg.trainers?.[0] || { version_str: '1.0', option_count: 0 };
                         return (
                           <GameCard
                             key={rg.id}
                             game={rg}
                             trainerVersion={trainer.version_str}
-                            optionCount={trainer.option_count}
+                            optionCount={trainer.option_count ?? 0}
                             locale={locale}
                             optionsLabel={pt.optionsLabel}
                             hideDetails={true}
@@ -1155,7 +1156,7 @@ interface TrainerUIPreviewProps {
   trainer: Trainer;
   mappings: Mapping[];
   locale: Locale;
-  popularGames?: any[];
+  popularGames?: GameCardData[];
 }
 
 function TrainerUIPreview({ game, trainer, mappings, locale }: TrainerUIPreviewProps) {

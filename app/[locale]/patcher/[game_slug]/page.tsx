@@ -1,6 +1,7 @@
 import React from 'react';
 import { notFound, permanentRedirect } from 'next/navigation';
 import PatcherClient from '@/components/PatcherClient';
+import type { GameCardData } from '@/components/GameCard';
 import SteamNews from '@/components/SteamNews';
 import SteamPlayerCount from '@/components/SteamPlayerCount';
 import SystemRequirements from '@/components/SystemRequirements';
@@ -218,8 +219,29 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
     currentLocale,
   );
   const indexEligible = eligibleByGameId.get(game.id) === true;
-  const popularGames = popularCandidates.filter((candidate) => eligibleByGameId.get(candidate.id) === true);
-  const relatedGames = relatedCandidates.filter((candidate) => eligibleByGameId.get(candidate.id) === true);
+  // 카드에 쓰는 필드와 첫 트레이너 요약만 클라이언트 경계로 전달합니다.
+  const toCardData = (candidate: GameCardData): GameCardData => ({
+    id: candidate.id,
+    title_en: candidate.title_en,
+    title_ko: candidate.title_ko,
+    title_ja: candidate.title_ja,
+    title_de: candidate.title_de,
+    title_es: candidate.title_es,
+    slug: candidate.slug,
+    cover_image_url: candidate.cover_image_url,
+    anti_cheat: candidate.anti_cheat,
+    trainers: candidate.trainers?.slice(0, 1).map((trainer) => ({
+      version_str: trainer.version_str,
+      option_count: trainer.option_count,
+    })),
+  });
+  const popularGames = popularCandidates
+    .filter((candidate) => eligibleByGameId.get(candidate.id) === true)
+    .slice(0, 6)
+    .map(toCardData);
+  const relatedGames = relatedCandidates
+    .filter((candidate) => eligibleByGameId.get(candidate.id) === true)
+    .map(toCardData);
 
   const jsonLd = {
     '@context': 'https://schema.org',
