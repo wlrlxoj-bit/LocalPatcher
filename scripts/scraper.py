@@ -1520,6 +1520,7 @@ def scrape_and_patch_trainer(
     reprocess_existing_unapproved=True,
     target_trainer_id=None,
     outcome_reporter=None,
+    failure_reporter=None,
 ):
     """FLiNG 원본을 수집한다.
 
@@ -1530,10 +1531,23 @@ def scrape_and_patch_trainer(
     print("[PAGE_PROCESSING_STARTED]")
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     requested_locales = set(languages or ('ko', 'ja', 'de', 'es'))
+    failure_code = None
+
+    def record_failure(code):
+        """최초의 구체 실패를 보존하고 진단만 전달한다."""
+        nonlocal failure_code
+        if failure_code is None:
+            failure_code = code
+            if failure_reporter:
+                failure_reporter(code)
     
     try:
         response = paced_fling_get(post['link'], headers=headers, timeout=10)
         if response.status_code != 200:
+            record_failure(
+                f"UPSTREAM_HTTP_{response.status_code}" if response.status_code in {403, 429}
+                else "PAGE_HTTP_FAILED",
+            )
             if response.status_code in {403, 429} and outcome_reporter:
                 outcome_reporter(
                     "deferred", f"UPSTREAM_HTTP_{response.status_code}", 10_800,
@@ -1555,6 +1569,7 @@ def scrape_and_patch_trainer(
         # Locate all download links (starts with /downloads/)
         download_anchors = soup.select('a[href*="/downloads/"]')
         if not download_anchors:
+            record_failure("NO_DOWNLOAD_LINKS")
             print("[-] No download links found on page.")
             if outcome_reporter:
                 outcome_reporter("blocked", "NO_DOWNLOAD_LINKS")
@@ -1628,6 +1643,11 @@ def scrape_and_patch_trainer(
                             None, dl_attempt, max_delay_seconds=FLING_429_RETRY_MAX_SECONDS,
                         ))
                 if not file_bytes:
+                    record_failure(
+                        f"UPSTREAM_HTTP_{upstream_status}" if upstream_status in {403, 429}
+                        else ("BINARY_EMPTY_RESPONSE" if upstream_status is None and file_bytes == b""
+                              else "BINARY_DOWNLOAD_FAILED"),
+                    )
                     print(
                         "[BINARY_DOWNLOAD_FAILED] code=DOWNLOAD_FAILED "
                         f"status={upstream_status if type(upstream_status) is int and 100 <= upstream_status <= 599 else 0}"
@@ -1673,6 +1693,7 @@ def scrape_and_patch_trainer(
                     exe_bytes = file_bytes
                     
                 if not exe_bytes or exe_bytes[:2] != b'MZ':
+                    record_failure("BINARY_INVALID_EXECUTABLE")
                     print("[-] Valid executable binary not found.")
                     if strict_download_failures:
                         had_eligible_failure = True
@@ -1755,6 +1776,7 @@ def scrape_and_patch_trainer(
                 # Parse PE header for security boundaries
                 text_section = parse_pe_binary(exe_bytes)
                 if not text_section:
+                    record_failure("BINARY_PE_PARSE_FAILED")
                     print("[-] Executable parsing failed. Section boundaries mismatch.")
                     if strict_download_failures:
                         had_eligible_failure = True
@@ -1763,6 +1785,7 @@ def scrape_and_patch_trainer(
                 # Scan cheat options string offset
                 mapping_details = scan_cheat_string_offset(exe_bytes)
                 if not mapping_details:
+                    record_failure("SOURCE_OPTIONS_MISSING")
                     print("[-] Option labels buffer not found inside binary.")
                     if strict_download_failures:
                         had_eligible_failure = True
@@ -1772,6 +1795,7 @@ def scrape_and_patch_trainer(
                 text_start = text_section.PointerToRawData
                 text_end = text_start + text_section.SizeOfRawData
                 if text_start <= mapping_details['offset_dec'] < text_end:
+                    record_failure("SOURCE_TEXT_SECTION_PROTECTED")
                     print("[-] Security Warning: Mapping offset falls inside .text section. Operation blocked.")
                     if strict_download_failures:
                         had_eligible_failure = True
@@ -1786,6 +1810,7 @@ def scrape_and_patch_trainer(
                 # 현재 스캐너는 단일 블록만 패치한다. 전체 옵션이 이 슬롯에 없으면
                 # DB 초안이나 유료 번역 호출 전에 보류한다.
                 if not source_complete:
+                    record_failure("SOURCE_OPTION_INCOMPLETE")
                     print(f"[SOURCE_OPTION_INCOMPLETE] trainer={trainer_id or 0} expected={option_count} actual={source_count}")
                     if strict_download_failures:
                         had_eligible_failure = True
@@ -1938,6 +1963,8 @@ def scrape_and_patch_trainer(
                             outcome_reporter("blocked", "TRANSLATION_OR_VALIDATION_FAILED")
                 
             except Exception as e:
+                record_failure("BINARY_ARCHIVE_INVALID" if isinstance(e, zipfile.BadZipFile)
+                               else "PROCESSING_EXCEPTION")
                 print("[DOWNLOAD_PROCESSING_FAILED] code=PROCESSING_EXCEPTION")
                 if target_eligible or strict_download_failures:
                     had_eligible_failure = True
@@ -1968,9 +1995,10 @@ def scrape_and_patch_trainer(
                     translation_deferred_failure[1],
                 )
             else:
-                outcome_reporter("blocked", "PROCESSING_FAILED")
+                outcome_reporter("blocked", failure_code or "PROCESSING_FAILED")
         return result
     except Exception as e:
+        record_failure("PAGE_PROCESSING_EXCEPTION")
         print("[PAGE_PROCESSING_FAILED] code=PAGE_PROCESSING_EXCEPTION")
         if outcome_reporter:
             outcome_reporter("blocked", "PAGE_PROCESSING_EXCEPTION")
@@ -2050,6 +2078,7 @@ def main():
             'link': args.url,
             'slug': game_slug
         }
+        failure_codes = []
         succeeded = scrape_and_patch_trainer(
             post,
             db,
@@ -2057,7 +2086,13 @@ def main():
             strict_download_failures=True,
             languages=args.languages,
             target_trainer_id=args.trainer_id,
+            failure_reporter=failure_codes.append,
         )
+        if failure_codes:
+            # 관측 실패는 큐 쓰기 증거가 아니며 기존 종료 코드도 변경하지 않는다.
+            observed_trainer_id = args.trainer_id or 0
+            for locale in sorted(set(args.languages)):
+                print(f"[SCRAPE_FAILURE] trainer={observed_trainer_id} locale={locale} code={failure_codes[0]}")
         return 0 if succeeded else 1
 
     # 정상 예약 경로는 공식 post-sitemap을 전체 발견 목록으로 사용한다. 홈페이지

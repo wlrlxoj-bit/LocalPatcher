@@ -19,6 +19,52 @@ from test_integrity_workflow_scope import evaluate_condition
 
 
 class ReprocessQueueSafetyTests(unittest.TestCase):
+    def test_observed_failures_are_exact_allowlisted_and_not_queue_evidence(self):
+        details, = load_functions("reprocess_pending_translations.py", ["child_result_details"])
+        codes = (
+            "UPSTREAM_HTTP_403", "UPSTREAM_HTTP_429", "PAGE_HTTP_FAILED", "NO_DOWNLOAD_LINKS",
+            "BINARY_DOWNLOAD_FAILED", "BINARY_EMPTY_RESPONSE", "BINARY_INVALID_EXECUTABLE",
+            "BINARY_PE_PARSE_FAILED", "BINARY_ARCHIVE_INVALID", "SOURCE_OPTIONS_MISSING",
+            "SOURCE_TEXT_SECTION_PROTECTED", "SOURCE_OPTION_INCOMPLETE",
+            "PROCESSING_EXCEPTION", "PAGE_PROCESSING_EXCEPTION",
+        )
+        for code in codes:
+            output = f"[SCRAPE_FAILURE] trainer=2052 locale=ko code={code}"
+            for rc in (0, 1):
+                with self.subTest(code=code, rc=rc):
+                    result = details(rc, output, 2052, "ko")
+                    self.assertEqual((result["outcome"], result["code"], result["queued"]),
+                                     ("failed", code, False))
+            self.assertEqual(details(1, output, 2053, "ko")["code"], "REPROCESS_CHILD_FAILED")
+            self.assertEqual(details(1, output, 2052, "ja")["code"], "REPROCESS_CHILD_FAILED")
+        for token in ("SECRET_SENTINEL", "https://private.invalid", "PAGE_HTTP_999"):
+            output = f"[SCRAPE_FAILURE] trainer=2052 locale=ko code={token}"
+            self.assertEqual(details(1, output, 2052, "ko")["code"], "REPROCESS_CHILD_FAILED")
+        manual = "[SCRAPE_FAILURE] trainer=0 locale=ko code=NO_DOWNLOAD_LINKS"
+        self.assertEqual(details(1, manual, None, "ko")["code"], "NO_DOWNLOAD_LINKS")
+        self.assertEqual(details(1, manual, 2052, "ko")["code"], "REPROCESS_CHILD_FAILED")
+
+    def test_duplicate_or_contradictory_final_tokens_never_confirm_success_or_deferral(self):
+        details, = load_functions("reprocess_pending_translations.py", ["child_result_details"])
+        approved = "[save-outcome] trainer=2052 locale=ko status=approved"
+        deferred = "[RETRY_QUEUED] trainer=2052 locale=ko state=deferred code=TRANSLATION_QUOTA"
+        blocked = "[RETRY_QUEUED] trainer=2052 locale=ko state=blocked code=VALIDATION_FAILED"
+        for output in (approved + "\n" + approved, deferred + "\n" + deferred,
+                       approved + "\n" + deferred, deferred + "\n" + approved,
+                       approved + "\n[save-outcome] trainer=2052 locale=ko status=rejected",
+                       deferred + "\n" + blocked):
+            for rc in (0, 1):
+                with self.subTest(output=output, rc=rc):
+                    result = details(rc, output, 2052, "ko")
+                    self.assertEqual((result["outcome"], result["code"], result["queued"]),
+                                     ("failed", "CHILD_RESULT_CONFLICT", False))
+        self.assertEqual(details(1, approved, 2052, "ko")["outcome"], "failed")
+        mixed = approved + "\n[save-outcome] trainer=2053 locale=ja status=approved"
+        self.assertEqual(details(0, mixed, 2052, "ko")["outcome"], "approved")
+        upstream = "[RETRY_QUEUED] trainer=2052 locale=ko state=deferred code=UPSTREAM_HTTP_403"
+        observed = "[SCRAPE_FAILURE] trainer=2052 locale=ko code=UPSTREAM_HTTP_403"
+        self.assertEqual(details(1, upstream + "\n" + observed, 2052, "ko")["outcome"], "deferred")
+
     def test_time_slots_do_not_rotate_pending_urls_automatically(self):
         select, = load_functions("reprocess_pending_translations.py", ["select_target_batch"])
         targets = list(range(45))

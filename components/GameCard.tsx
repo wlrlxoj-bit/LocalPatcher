@@ -6,19 +6,21 @@ import Image from 'next/image';
 import { ArrowRight, Lock } from 'lucide-react';
 import { getGameTitle, Locale } from '@/lib/i18n/index';
 
+export interface GameCardData {
+  id: number;
+  title_en: string;
+  title_ko: string;
+  title_ja?: string;
+  title_de?: string;
+  title_es?: string;
+  slug: string;
+  cover_image_url: string;
+  anti_cheat: string;
+  trainers?: { version_str: string; option_count?: number }[];
+}
+
 interface GameCardProps {
-  game: {
-    id: number;
-    title_en: string;
-    title_ko: string;
-    title_ja?: string;
-    title_de?: string;
-    title_es?: string;
-    slug: string;
-    cover_image_url: string;
-    anti_cheat: string;
-    fling_url?: string;
-  };
+  game: GameCardData;
   trainerVersion: string;
   optionCount: number;
   locale: Locale;

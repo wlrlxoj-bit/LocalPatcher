@@ -100,20 +100,55 @@ def child_result_details(returncode, output, trainer_id, locale):
         "SOURCE_URL_MISSING", "SOURCE_IDENTITY_MISMATCH", "REPROCESS_WORKER_FAILED",
     }
     detail = {"outcome": "failed", "code": "REPROCESS_CHILD_FAILED", "queued": False}
+    # 수동 URL은 호출 전에 trainer를 모르므로 관측 실패의 0번 identity만 허용한다.
     target = rf"trainer={trainer_id} locale={re.escape(locale)}" if trainer_id is not None else r"trainer=\d+ locale=" + re.escape(locale)
+    terminal_events = []
+    saved_statuses = []
+    observations = []
+    observation_codes = {
+        "UPSTREAM_HTTP_403", "UPSTREAM_HTTP_429", "PAGE_HTTP_FAILED", "NO_DOWNLOAD_LINKS",
+        "BINARY_DOWNLOAD_FAILED", "BINARY_EMPTY_RESPONSE", "BINARY_INVALID_EXECUTABLE",
+        "BINARY_PE_PARSE_FAILED", "BINARY_ARCHIVE_INVALID", "SOURCE_OPTIONS_MISSING",
+        "SOURCE_TEXT_SECTION_PROTECTED", "SOURCE_OPTION_INCOMPLETE",
+        "PROCESSING_EXCEPTION", "PAGE_PROCESSING_EXCEPTION",
+    }
     for line in output.splitlines():
         queued = re.fullmatch(r"\[RETRY_QUEUED\] " + target + r" state=(ready|deferred|blocked) code=([A-Z0-9_]+)", line)
         if queued and queued[2] in codes:
+            terminal_events.append(line)
             detail = {"outcome": "blocked" if queued[1] == "blocked" else "deferred",
                       "code": queued[2], "queued": True}
         saved = re.fullmatch(r"\[save-outcome\] " + target + r" status=(approved|preserved|rejected|db_error)", line)
-        if saved and saved[1] in {"approved", "preserved"} and returncode == 0:
-            detail = {"outcome": saved[1], "code": "NONE", "queued": False}
+        if saved:
+            saved_statuses.append(saved[1])
+        if saved and saved[1] in {"approved", "preserved"}:
+            terminal_events.append(line)
+            if returncode == 0:
+                detail = {"outcome": saved[1], "code": "NONE", "queued": False}
         protected = re.fullmatch(r"\[RETRY_PROTECTED\] " + target, line)
-        if protected and returncode == 0:
-            detail = {"outcome": "preserved", "code": "EXISTING_MAPPING_PROTECTED", "queued": False}
+        if protected:
+            terminal_events.append(line)
+            if returncode == 0:
+                detail = {"outcome": "preserved", "code": "EXISTING_MAPPING_PROTECTED", "queued": False}
+        observation_target = rf"trainer={trainer_id or 0} locale={re.escape(locale)}"
+        observed = re.fullmatch(r"\[SCRAPE_FAILURE\] " + observation_target + r" code=([A-Z0-9_]+)", line)
+        if observed and observed[1] in observation_codes:
+            observations.append(observed[1])
+    if len(terminal_events) > 1 or len(saved_statuses) > 1 or len(observations) > 1 or (
+        saved_statuses and saved_statuses[0] in {"rejected", "db_error"}
+        and detail["outcome"] in {"approved", "preserved"}
+    ) or (
+        observations and terminal_events and (
+            not detail["queued"] or detail["code"] != observations[0]
+        )
+    ):
+        detail = {"outcome": "failed", "code": "CHILD_RESULT_CONFLICT", "queued": False}
+    elif observations and not detail["queued"]:
+        detail = {"outcome": "failed", "code": observations[0], "queued": False}
     if detail["outcome"] == "failed":
-        if returncode == 0 and "[ARCHIVE_ONLY_PAGE_SKIPPED]" in output:
+        if detail["code"] != "REPROCESS_CHILD_FAILED":
+            pass
+        elif returncode == 0 and "[ARCHIVE_ONLY_PAGE_SKIPPED]" in output:
             detail.update(outcome="skipped", code="ARCHIVE_RAR_ONLY")
         elif returncode == 0:
             detail.update(outcome="unconfirmed", code="CHILD_RESULT_UNCONFIRMED")
