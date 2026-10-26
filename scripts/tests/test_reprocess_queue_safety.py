@@ -2,6 +2,7 @@
 
 import argparse
 import ast
+import json
 import os
 import pathlib
 import subprocess
@@ -19,6 +20,82 @@ from test_integrity_workflow_scope import evaluate_condition
 
 
 class ReprocessQueueSafetyTests(unittest.TestCase):
+    def test_main_relays_only_validated_source_diagnostic_and_keeps_failure_exit(self):
+        script = TESTS_DIR.parent / "reprocess_pending_translations.py"
+        functions = [node for node in ast.parse(script.read_text(encoding="utf-8")).body
+                     if isinstance(node, ast.FunctionDef)]
+        payload = {"trainer": 2052, "locale": "ko", "reason": "COUNT_MISMATCH", "expected": 50, "actual": 2}
+        for extra in ({}, {"raw": "SECRET_SENTINEL"}):
+            db = mock.Mock()
+            child_output = ("[SCRAPE_FAILURE] trainer=2052 locale=ko code=SOURCE_OPTION_INCOMPLETE\n"
+                            "[SOURCE_OPTION_DIAGNOSTIC] " + json.dumps(dict(payload, **extra))
+                            + "\nSECRET_SENTINEL https://private.invalid")
+            run = mock.Mock(return_value=SimpleNamespace(returncode=1, stdout=child_output, stderr="SECRET_SENTINEL"))
+            scope = {
+                "argparse": argparse, "os": os, "sys": sys, "__file__": str(script),
+                "subprocess": SimpleNamespace(run=run, TimeoutExpired=subprocess.TimeoutExpired),
+                "time": SimpleNamespace(monotonic=lambda: 100),
+                "create_client": lambda *args: db,
+            }
+            exec(compile(ast.Module(body=functions, type_ignores=[]), str(script), "exec"), scope)
+            scope["claim_due_retry_targets"] = mock.Mock(return_value=([
+                ("https://flingtrainer.com/a", 2052, "ko"),
+            ], []))
+            with mock.patch.dict(os.environ, {
+                "NEXT_PUBLIC_SUPABASE_URL": "https://example.supabase.co",
+                "SUPABASE_SERVICE_ROLE_KEY": "test-only",
+            }, clear=True), mock.patch.object(sys, "argv", [str(script), "--apply"]), \
+                    mock.patch("builtins.print") as output:
+                self.assertEqual(scope["main"](), 1)
+            lines = [call.args[0] for call in output.call_args_list]
+            self.assertIn("[REPROCESS_RESULT] trainer=2052 locale=ko outcome=failed code=SOURCE_OPTION_INCOMPLETE exit=1", lines)
+            diagnostic_lines = [line for line in lines if line.startswith("[REPROCESS_SOURCE_DIAGNOSTIC]")]
+            self.assertEqual(diagnostic_lines, [] if extra else [
+                "[REPROCESS_SOURCE_DIAGNOSTIC] trainer=2052 locale=ko reason=COUNT_MISMATCH expected=50 actual=2",
+            ])
+            self.assertNotIn("SECRET_SENTINEL", repr(lines))
+            db.rpc.assert_not_called()
+            self.assertEqual(run.call_args.kwargs["timeout"], 1740.0)
+
+    def test_source_diagnostic_is_bounded_identity_scoped_and_not_queue_evidence(self):
+        details, = load_functions("reprocess_pending_translations.py", ["child_result_details"])
+        failure = "[SCRAPE_FAILURE] trainer=2052 locale=ko code=SOURCE_OPTION_INCOMPLETE"
+        payload = {"trainer": 2052, "locale": "ko", "reason": "COUNT_MISMATCH", "expected": 50, "actual": 2}
+        token = lambda value: "[SOURCE_OPTION_DIAGNOSTIC] " + json.dumps(value)
+        for rc in (0, 1):
+            result = details(rc, failure + "\n" + token(payload), 2052, "ko")
+            self.assertEqual((result["outcome"], result["code"], result["queued"]),
+                             ("failed", "SOURCE_OPTION_INCOMPLETE", False))
+            self.assertEqual(result["source_diagnostic"], {
+                "reason": "COUNT_MISMATCH", "expected": 50, "actual": 2,
+            })
+        for reason, expected, actual in (
+            ("EXPECTED_COUNT_UNKNOWN", None, 2), ("COUNT_MISMATCH", 50, 2),
+            ("UNPARSED_OPTION", 2, 2), ("SOURCE_QUALITY_FAILED", 2, 2),
+        ):
+            output = failure + "\n" + token(dict(payload, reason=reason, expected=expected, actual=actual))
+            self.assertEqual(details(1, output, 2052, "ko")["source_diagnostic"]["reason"], reason)
+        invalid = [dict(payload, **change) for change in (
+            {"trainer": 2053}, {"trainer": True}, {"locale": "ja"},
+            {"reason": "SECRET_SENTINEL"}, {"reason": []}, {"actual": True},
+            {"actual": -1}, {"actual": 1_000_001}, {"expected": 0},
+            {"expected": "SECRET_SENTINEL"}, {"actual": "https://private.invalid"},
+            {"raw": "SECRET_SENTINEL"}, {"actual": 50},
+        )]
+        for value in invalid:
+            with self.subTest(value=value):
+                result = details(1, failure + "\n" + token(value), 2052, "ko")
+                self.assertNotIn("source_diagnostic", result)
+                self.assertNotIn("SECRET_SENTINEL", repr(result))
+        for output in (
+            token(payload), failure + "\n" + token(payload) + "\n" + token(payload),
+            failure + "\n" + token(payload) + "\n" + token(dict(payload, actual=3)),
+            failure + '\n[SOURCE_OPTION_DIAGNOSTIC] {"trainer":2052,"trainer":2052,"locale":"ko","reason":"COUNT_MISMATCH","expected":50,"actual":2}',
+            failure + "\n" + token(payload) + "\n[save-outcome] trainer=2052 locale=ko status=approved",
+            failure + "\n[SOURCE_OPTION_DIAGNOSTIC] SECRET_SENTINEL",
+        ):
+            self.assertNotIn("source_diagnostic", details(1, output, 2052, "ko"))
+
     def test_observed_failures_are_exact_allowlisted_and_not_queue_evidence(self):
         details, = load_functions("reprocess_pending_translations.py", ["child_result_details"])
         codes = (

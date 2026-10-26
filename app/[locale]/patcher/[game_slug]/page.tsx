@@ -312,7 +312,18 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
       )}
 
       <PatcherClient
-        game={game}
+        game={{
+          id: game.id,
+          title_en: game.title_en,
+          title_ko: game.title_ko,
+          title_ja: game.title_ja,
+          title_de: game.title_de,
+          title_es: game.title_es,
+          slug: game.slug,
+          cover_image_url: game.cover_image_url,
+          anti_cheat: game.anti_cheat,
+          fling_url: game.fling_url,
+        }}
         trainers={trainers.map(t => ({
           id: t.id,
           version_str: t.version_str,

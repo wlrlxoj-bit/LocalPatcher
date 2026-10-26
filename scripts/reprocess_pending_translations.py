@@ -92,6 +92,7 @@ def select_target_batch(targets, limit, offset=None, now=None):
 def child_result_details(returncode, output, trainer_id, locale):
     """정확한 대상의 허용된 결과 토큰만 읽는다. 원문·stderr 전문은 반환하지 않는다."""
     import re
+    import json
 
     codes = {
         "TRANSLATION_QUOTA", "TRANSLATION_API_TEMPORARY", "TRANSLATION_PERMANENT",
@@ -173,6 +174,40 @@ def child_result_details(returncode, output, trainer_id, locale):
         if event:
             provider_diagnostics.append((event[1], event[2], event[3] or "NONE", event[4]))
     detail["providers"] = provider_diagnostics[:4]
+    # 진단은 동일 identity의 확정된 관측 실패에만 붙인다. 큐나 승인 증거는 아니다.
+    diagnostic_lines = [line[len("[SOURCE_OPTION_DIAGNOSTIC] "):]
+                        for line in output.splitlines()
+                        if line.startswith("[SOURCE_OPTION_DIAGNOSTIC] ")]
+    if (detail["code"] == "SOURCE_OPTION_INCOMPLETE" and not detail["queued"]
+            and len(diagnostic_lines) == 1 and len(diagnostic_lines[0]) <= 512):
+        try:
+            diagnostic = json.loads(
+                diagnostic_lines[0],
+                object_pairs_hook=lambda pairs: dict(pairs) if len(dict(pairs)) == len(pairs) else None,
+            )
+        except (ValueError, TypeError):
+            diagnostic = None
+        if (isinstance(diagnostic, dict)
+                and set(diagnostic) == {"trainer", "locale", "reason", "expected", "actual"}
+                and type(diagnostic["trainer"]) is int
+                and diagnostic["trainer"] == (trainer_id or 0)
+                and diagnostic["locale"] == locale
+                and isinstance(diagnostic["reason"], str)
+                and diagnostic["reason"] in {
+                    "EXPECTED_COUNT_UNKNOWN", "COUNT_MISMATCH", "UNPARSED_OPTION", "SOURCE_QUALITY_FAILED",
+                }
+                and all(value is None or type(value) is int and 0 <= value <= 1_000_000
+                        for value in (diagnostic["expected"], diagnostic["actual"]))
+                and diagnostic["expected"] != 0):
+            expected, actual = diagnostic["expected"], diagnostic["actual"]
+            reason = diagnostic["reason"]
+            if ((reason == "EXPECTED_COUNT_UNKNOWN" and expected is None)
+                    or (reason == "COUNT_MISMATCH" and (expected is None or actual is None or expected != actual))
+                    or (reason in {"UNPARSED_OPTION", "SOURCE_QUALITY_FAILED"}
+                        and (expected is None or actual is None or expected == actual))):
+                detail["source_diagnostic"] = {
+                    "reason": reason, "expected": expected, "actual": actual,
+                }
     return detail
 
 
@@ -388,6 +423,11 @@ def main():
         print(f"[REPROCESS_RESULT] trainer={trainer_id or 0} locale={locale} outcome={outcome} code={detail['code']} exit={result.returncode}")
         for provider, code, reason, status in detail["providers"]:
             print(f"[REPROCESS_PROVIDER] trainer={trainer_id or 0} locale={locale} provider={provider} code={code} reason={reason} status={status}")
+        if "source_diagnostic" in detail:
+            diagnostic = detail["source_diagnostic"]
+            print(f"[REPROCESS_SOURCE_DIAGNOSTIC] trainer={trainer_id or 0} locale={locale} "
+                  f"reason={diagnostic['reason']} expected={diagnostic['expected'] if diagnostic['expected'] is not None else 'null'} "
+                  f"actual={diagnostic['actual'] if diagnostic['actual'] is not None else 'null'}")
         if outcome in {"failed", "unconfirmed"}:
             # 출력 유실·모순만으로 자식의 commit 여부를 판단할 수 없다.
             # 부모는 terminal 상태와 claim의 30분 lease를 그대로 보존한다.

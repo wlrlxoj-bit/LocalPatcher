@@ -10,23 +10,12 @@ import GameCard from '@/components/GameCard';
 import type { GameCardData } from '@/components/GameCard';
 import AdSenseUnit from '@/components/AdSenseUnit';
 import { trackAnalyticsEvent } from '@/lib/analytics';
-import type { UnapprovedTranslationStatus } from '@/lib/supabase';
+import type { Game as SourceGame, UnapprovedTranslationStatus } from '@/lib/supabase';
 
-interface Game {
-  id: number;
-  title_en: string;
-  title_ko: string;
-  title_ja?: string;
-  slug: string;
-  cover_image_url: string;
-  description_en?: string;
-  description_ko?: string;
-  description_ja?: string;
-  description_de?: string;
-  description_es?: string;
-  anti_cheat: string;
-  fling_url?: string;
-}
+type Game = Pick<SourceGame,
+  'id' | 'title_en' | 'title_ko' | 'title_ja' | 'title_de' | 'title_es' |
+  'slug' | 'cover_image_url' | 'anti_cheat' | 'fling_url'
+>;
 
 interface Trainer {
   id: number;

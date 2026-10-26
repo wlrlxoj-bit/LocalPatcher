@@ -1,8 +1,10 @@
 import ast
 import hashlib
+import json
 import pathlib
 import sys
 import unittest
+from unittest import mock
 
 
 SCRIPTS = pathlib.Path(__file__).resolve().parents[1]
@@ -33,6 +35,67 @@ def load_functions(filename, names, namespace=None):
 
 
 class TranslationChunkTests(unittest.TestCase):
+    def test_source_failure_emits_target_identity_schema_before_continuing(self):
+        module = ast.parse((SCRIPTS / "scraper.py").read_text(encoding="utf-8"))
+        scraper = next(node for node in module.body if isinstance(node, ast.FunctionDef)
+                       and node.name == "scrape_and_patch_trainer")
+        guard = next(node for node in ast.walk(scraper) if isinstance(node, ast.If)
+                     and isinstance(node.test, ast.UnaryOp)
+                     and isinstance(node.test.operand, ast.Name)
+                     and node.test.operand.id == "source_complete")
+        diagnostic = {"reason": "COUNT_MISMATCH", "expected": 50, "actual": 2}
+        failures, outcomes = [], []
+        continuation = mock.Mock()
+        scope = {
+            "source_complete": False, "source_count": 2, "option_count": 50,
+            "source_diagnostic": diagnostic, "trainer_id": 99, "target_trainer_id": 2052,
+            "requested_locales": {"ko"}, "json": json,
+            "strict_download_failures": True, "had_eligible_failure": False,
+            "record_failure": failures.append,
+            "outcome_reporter": lambda *args: outcomes.append(args),
+            "continuation": continuation,
+        }
+        loop = ast.For(target=ast.Name(id="item", ctx=ast.Store()),
+                       iter=ast.List(elts=[ast.Constant(1)], ctx=ast.Load()),
+                       body=[guard, ast.Expr(value=ast.Call(func=ast.Name(id="continuation", ctx=ast.Load()), args=[], keywords=[]))],
+                       orelse=[])
+        with mock.patch("builtins.print") as output:
+            exec(compile(ast.fix_missing_locations(ast.Module(body=[loop], type_ignores=[])), "scraper.py", "exec"), scope)
+        lines = [call.args[0] for call in output.call_args_list]
+        encoded = next(line.removeprefix("[SOURCE_OPTION_DIAGNOSTIC] ") for line in lines
+                       if line.startswith("[SOURCE_OPTION_DIAGNOSTIC] "))
+        self.assertEqual(json.loads(encoded), {"trainer": 2052, "locale": "ko", **diagnostic})
+        self.assertEqual(failures, ["SOURCE_OPTION_INCOMPLETE"])
+        self.assertEqual(outcomes, [("blocked", "SOURCE_OPTION_INCOMPLETE")])
+        self.assertTrue(scope["had_eligible_failure"])
+        continuation.assert_not_called()
+
+    def test_source_diagnostic_distinguishes_failure_reasons_without_extra_evaluation(self):
+        calls = []
+        checker, = load_functions("scraper.py", ["source_block_completeness"], {
+            "parse_options": lambda text: calls.append("parse") or [1, 2],
+            "is_option_candidate": lambda line: line == "unparsed",
+            "parse_option_line": lambda line: None,
+            "option_text_is_publishable": lambda text: calls.append("quality") or False,
+        })
+        for text, expected, reason, evaluations in (
+            ("unparsed", 0, "EXPECTED_COUNT_UNKNOWN", ["parse"]),
+            ("unparsed", 3, "COUNT_MISMATCH", ["parse"]),
+            ("unparsed", 2, "UNPARSED_OPTION", ["parse"]),
+            ("source", 2, "SOURCE_QUALITY_FAILED", ["parse", "quality"]),
+        ):
+            with self.subTest(reason=reason):
+                calls.clear()
+                diagnostic = {}
+                self.assertEqual(checker(text, expected, diagnostic), (False, 2))
+                self.assertEqual(diagnostic, {
+                    "reason": reason, "expected": expected or None, "actual": 2,
+                })
+                self.assertEqual(calls, evaluations)
+        diagnostic = {}
+        checker("source", 1_000_001, diagnostic)
+        self.assertIsNone(diagnostic["expected"])
+
     def test_source_preflight_blocks_incomplete_slot_and_accepts_section_title(self):
         checker, = load_functions(
             "scraper.py", ["source_block_completeness"],
@@ -45,6 +108,9 @@ class TranslationChunkTests(unittest.TestCase):
         source = "Edit Character\nNum 1 - Infinite Health\nNum 2 - Infinite Ammo"
         self.assertEqual(checker(source, 50), (False, 2))
         self.assertEqual(checker(source, 2), (True, 2))
+        diagnostic = {}
+        self.assertEqual(checker(source, 2, diagnostic), (True, 2))
+        self.assertEqual(diagnostic, {})
         self.assertEqual(checker(source + "\nNum 3 = Money", 2), (False, 2))
         self.assertEqual(checker("Num 1 - Health\nNum 1 - Money", 2), (False, 2))
         self.assertEqual(checker("Num 1 - **note", 1), (False, 1))
