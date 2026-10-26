@@ -567,15 +567,26 @@ def _split_option_for_translation(line):
     return prefix + delimiter, label
 
 
-def source_block_completeness(original_text: str, option_count: int):
+def source_block_completeness(original_text: str, option_count: int, diagnostic=None):
     """단일 패치 슬롯에 표기된 전체 옵션이 있고 후보 파싱 누락이 없는지 검사한다."""
     parsed_count = len(parse_options(original_text))
     has_unparsed = any(
         is_option_candidate(line) and parse_option_line(line) is None
         for line in original_text.replace('\r\n', '\n').split('\n')
     )
-    return (option_count > 0 and parsed_count == option_count and not has_unparsed
-            and option_text_is_publishable(original_text)), parsed_count
+    complete = (option_count > 0 and parsed_count == option_count and not has_unparsed
+                and option_text_is_publishable(original_text))
+    if diagnostic is not None and not complete:
+        # 중첩 실패는 기대 수량 미확정, 수량 차이, 파싱 누락, 품질 순으로 보고한다.
+        reason = ("EXPECTED_COUNT_UNKNOWN" if option_count <= 0 else
+                  "COUNT_MISMATCH" if parsed_count != option_count else
+                  "UNPARSED_OPTION" if has_unparsed else "SOURCE_QUALITY_FAILED")
+        diagnostic.update(
+            reason=reason,
+            expected=option_count if type(option_count) is int and 0 < option_count <= 1_000_000 else None,
+            actual=parsed_count if 0 <= parsed_count <= 1_000_000 else None,
+        )
+    return complete, parsed_count
 
 
 def translation_providers(prefer_openai_fallback=False):
@@ -1804,14 +1815,21 @@ def scrape_and_patch_trainer(
                 # Parse version and option count from download link text for accuracy
                 final_version_str, option_count = parse_trainer_version(download_text)
                 clean_orig_text = mapping_details['original_text'].replace('\x00', '').replace('\u0000', '')
+                source_diagnostic = {}
                 source_complete, source_count = source_block_completeness(
-                    clean_orig_text, option_count,
+                    clean_orig_text, option_count, source_diagnostic,
                 )
                 # 현재 스캐너는 단일 블록만 패치한다. 전체 옵션이 이 슬롯에 없으면
                 # DB 초안이나 유료 번역 호출 전에 보류한다.
                 if not source_complete:
                     record_failure("SOURCE_OPTION_INCOMPLETE")
                     print(f"[SOURCE_OPTION_INCOMPLETE] trainer={trainer_id or 0} expected={option_count} actual={source_count}")
+                    for diagnostic_locale in sorted(requested_locales):
+                        if source_diagnostic and diagnostic_locale in {'ko', 'ja', 'de', 'es'}:
+                            print("[SOURCE_OPTION_DIAGNOSTIC] " + json.dumps({
+                                "trainer": target_trainer_id or 0, "locale": diagnostic_locale,
+                                **source_diagnostic,
+                            }, separators=(',', ':')))
                     if strict_download_failures:
                         had_eligible_failure = True
                     if outcome_reporter:

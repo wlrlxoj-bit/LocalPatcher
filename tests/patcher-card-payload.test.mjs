@@ -55,9 +55,14 @@ function candidate(id) {
   };
 }
 
-async function renderPage(popular, related, eligible, locale = 'ko') {
-  const main = { ...candidate(1000), slug: 'main-game' };
-  const trainers = [{ id: 10001, version_str: 'v3.0', option_count: 1 }];
+async function renderPage(popular, related, eligible, locale = 'ko', mainOverrides = {}, indexEligible = true) {
+  const main = { ...candidate(1000), slug: 'main-game', ...mainOverrides };
+  const trainers = [
+    { id: 10001, version_str: 'v3.0', original_file_hash: 'synthetic-hash-latest', original_file_size: 321, option_count: 1 },
+    { id: 10002, version_str: 'v2.0', original_file_hash: 'synthetic-hash-older', original_file_size: 123, option_count: 2 },
+  ];
+  const originalMain = plain(main);
+  const originalTrainers = plain(trainers);
   const mappings = { 10001: [] };
   const statuses = { 10001: null };
   const eligibilityCalls = [];
@@ -86,7 +91,7 @@ async function renderPage(popular, related, eligible, locale = 'ko') {
       ELDEN_RING_CANONICAL_SLUG: 'elden-ring', AUTO_LOCALIZATION_LOCALES: ['ko', 'en', 'ja', 'de', 'es'],
       getPatcherIndexEligibilityByGameIds: async (ids, language) => {
         eligibilityCalls.push({ ids: Array.from(ids), locale: language });
-        return new Map(ids.map((id) => [id, id === main.id || eligible.has(id)]));
+        return new Map(ids.map((id) => [id, id === main.id ? indexEligible : eligible.has(id)]));
       },
     },
     '@/lib/trainer-option-summary': { getTrainerOptionSummary: () => null },
@@ -95,12 +100,29 @@ async function renderPage(popular, related, eligible, locale = 'ko') {
   });
   const tree = await page.default({ params: Promise.resolve({ locale, game_slug: main.slug }) });
   const props = elements(tree, 'PatcherClient')[0].props;
-  assert.equal(props.game, main);
+  assert.deepEqual(Object.keys(props.game).sort(), [
+    'id', 'title_en', 'title_ko', 'title_ja', 'title_de', 'title_es', 'slug',
+    'cover_image_url', 'anti_cheat', 'fling_url',
+  ].sort());
+  for (const key of Object.keys(props.game)) assert.equal(props.game[key], main[key]);
+  const info = elements(props.gameInfoSlot, 'PatcherUniqueContent')[0].props;
+  const localizedDescription = main[`description_${locale}`];
+  assert.equal(info.description, typeof localizedDescription === 'string' && localizedDescription.trim()
+    ? localizedDescription : main.description_en);
+  assert.equal(info.gameTitle, locale !== 'en' && main[`title_${locale}`] ? main[`title_${locale}`] : main.title_en);
+  assert.equal(info.gameTitleEn, main.title_en);
+  if (Array.isArray(main.genres)) assert.equal(info.genres, main.genres);
+  assert.deepEqual(plain(info.genres), Array.isArray(main.genres) ? main.genres : []);
+  if (Array.isArray(main.tags)) assert.equal(info.tags, main.tags);
+  assert.deepEqual(plain(info.tags), Array.isArray(main.tags) ? main.tags : []);
+  assert.equal(info.sourceUrl, main.fling_url);
+  assert.deepEqual(plain(main), originalMain);
+  assert.deepEqual(plain(trainers), originalTrainers);
   assert.equal(props.mappingsMap, mappings);
   if (locale === 'en') assert.deepEqual(plain(props.unapprovedStatusMap), {});
   else assert.equal(props.unapprovedStatusMap, statuses);
   assert.deepEqual(plain(props.trainers), trainers);
-  assert.equal(props.showAds, true);
+  assert.equal(props.showAds, indexEligible);
   assert.deepEqual(eligibilityCalls, [{ ids: [main.id, ...popular.map((game) => game.id), ...related.map((game) => game.id)], locale }]);
   return props;
 }
@@ -159,13 +181,9 @@ test('5개 언어의 카드 제목·fallback·링크·이미지·anti-cheat와 �
   }
 });
 
-test('관련 첫 트레이너의 옵션 수가 없으면 실제 PatcherClient가 카드에 숫자 0을 전달한다', async () => {
-  const related = candidate(31);
-  delete related.trainers[0].option_count;
-  const props = await renderPage([], [related], new Set([31]));
-  assert.deepEqual(plain(props.relatedGames[0].trainers), [{ version_str: 'v2.0' }]);
+function loadClient() {
   const { patcherDict } = load('lib/i18n/dictionaries/patcher.ts', {});
-  const Client = load('components/PatcherClient.tsx', {
+  return load('components/PatcherClient.tsx', {
     react: { useState: (initial) => [initial, () => {}], useEffect() {}, useRef: (current) => ({ current }) },
     'next/link': { default: 'client-link' },
     'next/image': { default: 'client-image' },
@@ -176,9 +194,64 @@ test('관련 첫 트레이너의 옵션 수가 없으면 실제 PatcherClient가
     '@/components/AdSenseUnit': { default: 'ad-unit' },
     '@/lib/analytics': { trackAnalyticsEvent: () => assert.fail('렌더링 중 분석 이벤트를 전송했습니다.') },
   }).default;
+}
+
+test('관련 첫 트레이너의 옵션 수가 없으면 실제 PatcherClient가 카드에 숫자 0을 전달한다', async () => {
+  const related = candidate(31);
+  delete related.trainers[0].option_count;
+  const props = await renderPage([], [related], new Set([31]));
+  assert.deepEqual(plain(props.relatedGames[0].trainers), [{ version_str: 'v2.0' }]);
+  const Client = loadClient();
   const cards = elements(Client(props), 'client-card');
   assert.equal(cards.length, 1);
   assert.equal(cards[0].props.game.id, 31);
   assert.equal(cards[0].props.trainerVersion, 'v2.0');
   assert.equal(cards[0].props.optionCount, 0);
+});
+
+test('본문 game은 10개 원값만 전달하고 5개 언어의 대형 설명·장르·태그는 서버 정보에 보존한다', async () => {
+  const Client = loadClient();
+  const descriptions = Object.fromEntries(['en', 'ko', 'ja', 'de', 'es'].map((locale) => [
+    `description_${locale}`, `합성 본문 ${locale} ${'S'.repeat(30000)}`,
+  ]));
+  const main = { ...candidate(1000), ...descriptions, slug: 'main-game', is_popular: false, popularity_index: null,
+    extra_payload: { nested: '합성 제외 필드' } };
+  for (const locale of ['en', 'ko', 'ja', 'de', 'es']) {
+    const props = await renderPage([], [], new Set(), locale, main);
+    for (const key of [...Object.keys(descriptions), 'genres', 'tags', 'is_popular', 'popularity_index', 'internal_note', 'trainers', 'extra_payload']) {
+      assert.equal(Object.hasOwn(props.game, key), false);
+    }
+    const clientTree = Client(props);
+    assert.equal(elements(clientTree, 'h1')[0].props.children, main[`title_${locale}`]);
+    assert.equal(elements(clientTree, 'client-image')[0].props.src, main.cover_image_url);
+    assert.ok(Buffer.byteLength(JSON.stringify(props.game)) < Buffer.byteLength(JSON.stringify(main)));
+  }
+});
+
+test('본문 5개 언어의 빈 제목·누락 제목·공백 설명·누락 설명은 영어로 fallback한다', async () => {
+  const Client = loadClient();
+  for (const locale of ['en', 'ko', 'ja', 'de', 'es']) {
+    for (const missing of ['', undefined]) {
+      const overrides = { title_ko: missing, title_ja: missing, title_de: missing, title_es: missing,
+        description_en: '합성 영어 fallback', description_ko: missing === '' ? '  ' : undefined,
+        description_ja: missing === '' ? '  ' : undefined, description_de: missing === '' ? '  ' : undefined,
+        description_es: missing === '' ? '  ' : undefined };
+      const props = await renderPage([], [], new Set(), locale, overrides);
+      assert.equal(elements(Client(props), 'h1')[0].props.children, 'English 1000');
+      assert.equal(elements(props.gameInfoSlot, 'PatcherUniqueContent')[0].props.description, '합성 영어 fallback');
+    }
+  }
+});
+
+test('본문 false·null·누락 필드는 기본값 없이 전달하고 미승인 광고 판정도 유지한다', async () => {
+  for (const antiCheat of ['none', null, false]) {
+    for (const flingUrl of ['https://example.invalid/source-main', null, undefined]) {
+      const props = await renderPage([], [], new Set(), 'ko', {
+        anti_cheat: antiCheat, fling_url: flingUrl, genres: null, tags: null,
+      }, false);
+      assert.equal(props.game.anti_cheat, antiCheat);
+      assert.equal(props.game.fling_url, flingUrl);
+      assert.equal(props.showAds, false);
+    }
+  }
 });
