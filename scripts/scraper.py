@@ -180,29 +180,56 @@ def complete_translation_retry(db, trainer_id, language_code):
     return False
 
 
-def revalidate_patcher_after_automation(trainer_id):
+def revalidate_patcher_after_automation(trainer_id, db=None):
     """저장 완료한 trainer의 공개 페이지와 sitemap ISR을 웹훅으로 갱신한다.
 
-    구성 누락·일시 네트워크 오류는 수집 DB 작업을 되돌리거나 실패로 오인하지 않는다.
-    웹훅은 별도 비밀이 있는 경우에만 호출하며, 응답 본문은 로그에 남기지 않는다.
+    웹훅이 미설정·비200·네트워크 오류로 실패하면 DB RPC로 패처 인덱스 스냅샷과
+    재검증 outbox를 직접 갱신해 노출 누락을 막는다. 응답 본문·URL·예외 원문은
+    로그에 남기지 않는다.
     """
+    if type(trainer_id) is not int or trainer_id <= 0:
+        return False
     if not PATCHER_REVALIDATE_URL or not PATCHER_REVALIDATE_SECRET:
         print("[PATCHER_REVALIDATE_NOT_CONFIGURED]")
+    else:
+        try:
+            response = requests.post(
+                PATCHER_REVALIDATE_URL,
+                headers={"Authorization": f"Bearer {PATCHER_REVALIDATE_SECRET}"},
+                json={"trainerId": trainer_id},
+                timeout=10,
+            )
+            if response.status_code == 200:
+                print(f"[PATCHER_REVALIDATED] trainer={trainer_id}")
+                return True
+            status = (
+                response.status_code
+                if type(response.status_code) is int and 100 <= response.status_code <= 599
+                else 0
+            )
+            print(f"[PATCHER_REVALIDATE_FAILED] trainer={trainer_id} status={status}")
+        except requests.RequestException:
+            print(f"[PATCHER_REVALIDATE_FAILED] trainer={trainer_id} status=network")
+        except Exception:
+            # 비-RequestException 예외 원문에 URL·비밀키가 포함될 수 있어 status=0으로만 기록한다.
+            print(f"[PATCHER_REVALIDATE_FAILED] trainer={trainer_id} status=0")
+    if db is None:
         return False
     try:
-        response = requests.post(
-            PATCHER_REVALIDATE_URL,
-            headers={"Authorization": f"Bearer {PATCHER_REVALIDATE_SECRET}"},
-            json={"trainerId": trainer_id},
-            timeout=10,
-        )
-        if response.status_code == 200:
-            print(f"[PATCHER_REVALIDATED] trainer={trainer_id}")
+        result = db.rpc("refresh_patcher_index_and_enqueue", {"p_trainer_id": trainer_id}).execute()
+        if (
+            result is not None
+            and not getattr(result, "error", None)
+            and type(getattr(result, "data", None)) is int
+            and result.data >= 0
+        ):
+            print(f"[PATCHER_REVALIDATE_FALLBACK_ENQUEUED] trainer={trainer_id}")
             return True
-        print(f"[PATCHER_REVALIDATE_FAILED] trainer={trainer_id} status={response.status_code}")
-    except requests.RequestException:
-        print(f"[PATCHER_REVALIDATE_FAILED] trainer={trainer_id} status=network")
-    return False
+        print(f"[PATCHER_REVALIDATE_FALLBACK_FAILED] trainer={trainer_id}")
+        return False
+    except Exception:
+        print(f"[PATCHER_REVALIDATE_FALLBACK_FAILED] trainer={trainer_id}")
+        return False
 
 # Dictionary of common trainer translations for cost-free instant translation mapping
 COMMON_TRANSLATIONS = {
@@ -1876,6 +1903,7 @@ def scrape_and_patch_trainer(
                 # Run translation engine
                 # 자동 초안은 승인된 기존 매핑을 절대 덮어쓰지 않는 DB RPC로 저장한다.
                 trainer_ok = True
+                any_locale_approved = False
                 for language_code, translator in {
                     'ko': process_translation_block, 'ja': process_translation_block_ja,
                     'de': process_translation_block_de, 'es': process_translation_block_es
@@ -1950,6 +1978,7 @@ def scrape_and_patch_trainer(
                     if outcome.value in {"approved", "preserved"}:
                         complete_translation_retry(db, trainer_id, language_code)
                         if outcome.value == "approved":
+                            any_locale_approved = True
                             learn_approved_option_labels(
                                 clean_orig_text, mapping['translated_text'], language_code, db,
                             )
@@ -1966,8 +1995,8 @@ def scrape_and_patch_trainer(
                         trainer_ok = False
                 
                 print(f"[번역 결과] trainer={trainer_id} game={game_id} success={trainer_ok}")
-                if trainer_ok:
-                    revalidate_patcher_after_automation(trainer_id)
+                if trainer_ok or any_locale_approved:
+                    revalidate_patcher_after_automation(trainer_id, db=db)
                 any_registered = any_registered or trainer_ok
                 if not trainer_ok:
                     had_eligible_failure = True

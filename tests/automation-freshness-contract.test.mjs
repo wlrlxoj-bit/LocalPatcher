@@ -20,9 +20,10 @@ test('자동 저장·무결성 복구 작업은 비밀 인증된 내부 ISR 웹�
     read('.github/workflows/scraper.yml'),
     read('app/api/internal/revalidate-patcher/route.ts'),
   ]);
-  assert.match(scraper, /def revalidate_patcher_after_automation\(trainer_id\)/);
+  assert.match(scraper, /def revalidate_patcher_after_automation\(trainer_id, db=None\)/);
   assert.match(scraper, /Authorization.*Bearer \{PATCHER_REVALIDATE_SECRET\}/);
-  assert.match(scraper, /if trainer_ok:\s*\n\s*revalidate_patcher_after_automation\(trainer_id\)/);
+  assert.match(scraper, /db\.rpc\(\s*"refresh_patcher_index_and_enqueue",\s*\{\s*"p_trainer_id":\s*trainer_id\s*\}\s*\)\.execute\(\)/);
+  assert.match(scraper, /if trainer_ok or any_locale_approved:\s*\n\s*revalidate_patcher_after_automation\(trainer_id, db=db\)/);
   assert.match(workflow, /PATCHER_REVALIDATE_URL: https:\/\/localpatcher\.com\/api\/internal\/revalidate-patcher/);
   assert.ok((workflow.match(/PATCHER_REVALIDATE_SECRET: \$\{\{ secrets\.PATCHER_REVALIDATE_SECRET \}\}/g) || []).length >= 2);
   assert.match(route, /timingSafeEqual/);
