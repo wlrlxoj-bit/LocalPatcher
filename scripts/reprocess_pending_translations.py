@@ -174,6 +174,26 @@ def child_result_details(returncode, output, trainer_id, locale):
         if event:
             provider_diagnostics.append((event[1], event[2], event[3] or "NONE", event[4]))
     detail["providers"] = provider_diagnostics[:4]
+    # 패처 재검증/DB fallback 결과는 관측 진단으로만 중계하며 outcome·종료 코드는 바꾸지 않는다.
+    revalidation_target = rf"trainer={trainer_id}" if trainer_id is not None else r"trainer=[0-9]+"
+    revalidation_events = []
+    for line in output.splitlines():
+        if re.fullmatch(r"\[PATCHER_REVALIDATED\] " + revalidation_target, line):
+            revalidation_events.append(("REVALIDATED", "200"))
+        elif re.fullmatch(r"\[PATCHER_REVALIDATE_NOT_CONFIGURED\]", line):
+            revalidation_events.append(("NOT_CONFIGURED", "NONE"))
+        else:
+            failed = re.fullmatch(
+                r"\[PATCHER_REVALIDATE_FAILED\] " + revalidation_target + r" status=(0|network|[1-5][0-9]{2})",
+                line,
+            )
+            if failed:
+                revalidation_events.append(("FAILED", failed[1]))
+            elif re.fullmatch(r"\[PATCHER_REVALIDATE_FALLBACK_ENQUEUED\] " + revalidation_target, line):
+                revalidation_events.append(("FALLBACK_ENQUEUED", "RPC"))
+            elif re.fullmatch(r"\[PATCHER_REVALIDATE_FALLBACK_FAILED\] " + revalidation_target, line):
+                revalidation_events.append(("FALLBACK_FAILED", "RPC"))
+    detail["revalidation_events"] = revalidation_events[:4]
     # 진단은 동일 identity의 확정된 관측 실패에만 붙인다. 큐나 승인 증거는 아니다.
     diagnostic_lines = [line[len("[SOURCE_OPTION_DIAGNOSTIC] "):]
                         for line in output.splitlines()
@@ -423,6 +443,8 @@ def main():
         print(f"[REPROCESS_RESULT] trainer={trainer_id or 0} locale={locale} outcome={outcome} code={detail['code']} exit={result.returncode}")
         for provider, code, reason, status in detail["providers"]:
             print(f"[REPROCESS_PROVIDER] trainer={trainer_id or 0} locale={locale} provider={provider} code={code} reason={reason} status={status}")
+        for event, status in detail["revalidation_events"]:
+            print(f"[REPROCESS_REVALIDATION] trainer={trainer_id or 0} locale={locale} event={event} status={status}")
         if "source_diagnostic" in detail:
             diagnostic = detail["source_diagnostic"]
             print(f"[REPROCESS_SOURCE_DIAGNOSTIC] trainer={trainer_id or 0} locale={locale} "

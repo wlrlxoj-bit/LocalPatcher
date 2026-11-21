@@ -77,7 +77,7 @@ def worker_fixture(*, translator_error=None, validation_ok=True):
         retry_failure_policy=provider["retry_failure_policy"],
         process_translation_block=translator, process_translation_block_ja=translator,
         process_translation_block_de=translator, process_translation_block_es=translator,
-        revalidate_patcher_after_automation=lambda trainer: revalidated.append(trainer),
+        revalidate_patcher_after_automation=lambda trainer, db=None: revalidated.append((trainer, db is not None)),
     )
     names = ["_slot_signature", "_all_offsets", "scan_option_blocks", "safe_code", "finish",
              "renew_lease", "lease_renewal_failed", "get_mappings", "preflight_slots",
@@ -110,7 +110,7 @@ class IntegrityClaimOutcomeTests(unittest.TestCase):
         self.assertEqual(outcome, "completed")
         self.assertEqual(db.state, "completed")
         self.assertEqual(len(translated), 3)
-        self.assertEqual(revalidated, [42])
+        self.assertEqual(revalidated, [(42, True)])
         applies = [args for name, args in db.calls if name == "apply_translation_integrity_recovery_v2"]
         self.assertEqual(len(applies), 1)
         self.assertEqual({row["mapping"]["language_code"] for row in applies[0]["p_batch"]}, {"ja", "de", "es"})

@@ -417,7 +417,7 @@ def process_claim(db, claim, provider):
         return lease_renewal_failed(db, claim)
     if not apply_prepared_batch(db, claim, prepared):
         return finish(db, claim, "deferred", "RECOVERY_BATCH_APPLY_FAILED", 1800)
-    scraper.revalidate_patcher_after_automation(trainer_id)
+    scraper.revalidate_patcher_after_automation(trainer_id, db=db)
     print("[INTEGRITY_RECOVERY_OUTCOME] state=completed code=NONE")
     return "completed"
 
