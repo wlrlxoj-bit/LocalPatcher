@@ -387,7 +387,7 @@ export const getGamesWithTrainers = unstable_cache(async (): Promise<ListedGame[
     offset += data.length;
   }
   return processData(games);
-}, ['games-with-trainers'], { revalidate: 3600 });
+}, ['games-with-trainers'], { revalidate: 86400 });
 
 
 export const getPopularGamesWithTrainers = unstable_cache(async () => {
@@ -405,9 +405,11 @@ export const getPopularGamesWithTrainers = unstable_cache(async () => {
     console.error('getPopularGamesWithTrainers failed:', err);
     return [];
   }
-}, ['popular-games'], { revalidate: 3600 });
+}, ['popular-games'], { revalidate: 86400 });
 
-export const getGameBySlug = unstable_cache(async (slug: string) => {
+// 임의의 404 봇 스캔 slug가 Data Cache Write를 유발하지 않도록 unstable_cache를 사용하지 않습니다.
+// 정상 패처 페이지는 자체 24시간 ISR(revalidate = 86400)로 캐시됩니다.
+export async function getGameBySlug(slug: string) {
   if (!supabase) throw new Error('게임 DB가 설정되지 않았습니다.');
   try {
     const { data, error } = await supabase.from('games').select('*').eq('slug', slug).maybeSingle();
@@ -417,9 +419,9 @@ export const getGameBySlug = unstable_cache(async (slug: string) => {
     console.error('운영 게임 조회에 실패했습니다:', err);
     throw new Error('운영 게임 조회에 실패했습니다.', { cause: err });
   }
-}, ['game-by-slug'], { revalidate: 3600 });
+}
 
-export const resolveGameSlugAlias = unstable_cache(async (aliasSlug: string): Promise<string | null> => {
+export async function resolveGameSlugAlias(aliasSlug: string): Promise<string | null> {
   const staticAlias = resolveStaticGameSlugAlias(aliasSlug);
   if (staticAlias) return staticAlias;
 
@@ -448,7 +450,7 @@ export const resolveGameSlugAlias = unstable_cache(async (aliasSlug: string): Pr
     console.warn('게임 slug 별칭 조회에 실패했습니다:', err);
     return null;
   }
-}, ['resolve-game-slug'], { revalidate: 3600 });
+}
 
 export const getRelatedGames = unstable_cache(async (gameId: number, limit = 6): Promise<Game[]> => {
   if (!supabase) return mockGames.filter(g => g.id !== gameId).slice(0, limit);
@@ -493,7 +495,7 @@ export const getRelatedGames = unstable_cache(async (gameId: number, limit = 6):
     console.error('연관 게임 조회에 실패했습니다:', err);
     return [];
   }
-}, ['related-games'], { revalidate: 3600 });
+}, ['related-games'], { revalidate: 86400 });
 
 function parseVersion(version: string): number[] {
   const matches = [...version.matchAll(/v(\d+(?:\.\d+)*)/gi)];
@@ -534,15 +536,19 @@ export async function getTrainersForGame(gameId: number) {
       console.error('운영 트레이너 조회에 실패했습니다:', err);
       throw new Error('운영 트레이너 조회에 실패했습니다.', { cause: err });
     }
-  }, ['trainers-for-game', String(gameId)], { revalidate: 3600, tags: [tag] })();
+  }, ['trainers-for-game', String(gameId)], { revalidate: 86400, tags: [tag] })();
 }
+
+// 패처·바이너리 패치·옵션 표/요약·공개 매핑 API가 실제로 참조하는 컬럼만 조회해 RSC/Origin 전송량을 절감합니다.
+const PUBLIC_TRANSLATION_MAPPING_COLUMNS =
+  'id,trainer_id,language_code,offset_dec,encoding,original_text,translated_text,max_char_len,is_approved';
 
 export async function getMappingsForTrainer(trainerId: number, lang: string = 'ko') {
   if (!supabase) throw new Error('번역 매핑 DB가 설정되지 않았습니다.');
   try {
     const { data, error } = await supabase
       .from('translation_mappings')
-      .select('*')
+      .select(PUBLIC_TRANSLATION_MAPPING_COLUMNS)
       .eq('trainer_id', trainerId)
       .eq('language_code', lang)
       .eq('is_approved', true);
@@ -560,7 +566,7 @@ async function loadMappingsForTrainers(trainerIds: number[], lang: string) {
   try {
     const { data, error } = await supabase
       .from('translation_mappings')
-      .select('*')
+      .select(PUBLIC_TRANSLATION_MAPPING_COLUMNS)
       .in('trainer_id', trainerIds)
       .eq('language_code', lang)
       .eq('is_approved', true);
@@ -588,7 +594,7 @@ async function loadMappingsForTrainers(trainerIds: number[], lang: string) {
 export function getMappingsForTrainers(trainerIds: number[], lang: string = 'ko') {
   return unstable_cache(loadMappingsForTrainers, ['mappings-for-trainers'], {
     tags: [...new Set(trainerIds.map((trainerId) => getPatcherMappingCacheTag(trainerId, lang)))],
-    revalidate: 3600,
+    revalidate: 86400,
   })(trainerIds, lang);
 }
 
@@ -639,6 +645,6 @@ async function loadLatestUnapprovedStatusesForTrainers(
 export function getLatestUnapprovedStatusesForTrainers(trainerIds: number[], lang: string = 'ko') {
   return unstable_cache(loadLatestUnapprovedStatusesForTrainers, ['unapproved-statuses'], {
     tags: [...new Set(trainerIds.map((trainerId) => getPatcherMappingCacheTag(trainerId, lang)))],
-    revalidate: 3600,
+    revalidate: 86400,
   })(trainerIds, lang);
 }

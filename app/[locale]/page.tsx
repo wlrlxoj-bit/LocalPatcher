@@ -8,7 +8,7 @@ import PatcherLinkDirectory from '@/components/PatcherLinkDirectory';
 import { canonicalizeListedGameSlug } from '@/lib/game-slug-aliases';
 import { getEligiblePatcherSlugsForListedGames } from '@/lib/content-eligibility';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 async function GamesFetcher({ locale }: { locale: Locale }) {
   const gamesData = await getGamesWithTrainers();

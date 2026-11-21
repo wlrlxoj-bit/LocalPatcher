@@ -35,6 +35,7 @@ export default function GameCard({ game, trainerVersion, optionCount, locale, op
   return (
     <Link 
       href={`/${locale}/patcher/${game.slug}`}
+      prefetch={false}
       className="rounded-2xl border border-slate-800 bg-slate-900/30 overflow-hidden hover:border-slate-700 hover:bg-slate-900/50 hover:shadow-lg hover:shadow-cyan-500/5 transition-all duration-300 group cursor-pointer flex flex-col h-full"
     >
       {/* Game Cover Mock Image */}

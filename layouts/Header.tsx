@@ -53,7 +53,7 @@ export default function Header({ locale }: HeaderProps) {
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         
         {/* Logo */}
-        <Link href={`/${locale}`} className="flex items-center space-x-3 group">
+        <Link href={`/${locale}`} prefetch={false} className="flex items-center space-x-3 group">
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-400 to-indigo-500 flex items-center justify-center shadow-lg shadow-cyan-500/20 group-hover:scale-105 transition-transform duration-200">
             <Shield className="w-5 h-5 text-slate-950 stroke-[2.5]" />
           </div>
@@ -64,28 +64,31 @@ export default function Header({ locale }: HeaderProps) {
 
         {/* Desktop Navigation */}
         <nav className="hidden lg:flex items-center gap-4 text-xs font-medium">
-          <Link 
-            href={`/${locale}`} 
+          <Link
+            href={`/${locale}`}
+            prefetch={false}
             className={`${pathname === `/${locale}` || pathname.includes('/patcher') ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'} transition-colors duration-200`}
           >
             {t.backToHome}
           </Link>
-          <Link 
-            href={`/${locale}/guides`} 
+          <Link
+            href={`/${locale}/guides`}
+            prefetch={false}
             className={`${pathname.includes('/guides') ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'} transition-colors duration-200`}
           >
             {pt.guideTab}
           </Link>
-          <Link 
+          <Link
             href={`/${locale}/about`}
+            prefetch={false}
             className={`${pathname.includes('/about') ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'} transition-colors duration-200 whitespace-nowrap`}
           >
             {trustLinks.about}
           </Link>
-          <Link href={`/${locale}/editorial-policy`} className={`${pathname.includes('/editorial-policy') ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'} transition-colors duration-200 whitespace-nowrap`}>
+          <Link href={`/${locale}/editorial-policy`} prefetch={false} className={`${pathname.includes('/editorial-policy') ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'} transition-colors duration-200 whitespace-nowrap`}>
             {trustLinks.editorial}
           </Link>
-          <Link href={`/${locale}/contact`} className={`${pathname.includes('/contact') ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'} transition-colors duration-200 whitespace-nowrap`}>
+          <Link href={`/${locale}/contact`} prefetch={false} className={`${pathname.includes('/contact') ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'} transition-colors duration-200 whitespace-nowrap`}>
             {trustLinks.contact}
           </Link>
         </nav>
@@ -140,31 +143,34 @@ export default function Header({ locale }: HeaderProps) {
       {isMobileMenuOpen && (
         <div className="lg:hidden border-t border-slate-800 bg-slate-950 px-6 py-4 space-y-4">
           <nav className="flex flex-col space-y-3 text-sm">
-            <Link 
+            <Link
               href={`/${locale}`}
+              prefetch={false}
               onClick={() => setIsMobileMenuOpen(false)}
               className={`${pathname === `/${locale}` || pathname.includes('/patcher') ? 'text-cyan-400 font-semibold' : 'text-slate-400'} transition-colors`}
             >
               {t.backToHome}
             </Link>
-            <Link 
+            <Link
               href={`/${locale}/guides`}
+              prefetch={false}
               onClick={() => setIsMobileMenuOpen(false)}
               className="block px-3 py-2 rounded-md text-base font-medium text-slate-300 hover:text-cyan-400 hover:bg-slate-800/50"
             >
               {pt.guideTab}
             </Link>
-            <Link 
+            <Link
               href={`/${locale}/about`}
+              prefetch={false}
               onClick={() => setIsMobileMenuOpen(false)}
               className="text-slate-400 transition-colors"
             >
               {trustLinks.about}
             </Link>
-            <Link href={`/${locale}/editorial-policy`} onClick={() => setIsMobileMenuOpen(false)} className={`${pathname.includes('/editorial-policy') ? 'text-cyan-400 font-semibold' : 'text-slate-400'} transition-colors`}>
+            <Link href={`/${locale}/editorial-policy`} prefetch={false} onClick={() => setIsMobileMenuOpen(false)} className={`${pathname.includes('/editorial-policy') ? 'text-cyan-400 font-semibold' : 'text-slate-400'} transition-colors`}>
               {trustLinks.editorial}
             </Link>
-            <Link href={`/${locale}/contact`} onClick={() => setIsMobileMenuOpen(false)} className={`${pathname.includes('/contact') ? 'text-cyan-400 font-semibold' : 'text-slate-400'} transition-colors`}>
+            <Link href={`/${locale}/contact`} prefetch={false} onClick={() => setIsMobileMenuOpen(false)} className={`${pathname.includes('/contact') ? 'text-cyan-400 font-semibold' : 'text-slate-400'} transition-colors`}>
               {trustLinks.contact}
             </Link>
           </nav>

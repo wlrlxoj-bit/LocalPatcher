@@ -92,7 +92,13 @@ export async function GET(request: NextRequest) {
         : APP_ID_MAP[title ?? ''] ?? null;
     }
     appId ??= title ? APP_ID_MAP[title] ?? null : null;
-    if (appId === null || !Number.isSafeInteger(appId) || appId <= 0) return priceResponse({ success: false, error: 'UNSUPPORTED_GAME' }, 404);
+    // 미지원 게임(404)은 확정 결과이므로 CDN에 캐시해 반복 Origin 호출을 줄입니다.
+    if (appId === null || !Number.isSafeInteger(appId) || appId <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'UNSUPPORTED_GAME' },
+        { status: 404, headers: SUCCESS_CACHE_HEADERS },
+      );
+    }
 
     let cachedData: CachedPriceRow | null = null;
     if (supabase && gameId !== null) {
