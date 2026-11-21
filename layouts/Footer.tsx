@@ -23,16 +23,16 @@ export default function Footer({ locale }: FooterProps) {
 
         {/* Right Side: Links */}
         <div className="flex flex-wrap gap-x-6 gap-y-2 justify-center md:justify-end min-w-[240px] text-slate-400">
-          <Link href={`/${locale}/about`} className="hover:text-slate-200 transition-colors">{t.aboutLink}</Link>
-          <Link href={`/${locale}/editorial-policy`} className="hover:text-slate-200 transition-colors">{t.editorialLink}</Link>
-          <Link href={`/${locale}/contact`} className="hover:text-slate-200 transition-colors">{t.contactLink}</Link>
-          <Link href={`/${locale}/terms`} className="hover:text-slate-200 transition-colors">
+          <Link href={`/${locale}/about`} prefetch={false} className="hover:text-slate-200 transition-colors">{t.aboutLink}</Link>
+          <Link href={`/${locale}/editorial-policy`} prefetch={false} className="hover:text-slate-200 transition-colors">{t.editorialLink}</Link>
+          <Link href={`/${locale}/contact`} prefetch={false} className="hover:text-slate-200 transition-colors">{t.contactLink}</Link>
+          <Link href={`/${locale}/terms`} prefetch={false} className="hover:text-slate-200 transition-colors">
             {t.terms}
           </Link>
-          <Link href={`/${locale}/privacy`} className="hover:text-slate-200 transition-colors">
+          <Link href={`/${locale}/privacy`} prefetch={false} className="hover:text-slate-200 transition-colors">
             {t.privacy}
           </Link>
-          <Link href={`/${locale}/faq`} className="hover:text-slate-200 transition-colors">
+          <Link href={`/${locale}/faq`} prefetch={false} className="hover:text-slate-200 transition-colors">
             {t.faq}
           </Link>
         </div>

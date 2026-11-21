@@ -58,7 +58,7 @@ interface PatcherPageProps {
   }>;
 }
 
-async function getCanonicalPatcherData(requestedSlug: string) {
+async function loadCanonicalPatcherData(requestedSlug: string) {
   const aliasSlug = await resolveGameSlugAlias(requestedSlug);
   let canonicalSlug = aliasSlug ?? requestedSlug;
   let game = await getGameBySlug(canonicalSlug);
@@ -85,6 +85,10 @@ async function getCanonicalPatcherData(requestedSlug: string) {
 
   return { canonicalSlug, game, trainers };
 }
+
+// 같은 요청 내 generateMetadata와 본문 렌더가 게임·별칭 조회를 중복 호출하지 않도록 요청 단위로 묶습니다.
+const getCanonicalPatcherData =
+  typeof React.cache === 'function' ? React.cache(loadCanonicalPatcherData) : loadCanonicalPatcherData;
 
 export async function generateMetadata({ params }: PatcherPageProps) {
   const { locale, game_slug } = await params;
@@ -198,8 +202,10 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
   }
   // metadata와 본문 외부 노출 판단을 같은 최신·완전 승인 기준으로 맞춘다.
   // 대기/실패 번역 페이지는 사용자에게 남기되 구조화 데이터·광고 대상에서는 제외한다.
-  // 3. Pre-fetch mappings for all trainers of this game in a single batch query
-  const mappingsMap = await getMappingsForTrainers(trainers.map(t => t.id), currentLocale);
+  // 3. 영문 페이지는 원본 FLiNG 안내만 표시하므로 불필요한 번역 매핑 조회·전송을 생략합니다.
+  const mappingsMap = currentLocale !== 'en'
+    ? await getMappingsForTrainers(trainers.map(t => t.id), currentLocale)
+    : {};
   const unapprovedStatusMap = currentLocale !== 'en'
     ? await getLatestUnapprovedStatusesForTrainers(trainers.map(t => t.id), currentLocale)
     : {};

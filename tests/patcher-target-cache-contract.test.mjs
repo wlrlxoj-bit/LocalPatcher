@@ -85,7 +85,7 @@ test('trainer·언어 태그는 유효한 범위만 허용하고 실제 batch �
   const statusCache = cacheCalls.find(({ keys }) => keys.includes('unapproved-statuses'));
   assert.ok(mappingCache);
   assert.ok(statusCache);
-  assert.equal(mappingCache.options.revalidate, 3600);
+  assert.equal(mappingCache.options.revalidate, 86400);
   assert.deepEqual(Array.from(mappingCache.options.tags), [
     tags.getPatcherMappingCacheTag(42, 'ko'), tags.getPatcherMappingCacheTag(43, 'ko'),
   ]);

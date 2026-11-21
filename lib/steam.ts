@@ -24,7 +24,7 @@ export async function getSteamNews(appId: number, count: number = 3): Promise<St
     const res = await fetch(
       `https://api.steampowered.com/ISteamNews/GetNewsForApp/v0002/?appid=${appId}&count=${count * 4}&maxlength=300&format=json`,
       {
-        next: { revalidate: 3600 * 6 }, // Cache for 6 hours
+        next: { revalidate: 86400 }, // 24시간 캐시로 ISR 쓰기 빈도 완화
       }
     );
 

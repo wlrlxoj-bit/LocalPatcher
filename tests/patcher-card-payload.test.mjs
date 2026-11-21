@@ -118,7 +118,8 @@ async function renderPage(popular, related, eligible, locale = 'ko', mainOverrid
   assert.equal(info.sourceUrl, main.fling_url);
   assert.deepEqual(plain(main), originalMain);
   assert.deepEqual(plain(trainers), originalTrainers);
-  assert.equal(props.mappingsMap, mappings);
+  if (locale === 'en') assert.deepEqual(plain(props.mappingsMap), {});
+  else assert.equal(props.mappingsMap, mappings);
   if (locale === 'en') assert.deepEqual(plain(props.unapprovedStatusMap), {});
   else assert.equal(props.unapprovedStatusMap, statuses);
   assert.deepEqual(plain(props.trainers), trainers);

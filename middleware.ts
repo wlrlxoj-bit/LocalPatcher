@@ -3,6 +3,9 @@ import type { NextRequest } from 'next/server';
 import { resolveStaticGameSlugAlias } from './lib/game-slug-aliases';
 
 const locales = ['en', 'ko', 'ja', 'de', 'es'];
+// 자동 308 리다이렉트 대상은 색인 가능한 공개 현지화 로케일로 제한해
+// Accept-Language: en-* 요청이 noindex인 /en으로 이동하지 않고 x-default(/ko)로 수렴하도록 합니다.
+const publicLocales = ['ko', 'ja', 'de', 'es'];
 // LocalPatcher는 한국어를 기본 진입점으로 사용한다. 영어 원문은 FLiNG가 기준이며
 // LocalPatcher의 대량 영어 URL을 기본 경로로 다시 만들지 않는다.
 const defaultLocale = 'ko';
@@ -20,7 +23,7 @@ function getLocale(request: NextRequest): string {
   languages.sort((a, b) => b.weight - a.weight);
 
   for (const { locale } of languages) {
-    if (locales.includes(locale)) {
+    if (publicLocales.includes(locale)) {
       return locale;
     }
   }
@@ -79,7 +82,7 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Match all paths except those starting with `_next`
-    '/((?!_next).*)',
+    // 정적 자산·API·사이트맵·메타 파일·확장자 파일은 Edge Middleware 호출 자체를 제외합니다.
+    '/((?!_next/|api/|images/|sitemap\\.xml$|robots\\.txt$|favicon\\.ico$|icon\\.png$|ads\\.txt$|llms\\.txt$|.*\\.[^/]+$).*)',
   ],
 };

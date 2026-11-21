@@ -544,6 +544,7 @@ export default function PatcherClient({
         <div className="mb-0 w-full">
           <Link 
             href={`/${locale}`}
+            prefetch={false}
             className="inline-flex items-center space-x-1 text-xs text-slate-500 hover:text-cyan-400 transition-colors"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -713,6 +714,7 @@ export default function PatcherClient({
       <div className="mb-0 w-full">
         <Link 
           href={`/${locale}`}
+          prefetch={false}
           className="inline-flex items-center space-x-1 text-xs text-slate-500 hover:text-cyan-400 transition-colors"
         >
           <ChevronLeft className="w-4 h-4" />
@@ -754,6 +756,7 @@ export default function PatcherClient({
           {game.anti_cheat && game.anti_cheat !== 'none' && (
             <Link
               href={`/${locale}/guides`}
+              prefetch={false}
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-400 hover:bg-amber-500/20 transition-all duration-200"
             >
               <span>{pt.bypassGuide.replace('{antiCheat}', game.anti_cheat)}</span>
@@ -856,7 +859,7 @@ export default function PatcherClient({
                           ) : (
                             <p className="rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-center text-xs leading-relaxed text-slate-400">{startGuide.missingFling}</p>
                           )}
-                          <Link href={`/${locale}/guides`} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-950/40 px-5 py-3 text-center text-sm font-semibold text-slate-200 transition-colors hover:border-cyan-400/60 hover:text-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950">
+                          <Link href={`/${locale}/guides`} prefetch={false} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-950/40 px-5 py-3 text-center text-sm font-semibold text-slate-200 transition-colors hover:border-cyan-400/60 hover:text-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950">
                             {startGuide.guide}<ArrowRight className="h-4 w-4" aria-hidden="true" />
                           </Link>
                         </div>

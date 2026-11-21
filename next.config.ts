@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: {
+    // Vercel Image Optimization 호출 비용을 차단하고 외부 CDN 이미지를 직접 제공합니다.
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',
