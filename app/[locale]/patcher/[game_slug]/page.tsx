@@ -94,12 +94,8 @@ export async function generateMetadata({ params }: PatcherPageProps) {
   const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? locale : 'ko';
 
   const patcherData = await getCanonicalPatcherData(game_slug);
-  if (!patcherData) {
-    return {};
-  }
-  
-  if (patcherData.canonicalSlug !== game_slug) {
-    return {};
+  if (!patcherData || patcherData.canonicalSlug !== game_slug) {
+    return { robots: { index: false, follow: false } };
   }
 
   const { canonicalSlug, game, trainers } = patcherData;
@@ -266,11 +262,12 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
     })),
   });
   const popularGames = popularCandidates
-    .filter((candidate) => eligibleByGameId.get(candidate.id) === true)
+    .filter((candidate) => candidate.id !== game.id && eligibleByGameId.get(candidate.id) === true)
     .slice(0, 6)
     .map(toCardData);
   const relatedGames = relatedCandidates
-    .filter((candidate) => eligibleByGameId.get(candidate.id) === true)
+    .filter((candidate) => candidate.id !== game.id && eligibleByGameId.get(candidate.id) === true)
+    .slice(0, 6)
     .map(toCardData);
 
   const canonicalUrl = `${SITE_URL}/${currentLocale}/patcher/${patcherData?.canonicalSlug ?? game.slug}`;
@@ -282,14 +279,22 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
     es: `${localizedGameTitle} Trainer Parche Español`,
     en: `${game.title_en} Trainer Local Patcher`,
   };
-  const jsonLd = {
-    '@context': 'https://schema.org',
+  const rawDateModified = (trainers[0] as { updated_at?: string; created_at?: string } | undefined)?.updated_at
+    || (trainers[0] as { created_at?: string } | undefined)?.created_at
+    || (game as { updated_at?: string; created_at?: string }).updated_at
+    || (game as { created_at?: string }).created_at;
+  const dateModified = typeof rawDateModified === 'string' && !Number.isNaN(Date.parse(rawDateModified))
+    ? new Date(rawDateModified).toISOString()
+    : undefined;
+  const softwareApplicationLd = {
     '@type': 'SoftwareApplication',
     'name': jsonLdNameMap[currentLocale as Locale],
     'inLanguage': currentLocale,
     'url': canonicalUrl,
     'operatingSystem': 'Windows',
     'applicationCategory': 'GameApplication',
+    'isAccessibleForFree': true,
+    ...(dateModified ? { 'dateModified': dateModified } : {}),
     'offers': {
       '@type': 'Offer',
       'price': '0',
@@ -303,12 +308,33 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
     'softwareVersion': trainers[0]?.version_str || '1.0',
     'downloadUrl': canonicalUrl,
   };
+  const breadcrumbListLd = {
+    '@type': 'BreadcrumbList',
+    'itemListElement': [
+      {
+        '@type': 'ListItem',
+        'position': 1,
+        'name': pt.breadcrumbHome || 'Home',
+        'item': `${SITE_URL}/${currentLocale}`,
+      },
+      {
+        '@type': 'ListItem',
+        'position': 2,
+        'name': localizedGameTitle,
+        'item': canonicalUrl,
+      },
+    ],
+  };
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@graph': [softwareApplicationLd, breadcrumbListLd],
+  };
 
   const steamAppId = extractSteamAppId(game.cover_image_url);
   const localizedDescription = game[`description_${currentLocale}` as keyof typeof game];
-  const description = typeof localizedDescription === 'string' && localizedDescription.trim()
-    ? localizedDescription
-    : game.description_en;
+  const description = currentLocale === 'en'
+    ? (typeof game.description_en === 'string' && game.description_en.trim() ? game.description_en : undefined)
+    : (typeof localizedDescription === 'string' && localizedDescription.trim() ? localizedDescription : undefined);
   const latestTrainer = trainers[0];
   const latestOptionCount = latestTrainer?.option_count;
   const supportedOptionCount = typeof latestOptionCount === 'number' &&

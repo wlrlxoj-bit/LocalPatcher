@@ -9,13 +9,23 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   const { locale } = await params;
   const currentLocale: Locale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? locale as Locale : 'ko';
   const page = getPrivacyContent(currentLocale);
+  const title = `${page.title} | LocalPatcher`;
+  const url = `${SITE_URL}/${currentLocale}/privacy`;
 
   return {
-    title: `${page.title} | LocalPatcher`,
+    title,
     description: page.subtitle,
+    ...(currentLocale === 'en' ? { robots: { index: false, follow: true } } : {}),
     alternates: {
-      canonical: `${SITE_URL}/${currentLocale}/privacy`,
+      canonical: url,
       languages: localizedAlternates('/privacy'),
+    },
+    openGraph: {
+      type: 'website',
+      siteName: 'LocalPatcher',
+      title,
+      description: page.subtitle,
+      url,
     },
   };
 }
@@ -26,8 +36,8 @@ export default async function PrivacyPage({ params }: { params: Promise<{ locale
   const t = getCommonDict(currentLocale);
   const page = getPrivacyContent(currentLocale);
 
-  return <main className="max-w-4xl mx-auto px-6 py-12">
-    <Link href={`/${currentLocale}`} className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-cyan-400"><ArrowLeft className="w-3.5 h-3.5" />{t.backToHome}</Link>
+  return <article className="max-w-4xl mx-auto px-6 py-12">
+    <Link href={`/${currentLocale}`} prefetch={false} className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-cyan-400"><ArrowLeft className="w-3.5 h-3.5" />{t.backToHome}</Link>
     <header className="text-center my-12"><Shield className="w-8 h-8 text-cyan-400 mx-auto mb-4" /><h1 className="font-bold text-3xl text-white">{page.title}</h1><p className="text-slate-400 text-sm mt-3">{page.subtitle}</p><p className="text-xs text-slate-500 mt-3">{page.updated}</p></header>
     <p className="p-5 mb-8 rounded-2xl border border-cyan-500/20 bg-cyan-950/10 text-xs leading-relaxed text-slate-300">{page.notice}</p>
     <div className="space-y-6">{page.sections.map(([Icon, title, text]) => {
@@ -40,5 +50,5 @@ export default async function PrivacyPage({ params }: { params: Promise<{ locale
         </section>
       );
     })}</div>
-  </main>;
+  </article>;
 }

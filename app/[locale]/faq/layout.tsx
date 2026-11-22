@@ -8,14 +8,23 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   const { locale } = await params;
   const currentLocale: Locale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? (locale as Locale) : 'ko';
   const copy = getFaqContent(currentLocale);
+  const title = `${copy.title} | LocalPatcher`;
+  const url = `${SITE_URL}/${currentLocale}/faq`;
 
   return {
-    title: `${copy.title} | LocalPatcher`,
+    title,
     description: copy.sub,
-    keywords: copy.keywords,
+    ...(currentLocale === 'en' ? { robots: { index: false, follow: true } } : {}),
     alternates: {
-      canonical: `${SITE_URL}/${currentLocale}/faq`,
+      canonical: url,
       languages: localizedAlternates('/faq'),
+    },
+    openGraph: {
+      type: 'website',
+      siteName: 'LocalPatcher',
+      title,
+      description: copy.sub,
+      url,
     },
   };
 }

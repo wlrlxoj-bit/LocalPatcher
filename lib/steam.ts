@@ -57,7 +57,7 @@ export interface SteamAppDetails {
 }
 
 export async function getSteamAppDetails(appId: number, locale: string = 'en'): Promise<SteamAppDetails | null> {
-  const langMap: Record<string, string> = { ko: 'korean', en: 'english', ja: 'japanese', de: 'german', es: 'spanish' };
+  const langMap: Record<string, string> = { ko: 'koreana', en: 'english', ja: 'japanese', de: 'german', es: 'spanish' };
   const steamLang = langMap[locale] || 'english';
   try {
     const res = await fetch(

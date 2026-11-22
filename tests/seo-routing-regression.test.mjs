@@ -93,15 +93,17 @@ test('사이트맵이 유지하는 독립 trainer 주소는 실제 미들웨어�
   assertPassThrough(`/ko/patcher/${canonical}`);
 });
 
-test('기본 진입 언어와 Accept-Language 우선순위 및 쿼리 보존은 유지한다', () => {
+test('기본 진입 언어와 Accept-Language 우선순위 및 쿼리 보존은 307 + Vary: Accept-Language로 유지한다', () => {
   const defaultResponse = request('/?from=home');
-  assert.equal(defaultResponse.status, 308);
+  assert.equal(defaultResponse.status, 307);
+  assert.equal(defaultResponse.headers.get('vary'), 'Accept-Language');
   assert.equal(defaultResponse.headers.get('location'), `${origin}/ko?from=home`);
 
   const localized = request('/patcher/example-trainer?from=search', {
     'accept-language': 'fr;q=1,ja-JP;q=0.9,ko;q=0.8',
   });
-  assert.equal(localized.status, 308);
+  assert.equal(localized.status, 307);
+  assert.equal(localized.headers.get('vary'), 'Accept-Language');
   assert.equal(localized.headers.get('location'), `${origin}/ja/patcher/example-trainer?from=search`);
 });
 

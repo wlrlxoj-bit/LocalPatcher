@@ -43,29 +43,35 @@ export default function SteamPlayerCount({ steamAppId, locale }: SteamPlayerCoun
 
   if (!loaded) {
     return (
-      <div
-        className="h-12 w-40 animate-pulse rounded-full border border-slate-700/50 bg-slate-800/50"
-        aria-busy="true"
-        aria-label={pt.livePlayerCount}
-      />
+      <div className="min-h-[28px] my-2 flex items-center">
+        <div
+          className="h-7 w-40 animate-pulse rounded-full border border-slate-700/50 bg-slate-800/50"
+          aria-busy="true"
+          aria-label={pt.livePlayerCount}
+        />
+      </div>
     );
   }
 
-  if (count === null) return null;
+  if (count === null) {
+    return <div className="min-h-[28px] my-2" aria-hidden="true" />;
+  }
 
   // Format number with commas
   const numberLocale = locale === 'ko' ? 'ko-KR' : locale === 'ja' ? 'ja-JP' : locale === 'de' ? 'de-DE' : locale === 'es' ? 'es-ES' : 'en-US';
   const formattedCount = new Intl.NumberFormat(numberLocale).format(count);
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/50 border border-emerald-500/20 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.1)] w-fit my-2" role="status" aria-live="polite">
-      <span className="relative flex h-2.5 w-2.5">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-      </span>
-      <span className="text-xs font-bold text-emerald-400 tracking-wide font-mono">
-        {pt.livePlayerCount}: {formattedCount}
-      </span>
+    <div className="min-h-[28px] my-2 flex items-center">
+      <div className="flex items-center gap-2 px-3 py-1 bg-slate-900/50 border border-emerald-500/20 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.1)] w-fit" role="status" aria-live="polite">
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+        </span>
+        <span className="text-xs font-bold text-emerald-400 tracking-wide font-mono">
+          {pt.livePlayerCount}: {formattedCount}
+        </span>
+      </div>
     </div>
   );
 }

@@ -10,13 +10,23 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   const { locale } = await params;
   const currentLocale: Locale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? locale as Locale : 'ko';
   const page = getTermsContent(currentLocale);
+  const title = `${page.title} | LocalPatcher`;
+  const url = `${SITE_URL}/${currentLocale}/terms`;
 
   return {
-    title: `${page.title} | LocalPatcher`,
+    title,
     description: page.subtitle,
+    ...(currentLocale === 'en' ? { robots: { index: false, follow: true } } : {}),
     alternates: {
-      canonical: `${SITE_URL}/${currentLocale}/terms`,
+      canonical: url,
       languages: localizedAlternates('/terms'),
+    },
+    openGraph: {
+      type: 'website',
+      siteName: 'LocalPatcher',
+      title,
+      description: page.subtitle,
+      url,
     },
   };
 }
@@ -28,8 +38,8 @@ export default async function TermsPage({ params }: { params: Promise<{ locale: 
   const page = getTermsContent(currentLocale);
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-14">
-      <Link href={`/${currentLocale}`} className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 transition-colors hover:text-cyan-400">
+    <article className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-14">
+      <Link href={`/${currentLocale}`} prefetch={false} className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 transition-colors hover:text-cyan-400">
         <ArrowLeft className="h-3.5 w-3.5" />{t.backToHome}
       </Link>
       <header className="my-10 text-center sm:my-14">
@@ -60,10 +70,10 @@ export default async function TermsPage({ params }: { params: Promise<{ locale: 
       </div>
       <aside className="mt-8 rounded-2xl border border-cyan-500/20 bg-cyan-950/10 p-5 text-sm leading-7 text-slate-300 sm:p-6">
         {page.privacy}{' '}
-        <Link href={`/${currentLocale}/privacy`} className="font-semibold text-cyan-400 underline decoration-cyan-400/30 underline-offset-4 hover:text-cyan-300">
+        <Link href={`/${currentLocale}/privacy`} prefetch={false} className="font-semibold text-cyan-400 underline decoration-cyan-400/30 underline-offset-4 hover:text-cyan-300">
           {t.viewPrivacyPolicyLink}
         </Link>
       </aside>
-    </main>
+    </article>
   );
 }

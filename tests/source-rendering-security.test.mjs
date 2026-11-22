@@ -69,8 +69,13 @@ test('JSON-LD는 script 종료·HTML·유니코드 입력을 데이터로 보존
   assert.equal(serialized.includes('<'), false);
   assert.equal(/<\/script/i.test(serialized), false);
   assert.ok(serialized.includes('\\u003c'));
-  assert.deepEqual(JSON.parse(serialized), { ...expected, name: `${payload} Trainer Local Patcher`,
-    screenshot: payload, softwareVersion: payload });
+  assert.deepEqual(JSON.parse(serialized), {
+    ...expected,
+    '@graph': [
+      { ...expected['@graph'][0], screenshot: payload, softwareVersion: payload },
+      expected['@graph'][1],
+    ],
+  });
 });
 
 test('Steam 요구사항의 br·목록 구분은 텍스트 줄바꿈으로 보존하고 악성 HTML은 실행하지 않는다', async () => {

@@ -60,7 +60,8 @@ function parseOptions(value: string): TrainerOptionTableItem[] | null {
 
 /**
  * 입력은 최신 ID·현재 언어·옵션 수와 승인 매핑입니다. 블록 및 개별 슬롯을 오프셋
- * 순서로 모으되 짝·범위·중복·수량이 모두 정확할 때만 전체 번역 표를 반환합니다.
+ * 순서로 모으되 짝·범위·중복을 검증하고 content-eligibility와 동일하게
+ * `items.length >= optionCount`를 충족할 때 전체 번역 표를 반환합니다.
  * HP/XP/SP 같은 고유명사·약어가 일부 원문과 같더라도 전체 옵션의 과반 이상이
  * 번역되었으면 표를 반환하고, 과반 미만이나 손상된 행이 있으면 null을 반환합니다.
  */
@@ -94,7 +95,7 @@ export function getTrainerOptionTable({ latestTrainerId, locale, optionCount, in
       items.push(item);
     }
   }
-  if (items.length !== optionCount) return null;
+  if (items.length < optionCount) return null;
   if (translatedLabelCount < Math.ceil(items.length * 0.5)) return null;
   return { items };
 }
