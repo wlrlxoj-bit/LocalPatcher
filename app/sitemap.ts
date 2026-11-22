@@ -1,6 +1,7 @@
 import { MetadataRoute } from 'next';
 import { SITE_URL } from '@/lib/site';
 import { AUTO_LOCALIZATION_LOCALES, getPatcherSitemapSnapshotEntries } from '@/lib/content-eligibility';
+import { GENRE_HUBS } from '@/lib/i18n/genres';
 
 export const revalidate = 86400;
 
@@ -44,6 +45,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         changeFrequency: path === '' ? 'daily' : 'monthly',
         priority: path === '' ? 1.0 : (path === '/guides' || path === '/faq') ? 0.6 : 0.3,
         alternates: { languages: staticLanguages },
+      });
+    }
+  }
+
+  // 2.5. Genre hub pages for each indexable locale (4 locales × 10 genres = 40 URLs)
+  for (const locale of locales) {
+    for (const hub of GENRE_HUBS) {
+      const genreLanguages: Record<string, string> = Object.fromEntries(
+        locales.map((candidate) => [candidate, `${SITE_URL}/${candidate}/genre/${hub.slug}`]),
+      );
+      genreLanguages['x-default'] = genreLanguages.ko ?? `${SITE_URL}/${locales[0]}/genre/${hub.slug}`;
+      sitemapEntries.push({
+        url: `${SITE_URL}/${locale}/genre/${hub.slug}`,
+        changeFrequency: 'weekly',
+        priority: 0.85,
+        alternates: { languages: genreLanguages },
       });
     }
   }

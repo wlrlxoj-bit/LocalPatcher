@@ -1,7 +1,9 @@
 import React from 'react';
+import Link from 'next/link';
 import GamesListClient from '@/components/GamesListClient';
 import { getGamesWithTrainers } from '@/lib/supabase';
 import { Locale, getCommonDict, getLayoutMetadata } from '@/lib/i18n/index';
+import { GENRE_HUBS, getGenreNavLabel } from '@/lib/i18n/genres';
 import { SITE_URL } from '@/lib/site';
 import { ShieldCheck, Zap, Info } from 'lucide-react';
 import GamesListSkeleton from '@/components/GamesListSkeleton';
@@ -22,8 +24,9 @@ async function GamesFetcher({ locale }: { locale: Locale }) {
   const eligibleGamesData = directoryCandidates.filter((game) =>
     eligibleSlugs.has(canonicalizeListedGameSlug(game.slug, existingSlugs, titleBySlug))
   );
-  const games = eligibleGamesData.map(({ trainers, ...game }) => {
+  const games = eligibleGamesData.map(({ trainers, genres, ...game }) => {
     void trainers;
+    void genres;
     return game;
   });
   const gameBySlug = new Map(eligibleGamesData.map(game => [game.slug, game]));
@@ -121,6 +124,23 @@ export default async function LocalePage({
           </div>
         </div>
       </div>
+
+      {/* Crawlable Genre Hub Navigation Bar */}
+      <nav
+        aria-label={getGenreNavLabel(currentLocale)}
+        className="w-full max-w-5xl mb-10 flex flex-wrap items-center justify-center gap-2"
+      >
+        {GENRE_HUBS.map((hub) => (
+          <Link
+            key={hub.slug}
+            href={`/${currentLocale}/genre/${hub.slug}`}
+            prefetch={false}
+            className="px-3.5 py-1.5 rounded-full text-xs font-semibold border border-slate-800 bg-slate-900/40 text-slate-300 hover:border-cyan-500/40 hover:text-cyan-300 transition-colors"
+          >
+            {hub.labels[currentLocale] || hub.labels.en}
+          </Link>
+        ))}
+      </nav>
 
       <React.Suspense fallback={<GamesListSkeleton />}>
         <GamesFetcher locale={currentLocale} />
