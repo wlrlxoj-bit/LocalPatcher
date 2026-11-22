@@ -343,7 +343,7 @@ export async function getGames() {
   }
 }
 
-type ListedGame = Omit<Game, 'description_en' | 'description_ko' | 'description_ja' | 'description_de' | 'description_es' | 'genres' | 'tags' | 'fling_url'> & {
+type ListedGame = Omit<Game, 'description_en' | 'description_ko' | 'description_ja' | 'description_de' | 'description_es' | 'tags' | 'fling_url'> & {
   trainers: Array<{ id: number; version_str: string; option_count: number }>;
 };
 
@@ -380,6 +380,7 @@ export const getGamesWithTrainers = unstable_cache(async (): Promise<ListedGame[
       slug: game.slug,
       cover_image_url: game.cover_image_url,
       anti_cheat: game.anti_cheat,
+      genres: Array.isArray(game.genres) ? game.genres : null,
       is_popular: game.is_popular,
       popularity_index: game.popularity_index,
       trainers: game.trainers,

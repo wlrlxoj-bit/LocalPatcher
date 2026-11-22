@@ -1,7 +1,9 @@
 import React from 'react';
+import Link from 'next/link';
 import { Languages, ListChecks } from 'lucide-react';
 import type { Locale } from '@/lib/i18n/types';
 import { translateGenre } from '@/lib/i18n/genres';
+import { getGenreSlugByDbName } from '@/lib/i18n/genres';
 import PatcherOptionSummary from '@/components/PatcherOptionSummary';
 import type { TrainerOptionSummary } from '@/lib/trainer-option-summary';
 import PatcherOptionTable from '@/components/PatcherOptionTable';
@@ -71,10 +73,18 @@ export default function PatcherUniqueContent({
     es: { source: 'Página original de FLiNG', guides: 'Guías de uso', privacy: 'Privacidad' },
   }[locale];
   const rawCategories = [...genres, ...tags].filter(Boolean);
-  const localizedCategories = locale !== 'en'
-    ? rawCategories.map((category) => translateGenre(category, locale))
-    : rawCategories;
-  const categories = [...new Set(localizedCategories)].slice(0, 12);
+  const seenCategoryLabels = new Set<string>();
+  const categoryItems: Array<{ label: string; genreSlug?: string }> = [];
+  for (const category of rawCategories) {
+    const label = locale !== 'en' ? translateGenre(category, locale) : category;
+    if (seenCategoryLabels.has(label)) continue;
+    seenCategoryLabels.add(label);
+    categoryItems.push({
+      label,
+      genreSlug: getGenreSlugByDbName(category),
+    });
+    if (categoryItems.length >= 12) break;
+  }
   // 게임 설명은 등록 원문에 HTML이 포함될 수 있으므로, 서버 렌더링 정보 영역에는 텍스트만 노출합니다.
   const plainDescription = description?.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -108,8 +118,32 @@ export default function PatcherUniqueContent({
             <dd className="text-sm text-slate-200">{optionCount > 0 ? optionCount.toLocaleString(locale) : labels.unavailable}</dd>
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-            <dt className="text-xs text-slate-500 mb-1">{labels.categories}</dt>
-            <dd className="text-sm text-slate-200">{categories.length > 0 ? categories.join(' · ') : labels.unavailable}</dd>
+            <dt className="text-xs text-slate-500 mb-1.5">{labels.categories}</dt>
+            <dd className="text-sm text-slate-200 flex flex-wrap gap-1.5">
+              {categoryItems.length > 0 ? (
+                categoryItems.map((item) =>
+                  item.genreSlug ? (
+                    <Link
+                      key={item.label}
+                      href={`/${locale}/genre/${item.genreSlug}`}
+                      prefetch={false}
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-cyan-500/30 bg-cyan-950/40 text-cyan-300 hover:border-cyan-400/60 hover:text-cyan-200 transition-colors"
+                    >
+                      {item.label}
+                    </Link>
+                  ) : (
+                    <span
+                      key={item.label}
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-slate-800 bg-slate-900/60 text-slate-300"
+                    >
+                      {item.label}
+                    </span>
+                  ),
+                )
+              ) : (
+                labels.unavailable
+              )}
+            </dd>
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
             <dt className="text-xs text-slate-500 mb-1 flex items-center gap-1.5"><Languages className="w-3.5 h-3.5" />{labels.translation}</dt>
