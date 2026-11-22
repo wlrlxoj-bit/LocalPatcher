@@ -78,7 +78,7 @@ test('정상 패처의 상위 SEO 경계는 noindex 헤더나 robots 차단을 �
   assert.match(patcherSource, /getPatcherIndexEligibilityByGameIds\(/);
   assert.match(patcherSource, /const indexEligible = eligibleByGameId\.get\(game\.id\) === true/);
   assert.match(patcherSource, /robots:\s*indexEligible\s*\?\s*\{\s*index:\s*true,\s*follow:\s*true\s*\}\s*:\s*\{\s*index:\s*false,\s*follow:\s*true\s*\}/s);
-  assert.equal((patcherSource.match(/index:\s*false/g) || []).length, 1, '비자격 patcher 분기 외 index:false가 없어야 합니다.');
+  assert.equal((patcherSource.match(/index:\s*false/g) || []).length, 2, '404·별칭 불일치 분기와 비자격 patcher 분기 외 index:false가 없어야 합니다.');
 });
 
 test('구조화 데이터와 sitemap 변경 시각 신호가 중복되거나 실행 시각에 의존하지 않는다', async () => {

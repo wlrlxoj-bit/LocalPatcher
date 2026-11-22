@@ -13,13 +13,13 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? (locale as Locale) : 'ko';
   
   const meta = getLayoutMetadata(currentLocale);
-  const { title, description, keywords } = meta;
+  const { title, description } = meta;
 
   return {
     metadataBase: new URL(SITE_URL),
     title,
     description,
-    keywords,
+    ...(currentLocale === 'en' ? { robots: { index: false, follow: true } } : {}),
     verification: {
       other: {
         'naver-site-verification': '3531a31999851fd3a7ad0f180edc86a1bbbbe36a',

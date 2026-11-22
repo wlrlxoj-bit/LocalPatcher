@@ -44,7 +44,7 @@ export default function GameCard({ game, trainerVersion, optionCount, locale, op
       >
         <Image 
           src={game.cover_image_url}
-          alt={game.title_en}
+          alt={displayTitle}
           fill
           sizes="(max-width: 639px) calc(100vw - 48px), (max-width: 767px) calc((100vw - 72px) / 2), (max-width: 1023px) calc((100vw - 96px) / 3), 296px"
           priority={priority}
@@ -69,9 +69,9 @@ export default function GameCard({ game, trainerVersion, optionCount, locale, op
       {/* Info Details */}
       <div className="p-4 flex-grow flex flex-col justify-between">
         <div>
-          <h4 className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors line-clamp-1">
+          <h3 className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors line-clamp-1">
             {displayTitle}
-          </h4>
+          </h3>
           {!hideDetails && (
             <p className="text-xs text-slate-500 mt-1">Version: {trainerVersion}</p>
           )}

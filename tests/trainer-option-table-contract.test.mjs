@@ -79,9 +79,10 @@ test('최신 ID·언어·승인·색인 자격이 다르면 전체 표를 숨긴
   assert.equal(await parse([block(), block(1, { offset_dec: 500, trainer_id: 41 })]), null);
 });
 
-test('누락·과잉·중복 단축키·중복 또는 손상된 오프셋은 부분 표를 만들지 않는다', async () => {
+test('누락·중복 단축키·중복 또는 손상된 오프셋은 부분 표를 만들지 않고, optionCount 이상 완전 매핑은 허용한다', async () => {
   assert.equal(await parse([block(34)]), null);
-  assert.equal(await parse([block(36)]), null);
+  const extraOptionTable = await parse([block(36)]);
+  assert.equal(extraOptionTable?.items.length, 36);
   assert.equal(await parse([block(), block(1)]), null);
   assert.equal(await parse([block(), block(1, { offset_dec: 500 })], { optionCount: 36 }), null);
   for (const offset_dec of [undefined, -1, 1.5]) {

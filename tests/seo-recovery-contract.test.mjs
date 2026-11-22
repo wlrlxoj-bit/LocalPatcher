@@ -55,7 +55,7 @@ test('2. trainer-option-table은 고유명사 1건 일치로 전체 표를 버�
   );
   assert.match(source, /let translatedLabelCount = 0;/);
   assert.match(source, /if \(normalizeLabel\(source\.label\) !== normalizeLabel\(item\.label\)\)/);
-  assert.match(source, /if \(items\.length !== optionCount\) return null;/);
+  assert.match(source, /if \(items\.length < optionCount\) return null;/);
   assert.match(source, /if \(translatedLabelCount < Math\.ceil\(items\.length \* 0\.5\)\) return null;/);
   // 단축키·중복·오프셋 무결성 계약 유지
   assert.match(source, /shortcut !== normalizeShortcut\(source\.shortcut\) \|\| shortcuts\.has\(shortcut\)/);
@@ -173,8 +173,8 @@ test('4. 모바일 퍼스트 색인을 위해 시작 가이드·빌드 목록을
     read('components/PatcherUniqueContent.tsx'),
   ]);
 
-  // PatcherClient: h1 구조 보존 및 하드코딩 Original Game 제거
-  assert.match(clientSource, /<h1 className="text-xl md:text-2xl font-bold text-white font-outfit">\{displayTitle\}<\/h1>/);
+  // PatcherClient: 검색 의도 포함 h1 및 하드코딩 Original Game 제거
+  assert.match(clientSource, /<h1 className="text-xl md:text-2xl font-bold text-white font-outfit">\{heroTitle\}<\/h1>/);
   assert.doesNotMatch(clientSource, /Original Game:\s*\{game\.title_en\}/);
   assert.match(clientSource, /ko:\s*'영문 원제'/);
   assert.match(clientSource, /ja:\s*'原題'/);
@@ -226,4 +226,108 @@ test('5. sitemap은 최신순 정렬, 정적 우선순위 분리, hreflang alter
   assert.match(source, /patcherAlternatesBySlug/);
   assert.match(source, /languages\['x-default'\]\s*=\s*defaultUrl/);
   assert.match(source, /alternates:\s*\{\s*languages\s*\}/);
+});
+
+test('6. Wave 3 P0-1: /en 및 정적 7개 페이지는 noindex·개별 openGraph·중첩 main 제거를 준수한다', async () => {
+  const layoutSource = await read('app/[locale]/layout.tsx');
+  assert.match(layoutSource, /currentLocale === 'en'\s*\?\s*\{\s*robots:\s*\{\s*index:\s*false,\s*follow:\s*true\s*\}\s*\}/);
+  assert.doesNotMatch(layoutSource, /\n\s*keywords,\n/);
+
+  const staticMetaFiles = [
+    'app/[locale]/guides/page.tsx',
+    'app/[locale]/faq/layout.tsx',
+    'app/[locale]/about/page.tsx',
+    'app/[locale]/editorial-policy/page.tsx',
+    'app/[locale]/contact/page.tsx',
+    'app/[locale]/privacy/page.tsx',
+    'app/[locale]/terms/page.tsx',
+  ];
+  for (const file of staticMetaFiles) {
+    const source = await read(file);
+    assert.match(source, /=== 'en'\s*\?\s*\{\s*robots:\s*\{\s*index:\s*false,\s*follow:\s*true\s*\}\s*\}/, `${file} /en noindex 누락`);
+    assert.match(source, /openGraph:\s*\{[\s\S]*?title[\s\S]*?description[\s\S]*?url/, `${file} 개별 openGraph 누락`);
+  }
+
+  const staticPageFiles = [
+    'app/[locale]/guides/page.tsx',
+    'app/[locale]/faq/page.tsx',
+    'app/[locale]/about/page.tsx',
+    'app/[locale]/editorial-policy/page.tsx',
+    'app/[locale]/contact/page.tsx',
+    'app/[locale]/privacy/page.tsx',
+    'app/[locale]/terms/page.tsx',
+  ];
+  for (const file of staticPageFiles) {
+    const source = await read(file);
+    assert.doesNotMatch(source, /<main\b/, `${file}에 중첩 <main>이 남아 있으면 안 됩니다.`);
+  }
+});
+
+test('7. Wave 3 P0-5: middleware 307+Vary, support alternates, 404 noindex 메타데이터를 보장한다', async () => {
+  const [middlewareSource, supportLayout, patcherPage] = await Promise.all([
+    read('middleware.ts'),
+    read('app/[locale]/support/layout.tsx'),
+    read('app/[locale]/patcher/[game_slug]/page.tsx'),
+  ]);
+
+  assert.match(middlewareSource, /NextResponse\.redirect\(url,\s*307\)/);
+  assert.match(middlewareSource, /response\.headers\.set\('Vary',\s*'Accept-Language'\)/);
+  assert.match(supportLayout, /robots:\s*\{\s*index:\s*false,\s*follow:\s*true\s*\}/);
+  assert.match(supportLayout, /canonical:\s*`\$\{SITE_URL\}\/\$\{currentLocale\}\/support`/);
+  assert.match(supportLayout, /localizedAlternates\('\/support'\)/);
+  assert.match(patcherPage, /if\s*\(!patcherData \|\| patcherData\.canonicalSlug !== game_slug\)\s*\{\s*return\s*\{\s*robots:\s*\{\s*index:\s*false,\s*follow:\s*false\s*\}\s*\};/);
+});
+
+test('8. Wave 3 P0-4 & P1-1~P1-3: 교차 링크 확장·검색 의도 H1·브레드크럼·Steam koreana·영어 누수 차단·옵션 표 정합성을 검증한다', async () => {
+  const [supabaseSource, steamSource, patcherPage, patcherClient, uniqueContent] = await Promise.all([
+    read('lib/supabase.ts'),
+    read('lib/steam.ts'),
+    read('app/[locale]/patcher/[game_slug]/page.tsx'),
+    read('components/PatcherClient.tsx'),
+    read('components/PatcherUniqueContent.tsx'),
+  ]);
+
+  // P0-4: 연관 게임 오버페치 + 중복 제거 + 현지화 분기 인기 게임 섹션 + optionsCount 수정
+  assert.match(supabaseSource, /const candidateLimit = Math\.max\(limit \* 3,\s*18\)/);
+  assert.match(supabaseSource, /const existingIds = new Set<number>\(\[gameId,\s*\.\.\.relatedGames\.map/);
+  assert.match(supabaseSource, /!existingIds\.has\(game\.id\)/);
+  assert.equal((patcherClient.match(/aria-labelledby="popular-trainers-heading"/g) || []).length, 2);
+  assert.doesNotMatch(patcherClient, /optionsLabel=\{pt\.optionsLabel\}/);
+  assert.match(patcherClient, /optionsLabel=\{pt\.optionsCount\}/);
+
+  // P1-1: 브레드크럼 + 현지화 커버 alt
+  assert.match(patcherClient, /<nav aria-label="Breadcrumb"/);
+  assert.match(patcherClient, /alt=\{displayTitle\}/);
+
+  // P1-2: Steam 한국어 코드 koreana + 비영어 설명 영문 폴백 제거 + BreadcrumbList·isAccessibleForFree·dateModified
+  assert.match(steamSource, /ko:\s*'koreana'/);
+  assert.doesNotMatch(steamSource, /ko:\s*'korean'/);
+  assert.match(patcherPage, /const description = currentLocale === 'en'/);
+  assert.match(patcherPage, /'isAccessibleForFree':\s*true/);
+  assert.match(patcherPage, /'dateModified':\s*dateModified/);
+  assert.match(patcherPage, /'@type':\s*'BreadcrumbList'/);
+
+  // P1-3: optionTable 렌더 시 상단 optionSummary 중복 생략
+  assert.match(uniqueContent, /\{!optionTable && <PatcherOptionSummary locale=\{locale\} summary=\{optionSummary\} \/>\}/);
+});
+
+test('9. Wave 3 P1-4~P1-6: de/es 홈 메타·WebSite JSON-LD·SSR FAQ 답변/JSON-LD·GameCard alt/h3·SteamPlayerCount CLS 방어를 검증한다', async () => {
+  const [layoutI18n, homePage, faqPage, gameCard, playerCount] = await Promise.all([
+    read('lib/i18n/pages/layout.ts'),
+    read('app/[locale]/page.tsx'),
+    read('app/[locale]/faq/page.tsx'),
+    read('components/GameCard.tsx'),
+    read('components/SteamPlayerCount.tsx'),
+  ]);
+
+  assert.match(layoutI18n, /de:\s*\{[\s\S]*?FLiNG[\s\S]*?Deutsch Patch[\s\S]*?Cheats/);
+  assert.match(layoutI18n, /es:\s*\{[\s\S]*?FLiNG[\s\S]*?Parche Español[\s\S]*?Trucos/i);
+  assert.match(homePage, /'@type':\s*'WebSite'/);
+  assert.match(faqPage, /'@type':\s*'FAQPage'/);
+  assert.match(faqPage, /<details[\s\S]*?<summary/);
+  assert.doesNotMatch(faqPage, /\{isOpen &&/);
+  assert.match(gameCard, /alt=\{displayTitle\}/);
+  assert.match(gameCard, /<h3\b/);
+  assert.doesNotMatch(gameCard, /<h4\b/);
+  assert.match(playerCount, /min-h-\[28px\]/);
 });

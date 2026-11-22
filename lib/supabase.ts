@@ -453,7 +453,9 @@ export async function resolveGameSlugAlias(aliasSlug: string): Promise<string | 
 }
 
 export const getRelatedGames = unstable_cache(async (gameId: number, limit = 6): Promise<Game[]> => {
-  if (!supabase) return mockGames.filter(g => g.id !== gameId).slice(0, limit);
+  // 언어별 색인 자격 필터링(ja/de/es 등) 후에도 충분한 내부 링크가 남도록 후보를 넉넉히 조회합니다.
+  const candidateLimit = Math.max(limit * 3, 18);
+  if (!supabase) return mockGames.filter(g => g.id !== gameId).slice(0, candidateLimit);
 
   try {
     const { data: currentGame } = await supabase
@@ -471,22 +473,24 @@ export const getRelatedGames = unstable_cache(async (gameId: number, limit = 6):
         .select('*')
         .neq('id', gameId)
         .overlaps('genres', genresArray)
-        .limit(limit);
+        .limit(candidateLimit);
         
       if (data) relatedGames = data;
     }
 
-    if (relatedGames.length < limit) {
+    if (relatedGames.length < candidateLimit) {
+      const existingIds = new Set<number>([gameId, ...relatedGames.map((game) => game.id)]);
       const { data: popularGames } = await supabase
         .from('games')
         .select('*')
         .neq('id', gameId)
         .eq('is_popular', true)
         .order('popularity_index', { ascending: true })
-        .limit(limit - relatedGames.length);
+        .limit(candidateLimit);
         
       if (popularGames) {
-        relatedGames = [...relatedGames, ...popularGames];
+        const dedupedPopular = popularGames.filter((game) => !existingIds.has(game.id));
+        relatedGames = [...relatedGames, ...dedupedPopular].slice(0, candidateLimit);
       }
     }
 

@@ -107,8 +107,10 @@ async function renderPage(popular, related, eligible, locale = 'ko', mainOverrid
   for (const key of Object.keys(props.game)) assert.equal(props.game[key], main[key]);
   const info = elements(props.gameInfoSlot, 'PatcherUniqueContent')[0].props;
   const localizedDescription = main[`description_${locale}`];
-  assert.equal(info.description, typeof localizedDescription === 'string' && localizedDescription.trim()
-    ? localizedDescription : main.description_en);
+  const expectedDescription = locale === 'en'
+    ? (typeof main.description_en === 'string' && main.description_en.trim() ? main.description_en : undefined)
+    : (typeof localizedDescription === 'string' && localizedDescription.trim() ? localizedDescription : undefined);
+  assert.equal(info.description, expectedDescription);
   assert.equal(info.gameTitle, locale !== 'en' && main[`title_${locale}`] ? main[`title_${locale}`] : main.title_en);
   assert.equal(info.gameTitleEn, main.title_en);
   if (Array.isArray(main.genres)) assert.equal(info.genres, main.genres);
@@ -172,8 +174,9 @@ test('5개 언어의 카드 제목·fallback·링크·이미지·anti-cheat와 �
           optionCount: card.trainers[0].option_count, optionsLabel: 'Options' });
         assert.equal(elements(tree, 'card-link')[0].props.href, `/${locale}/patcher/game-${index + 1}`);
         assert.equal(elements(tree, 'card-image')[0].props.src, card.cover_image_url);
-        assert.equal(elements(tree, 'card-image')[0].props.alt, card.title_en);
-        assert.equal(elements(tree, 'h4')[0].props.children, index === 1 ? fallback.title_en : localized[`title_${locale}`]);
+        const expectedTitle = index === 1 ? fallback.title_en : localized[`title_${locale}`];
+        assert.equal(elements(tree, 'card-image')[0].props.alt, expectedTitle);
+        assert.equal(elements(tree, 'h3')[0].props.children, expectedTitle);
         assert.equal(elements(tree, 'lock').length, index === 0 ? 1 : 0);
         assert.equal(elements(tree, 'p')[0].props.children.join(''), 'Version: v2.0');
         assert.deepEqual(plain(card.trainers), [{ version_str: 'v2.0', option_count: 7 }]);
@@ -223,13 +226,20 @@ test('본문 game은 10개 원값만 전달하고 5개 언어의 대형 설명·
       assert.equal(Object.hasOwn(props.game, key), false);
     }
     const clientTree = Client(props);
-    assert.equal(elements(clientTree, 'h1')[0].props.children, main[`title_${locale}`]);
+    const expectedH1 = {
+      en: main.title_en,
+      ko: `${main.title_ko} 트레이너 한글 패치`,
+      ja: `${main.title_ja} トレーナー日本語化パッチ`,
+      de: `${main.title_de} Trainer Deutsch Patch`,
+      es: `${main.title_es} Trainer Parche Español`,
+    }[locale];
+    assert.equal(elements(clientTree, 'h1')[0].props.children, expectedH1);
     assert.equal(elements(clientTree, 'client-image')[0].props.src, main.cover_image_url);
     assert.ok(Buffer.byteLength(JSON.stringify(props.game)) < Buffer.byteLength(JSON.stringify(main)));
   }
 });
 
-test('본문 5개 언어의 빈 제목·누락 제목·공백 설명·누락 설명은 영어로 fallback한다', async () => {
+test('본문 5개 언어의 빈 제목·누락 제목은 영어로 fallback하되 비영어 설명 누락 시 영어 설명을 노출하지 않는다', async () => {
   const Client = loadClient();
   for (const locale of ['en', 'ko', 'ja', 'de', 'es']) {
     for (const missing of ['', undefined]) {
@@ -238,8 +248,18 @@ test('본문 5개 언어의 빈 제목·누락 제목·공백 설명·누락 설
         description_ja: missing === '' ? '  ' : undefined, description_de: missing === '' ? '  ' : undefined,
         description_es: missing === '' ? '  ' : undefined };
       const props = await renderPage([], [], new Set(), locale, overrides);
-      assert.equal(elements(Client(props), 'h1')[0].props.children, 'English 1000');
-      assert.equal(elements(props.gameInfoSlot, 'PatcherUniqueContent')[0].props.description, '합성 영어 fallback');
+      const expectedH1 = {
+        en: 'English 1000',
+        ko: 'English 1000 트레이너 한글 패치',
+        ja: 'English 1000 トレーナー日本語化パッチ',
+        de: 'English 1000 Trainer Deutsch Patch',
+        es: 'English 1000 Trainer Parche Español',
+      }[locale];
+      assert.equal(elements(Client(props), 'h1')[0].props.children, expectedH1);
+      assert.equal(
+        elements(props.gameInfoSlot, 'PatcherUniqueContent')[0].props.description,
+        locale === 'en' ? '합성 영어 fallback' : undefined,
+      );
     }
   }
 });

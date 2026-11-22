@@ -119,7 +119,7 @@ export default function PatcherUniqueContent({
           </div>
         </dl>
 
-        <PatcherOptionSummary locale={locale} summary={optionSummary} />
+        {!optionTable && <PatcherOptionSummary locale={locale} summary={optionSummary} />}
         <PatcherOptionTable locale={locale} table={optionTable} />
       </section>
 

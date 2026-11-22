@@ -443,6 +443,9 @@ export default function PatcherClient({
   const gamesT = getGamesDict(locale);
   const pt = getPatcherDict(locale as Locale);
   const displayTitle = getGameTitle(game, locale);
+  const heroTitle = pt.heroTitleTemplate
+    ? pt.heroTitleTemplate.replace('{gameTitle}', displayTitle)
+    : displayTitle;
   const [selectedTrainerId, setSelectedTrainerId] = useState<number>(
     sortedTrainers.length > 0 ? sortedTrainers[0].id : 0
   );
@@ -723,8 +726,25 @@ export default function PatcherClient({
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-12 flex flex-col gap-6 items-start w-full">
-      {/* Back button */}
-      <div className="mb-0 w-full">
+      {/* Breadcrumb & Back navigation */}
+      <div className="mb-0 w-full flex flex-wrap items-center justify-between gap-2">
+        <nav aria-label="Breadcrumb" className="text-xs text-slate-400">
+          <ol className="flex items-center gap-1.5">
+            <li>
+              <Link
+                href={`/${locale}`}
+                prefetch={false}
+                className="hover:text-cyan-400 transition-colors"
+              >
+                {pt.breadcrumbHome || 'Home'}
+              </Link>
+            </li>
+            <li aria-hidden="true" className="text-slate-600">&gt;</li>
+            <li aria-current="page" className="text-slate-200 font-medium truncate max-w-[260px] sm:max-w-md">
+              {displayTitle}
+            </li>
+          </ol>
+        </nav>
         <Link 
           href={`/${locale}`}
           prefetch={false}
@@ -746,7 +766,7 @@ export default function PatcherClient({
           >
             <Image 
               src={game.cover_image_url} 
-              alt={`${game.title_en} cover`}
+              alt={displayTitle}
               fill
               sizes="80px"
               priority
@@ -755,7 +775,7 @@ export default function PatcherClient({
             />
           </div>
           <div className="pt-1 flex-1">
-            <h1 className="text-xl md:text-2xl font-bold text-white font-outfit">{displayTitle}</h1>
+            <h1 className="text-xl md:text-2xl font-bold text-white font-outfit">{heroTitle}</h1>
             {displayTitle !== game.title_en && (
               <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-mono mb-3">
                 {ORIGINAL_GAME_LABEL[locale]}: {game.title_en}
@@ -1019,7 +1039,35 @@ export default function PatcherClient({
                             trainerVersion={trainer.version_str}
                             optionCount={trainer.option_count ?? 0}
                             locale={locale}
-                            optionsLabel={pt.optionsLabel}
+                            optionsLabel={pt.optionsCount}
+                            hideDetails={true}
+                          />
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                {/* Popular Trainers Grid */}
+                {popularGames && popularGames.length > 0 && (
+                  <section className="mt-12" aria-labelledby="popular-trainers-heading">
+                    <div className="flex items-center gap-3 mb-6">
+                      <h2 id="popular-trainers-heading" className="text-xl font-bold text-slate-100">
+                        {pt.popularTrainers}
+                      </h2>
+                      <div className="h-px flex-1 bg-gradient-to-r from-slate-800 to-transparent"></div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {popularGames.slice(0, 6).map((pg) => {
+                        const trainer = pg.trainers?.[0] || { version_str: '1.0', option_count: 0 };
+                        return (
+                          <GameCard
+                            key={pg.id}
+                            game={pg}
+                            trainerVersion={trainer.version_str}
+                            optionCount={trainer.option_count ?? 0}
+                            locale={locale}
+                            optionsLabel={pt.optionsCount}
                             hideDetails={true}
                           />
                         );

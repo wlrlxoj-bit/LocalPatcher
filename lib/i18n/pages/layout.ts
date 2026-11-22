@@ -26,13 +26,13 @@ export const layoutMetadataContent = {
     keywords: ['ゲーム', '日本語化', '日本語訳', 'パッチ', 'トレーナー', 'チート', '無料', 'ダウンロード', '日本', 'ローカルパッチャー', 'LocalPatcher'],
   },
   de: {
-    title: 'LocalPatcher - Spiele-Trainer Lokalisierungs-Tool',
-    description: 'Ein Browser-Tool zum lokalen Übersetzen von Spiele-Trainern ohne Datei-Upload.',
+    title: 'FLiNG Spiele-Trainer Deutsch Patch & Cheats | LocalPatcher',
+    description: 'Kostenloser FLiNG Spiele-Trainer Deutsch Patch für Steam & PC-Cheats. Trainer-Optionen direkt im Browser lokal übersetzen – ohne Datei-Upload.',
     keywords: ['spiele', 'trainer', 'cheats', 'übersetzung', 'patch', 'download', 'deutsch', 'localpatcher', 'spieletrainer', 'lokalisierung'],
   },
   es: {
-    title: 'LocalPatcher - Herramienta de Localización de Trainers',
-    description: 'Una herramienta de navegador para parchear trainers de juegos localmente sin subir archivos.',
+    title: 'Parche Español para FLiNG Trainers y Trucos de PC | LocalPatcher',
+    description: 'Aplica el parche español a trainers de FLiNG y trucos para juegos de Steam y PC. Traducción local en el navegador sin subir archivos al servidor.',
     keywords: ['juegos', 'trainer', 'trucos', 'traducción', 'parche', 'descargar', 'español', 'localpatcher', 'parcheador', 'localización'],
   },
 };

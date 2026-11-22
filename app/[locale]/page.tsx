@@ -1,7 +1,8 @@
 import React from 'react';
 import GamesListClient from '@/components/GamesListClient';
 import { getGamesWithTrainers } from '@/lib/supabase';
-import { Locale, getCommonDict } from '@/lib/i18n/index';
+import { Locale, getCommonDict, getLayoutMetadata } from '@/lib/i18n/index';
+import { SITE_URL } from '@/lib/site';
 import { ShieldCheck, Zap, Info } from 'lucide-react';
 import GamesListSkeleton from '@/components/GamesListSkeleton';
 import PatcherLinkDirectory from '@/components/PatcherLinkDirectory';
@@ -56,9 +57,24 @@ export default async function LocalePage({
   const { locale } = await params;
   const currentLocale = (locale === 'en' || locale === 'ja' || locale === 'ko' || locale === 'de' || locale === 'es') ? (locale as Locale) : 'ko';
   const t = getCommonDict(currentLocale);
+  const meta = getLayoutMetadata(currentLocale);
+  const websiteJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'LocalPatcher',
+    url: `${SITE_URL}/${currentLocale}`,
+    inLanguage: currentLocale,
+    description: meta.description,
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-12 flex flex-col items-center">
+      {currentLocale !== 'en' && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd).replace(/</g, '\\u003c') }}
+        />
+      )}
       {/* Hero Section */}
       <div className="text-center max-w-2xl mb-12">
         <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full border border-cyan-500/30 bg-cyan-950/40 text-xs font-semibold text-cyan-400 mb-4 tracking-wide glow-cyan">

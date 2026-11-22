@@ -53,13 +53,16 @@ export function middleware(request: NextRequest) {
   if (pathnameIsMissingLocale) {
     const locale = getLocale(request);
     
-    // 308 Permanent Redirect to the localized path
+    // Accept-Language 기반 로케일 분기는 307 + Vary: Accept-Language를 반환해
+    // 크롤러·브라우저가 잘못된 로케일을 영구 캐시하지 않도록 합니다.
     const url = new URL(`/${locale}${pathname === '/' ? '' : pathname}`, request.url);
     if (request.nextUrl.search) {
       url.search = request.nextUrl.search;
     }
     
-    return NextResponse.redirect(url, 308);
+    const response = NextResponse.redirect(url, 307);
+    response.headers.set('Vary', 'Accept-Language');
+    return response;
   }
 
   // 정확히 등록된 과거 주소만 즉시 이동한다. 일반 별칭은 페이지에서 DB·제목 확인 후 처리한다.
