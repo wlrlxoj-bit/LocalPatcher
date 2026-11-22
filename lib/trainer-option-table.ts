@@ -61,7 +61,8 @@ function parseOptions(value: string): TrainerOptionTableItem[] | null {
 /**
  * 입력은 최신 ID·현재 언어·옵션 수와 승인 매핑입니다. 블록 및 개별 슬롯을 오프셋
  * 순서로 모으되 짝·범위·중복·수량이 모두 정확할 때만 전체 번역 표를 반환합니다.
- * 원문 대체 라벨이나 손상된 한 행이 있으면 부분 표 대신 null을 반환합니다.
+ * HP/XP/SP 같은 고유명사·약어가 일부 원문과 같더라도 전체 옵션의 과반 이상이
+ * 번역되었으면 표를 반환하고, 과반 미만이나 손상된 행이 있으면 null을 반환합니다.
  */
 export function getTrainerOptionTable({ latestTrainerId, locale, optionCount, indexEligible, mappings }: TrainerOptionTableInput): TrainerOptionTable | null {
   if (!indexEligible || !LOCALIZED_LOCALES.has(locale) ||
@@ -77,6 +78,7 @@ export function getTrainerOptionTable({ latestTrainerId, locale, optionCount, in
 
   const items: TrainerOptionTableItem[] = [];
   const shortcuts = new Set<string>();
+  let translatedLabelCount = 0;
   for (const mapping of [...mappings].sort((left, right) => left.offset_dec - right.offset_dec)) {
     const original = parseOptions(mapping.original_text);
     const translated = parseOptions(mapping.translated_text);
@@ -84,11 +86,15 @@ export function getTrainerOptionTable({ latestTrainerId, locale, optionCount, in
     for (const [index, item] of translated.entries()) {
       const source = original[index];
       const shortcut = normalizeShortcut(item.shortcut);
-      if (!source || shortcut !== normalizeShortcut(source.shortcut) || shortcuts.has(shortcut) ||
-        normalizeLabel(source.label) === normalizeLabel(item.label)) return null;
+      if (!source || shortcut !== normalizeShortcut(source.shortcut) || shortcuts.has(shortcut)) return null;
+      if (normalizeLabel(source.label) !== normalizeLabel(item.label)) {
+        translatedLabelCount += 1;
+      }
       shortcuts.add(shortcut);
       items.push(item);
     }
   }
-  return items.length === optionCount ? { items } : null;
+  if (items.length !== optionCount) return null;
+  if (translatedLabelCount < Math.ceil(items.length * 0.5)) return null;
+  return { items };
 }

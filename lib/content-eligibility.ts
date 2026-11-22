@@ -47,7 +47,7 @@ export function isAutoLocalizationLocale(locale: string): locale is IndexableLoc
   return AUTO_LOCALIZATION_LOCALES.includes(locale as IndexableLocale);
 }
 
-/** 승인된 원문이 번역 검증기와 같은 수의 실제 옵션을 포함하는지 확인합니다. */
+/** 승인된 원문과 번역문이 번역 검증기와 같은 수의 실제 옵션을 포함하는지 확인합니다. */
 export function hasCompleteApprovedMappings(rows: MappingRow[], optionCount: number): boolean {
   if (rows.length === 0 || !rows.every((row) => row.is_approved &&
     typeof row.original_text === 'string' && row.original_text.trim().length > 0 &&
@@ -55,13 +55,17 @@ export function hasCompleteApprovedMappings(rows: MappingRow[], optionCount: num
   )) return false;
 
   // 한 슬롯에 전체 옵션 블록을 저장하는 최신 형식과, 슬롯을 나눈 과거 형식 모두를
-  // 허용하되 승인된 원문에서 실제 옵션 수를 확인한다. 일부 슬롯만 승인된 페이지는
-  // sitemap/index에 들어갈 수 없다.
-  const optionLabels = rows.flatMap((row) => {
+  // 허용하되 승인된 원문과 번역문 모두에서 실제 옵션 수를 확인한다. 일부 슬롯만
+  // 승인되거나 번역이 누락된 페이지는 sitemap/index에 들어갈 수 없다.
+  const originalOptionLabels = rows.flatMap((row) => {
     OPTION_LABEL_PATTERN.lastIndex = 0;
     return row.original_text!.match(OPTION_LABEL_PATTERN) || [];
   });
-  return optionLabels.length >= optionCount;
+  const translatedOptionLabels = rows.flatMap((row) => {
+    OPTION_LABEL_PATTERN.lastIndex = 0;
+    return row.translated_text!.match(OPTION_LABEL_PATTERN) || [];
+  });
+  return originalOptionLabels.length >= optionCount && translatedOptionLabels.length >= optionCount;
 }
 
 async function readAllPages<T>(fetchPage: (from: number, to: number) => Promise<{ data: T[] | null; error: unknown }>): Promise<T[]> {

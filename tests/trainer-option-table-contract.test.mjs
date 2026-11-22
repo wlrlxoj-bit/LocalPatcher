@@ -93,19 +93,46 @@ test('누락·과잉·중복 단축키·중복 또는 손상된 오프셋은 부
   assert.equal(await parse([duplicate], { optionCount: 36 }), null);
 });
 
-test('손상된 라벨·단축키 불일치·영문 원문 대체를 승인 번역으로 표시하지 않는다', async () => {
+test('손상된 라벨·단축키 불일치·과반 미만 번역(영문 원문 대체)을 승인 번역으로 표시하지 않는다', async () => {
+  // 35개 중 18개를 영문 원문 그대로 유지하면 번역 비율이 과반 미만(17/35)이므로 null이어야 합니다.
+  const mostlyUntranslated = Array.from({ length: 35 }, (_, number) => (
+    number < 18 ? option(number, 'en') : option(number, 'ko')
+  )).join('\n');
+
   for (const translated_text of [
     block().translated_text.replace('Shift + Num 4', 'Shift + Num 5'),
     block().translated_text.replace('승인 번역 옵션 35', ''),
     block().translated_text.replace('승인 번역 옵션 35', 'x'.repeat(181)),
     block().translated_text.replace('승인 번역 옵션 35', '\ufffd'),
-    block().translated_text.replace('승인 번역 옵션 35', '  ORIGINAL   OPTION 35 '),
+    mostlyUntranslated,
     block().original_text,
     `${block().translated_text}\nNum 9 -`,
   ]) {
     assert.equal(await parse([block(35, { translated_text })]), null);
   }
   assert.equal(await parse([block(35, { original_text: block().original_text.replace('Original option 35', '') })]), null);
+});
+
+test('HP/XP/SP 같은 소수 고유명사가 원문과 같아도 과반 이상 번역되면 전체 옵션 표를 유지한다', async () => {
+  const originalLines = Array.from({ length: 35 }, (_, number) => {
+    if (number === 0) return 'Num 0 - Max HP';
+    if (number === 1) return 'Num 1 - Max XP';
+    if (number === 2) return 'Num 2 - God Mode';
+    return option(number, 'en');
+  });
+  const translatedLines = Array.from({ length: 35 }, (_, number) => {
+    if (number === 0) return 'Num 0 - Max HP';
+    if (number === 1) return 'Num 1 - Max XP';
+    if (number === 2) return 'Num 2 - God Mode';
+    return option(number, 'ko');
+  });
+  const result = await parse([block(35, {
+    original_text: originalLines.join('\n'),
+    translated_text: translatedLines.join('\n'),
+  })]);
+  assert.equal(result?.items.length, 35);
+  assert.deepEqual(result?.items[0], { shortcut: 'Num 0', label: 'Max HP' });
+  assert.deepEqual(result?.items[34], { shortcut: 'Shift + Num 4', label: '승인 번역 옵션 35' });
 });
 
 test('승인 검증기에서 사용하는 특수 Num·방향·함수 키와 구분자를 처리한다', async () => {

@@ -17,7 +17,6 @@ import {
   getRelatedGames,
 } from '@/lib/supabase';
 import { Locale, getGameTitle, getPatcherDict } from '@/lib/i18n/index';
-import { translateGenre } from '@/lib/i18n/genres';
 import { SITE_URL } from '@/lib/site';
 import { extractSteamAppId } from '@/lib/steam';
 import {
@@ -117,41 +116,64 @@ export async function generateMetadata({ params }: PatcherPageProps) {
     .map(({ candidate }) => [candidate, `/${candidate}/patcher/${canonicalSlug}`]));
   if (alternateLanguages.ko) {
     alternateLanguages['x-default'] = alternateLanguages.ko;
+  } else {
+    const firstAlternateUrl = Object.values(alternateLanguages)[0];
+    if (firstAlternateUrl) {
+      alternateLanguages['x-default'] = firstAlternateUrl;
+    }
   }
 
+  const latestVersion = trainers?.[0]?.version_str?.trim() || '';
+  const latestOptionCount = typeof trainers?.[0]?.option_count === 'number' && trainers[0].option_count > 0
+    ? trainers[0].option_count
+    : 0;
   const versionsStr = trainers && trainers.length > 0
-    ? trainers.map(t => t.version_str).join(', ')
+    ? trainers.map(t => t.version_str).filter(Boolean).join(', ')
     : '';
+  const optionBadge = latestOptionCount > 0 ? ({
+    ko: ` (${latestOptionCount}개 옵션)`,
+    ja: ` (${latestOptionCount}機能)`,
+    de: ` (${latestOptionCount} Optionen)`,
+    es: ` (${latestOptionCount} opciones)`,
+    en: ` (${latestOptionCount} Options)`,
+  }[currentLocale] ?? '') : '';
 
   const pt = getPatcherDict(currentLocale as Locale);
   const gameName = getGameTitle(game, currentLocale as Locale);
   const gameNameEn = game.title_en;
+  const sameTitle = gameName.trim().toLowerCase() === gameNameEn.trim().toLowerCase();
 
-  const title = hasApprovedTranslation 
-    ? pt.metaTitleApproved.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn)
-    : pt.metaTitleUnapproved.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn);
-    
-  const description = hasApprovedTranslation
-    ? pt.metaDescApproved.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn).replace('{versionsStr}', versionsStr)
-    : pt.metaDescUnapproved.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn).replace('{versionsStr}', versionsStr);
+  // 원제와 현지화 제목이 같으면 괄호 병기를 제거하고, 버전·옵션 배지를 깔끔히 치환합니다.
+  const formatMetaText = (template: string) => {
+    const base = sameTitle
+      ? template.replace(/\s*\(\{gameTitleEn\}\)/g, '').replace(/（\{gameTitleEn\}）/g, '')
+      : template;
+    return base
+      .replaceAll('{gameTitle}', gameName)
+      .replaceAll('{gameTitleEn}', gameNameEn)
+      .replaceAll('{optionBadge}', optionBadge)
+      .replaceAll('{latestVersion}', latestVersion)
+      .replaceAll('{optionCount}', String(latestOptionCount))
+      .replaceAll('{versionsStr}', versionsStr)
+      .replace(/\s{2,}/g, ' ')
+      .replace(/\s+([.,。])/g, '$1')
+      .trim();
+  };
 
-  const baseKeywords = pt.metaKeywords.map(k => k.replace('{gameTitle}', gameName).replace('{gameTitleEn}', gameNameEn));
-  const rawDynamic = [...(game.genres || []), ...(game.tags || [])].filter(Boolean);
-  const dynamicKeywords = rawDynamic.map(tag => {
-    // Only translate if locale is not 'en'
-    if (locale !== 'en') {
-      const translated = translateGenre(tag, locale);
-      return translated !== tag ? `${translated}, ${tag}` : tag; // Include both localized and English if translated
-    }
-    return tag;
-  });
-  
-  const keywords = [...baseKeywords, ...dynamicKeywords];
+  const title = formatMetaText(hasApprovedTranslation ? pt.metaTitleApproved : pt.metaTitleUnapproved);
+  const description = formatMetaText(hasApprovedTranslation ? pt.metaDescApproved : pt.metaDescUnapproved);
+
+  const ogLocaleMap: Record<Locale, string> = {
+    ko: 'ko_KR',
+    ja: 'ja_JP',
+    de: 'de_DE',
+    es: 'es_ES',
+    en: 'en_US',
+  };
 
   return {
     title,
     description,
-    keywords,
     robots: indexEligible ? { index: true, follow: true } : { index: false, follow: true },
     alternates: {
       canonical: `/${currentLocale}/patcher/${canonicalSlug}`,
@@ -159,6 +181,8 @@ export async function generateMetadata({ params }: PatcherPageProps) {
     },
     openGraph: {
       type: 'website',
+      siteName: 'LocalPatcher',
+      locale: ogLocaleMap[currentLocale as Locale],
       title,
       description,
       url: `${SITE_URL}/${currentLocale}/patcher/${canonicalSlug}`,
@@ -249,10 +273,21 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
     .filter((candidate) => eligibleByGameId.get(candidate.id) === true)
     .map(toCardData);
 
+  const canonicalUrl = `${SITE_URL}/${currentLocale}/patcher/${patcherData?.canonicalSlug ?? game.slug}`;
+  const localizedGameTitle = getGameTitle(game, currentLocale as Locale);
+  const jsonLdNameMap: Record<Locale, string> = {
+    ko: `${localizedGameTitle} 트레이너 한글 패치`,
+    ja: `${localizedGameTitle} トレーナー日本語化パッチ`,
+    de: `${localizedGameTitle} Trainer Deutsch Patch`,
+    es: `${localizedGameTitle} Trainer Parche Español`,
+    en: `${game.title_en} Trainer Local Patcher`,
+  };
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
-    'name': `${game.title_en} Trainer Local Patcher`,
+    'name': jsonLdNameMap[currentLocale as Locale],
+    'inLanguage': currentLocale,
+    'url': canonicalUrl,
     'operatingSystem': 'Windows',
     'applicationCategory': 'GameApplication',
     'offers': {
@@ -260,10 +295,13 @@ export default async function PatcherPage({ params }: PatcherPageProps) {
       'price': '0',
       'priceCurrency': 'USD',
     },
-    'description': pt.jsonLdDescription.replace('{gameTitleKo}', game.title_ko || game.title_en).replace('{gameTitleEn}', game.title_en),
+    'description': pt.jsonLdDescription
+      .replaceAll('{gameTitle}', localizedGameTitle)
+      .replaceAll('{gameTitleKo}', game.title_ko || game.title_en)
+      .replaceAll('{gameTitleEn}', game.title_en),
     'screenshot': game.cover_image_url,
     'softwareVersion': trainers[0]?.version_str || '1.0',
-    'downloadUrl': `${SITE_URL}/${currentLocale}/patcher/${patcherData?.canonicalSlug ?? game.slug}`,
+    'downloadUrl': canonicalUrl,
   };
 
   const steamAppId = extractSteamAppId(game.cover_image_url);

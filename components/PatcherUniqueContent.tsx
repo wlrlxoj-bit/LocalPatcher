@@ -1,6 +1,7 @@
 import React from 'react';
 import { Languages, ListChecks } from 'lucide-react';
 import type { Locale } from '@/lib/i18n/types';
+import { translateGenre } from '@/lib/i18n/genres';
 import PatcherOptionSummary from '@/components/PatcherOptionSummary';
 import type { TrainerOptionSummary } from '@/lib/trainer-option-summary';
 import PatcherOptionTable from '@/components/PatcherOptionTable';
@@ -23,6 +24,7 @@ interface PatcherUniqueContentProps {
 
 const GAME_FACT_LABELS: Record<Locale, {
   title: string;
+  englishTitle: string;
   description: string;
   versions: string;
   options: string;
@@ -32,11 +34,11 @@ const GAME_FACT_LABELS: Record<Locale, {
   original: string;
   unavailable: string;
 }> = {
-  ko: { title: '게임별 지원 정보', description: '게임 소개', versions: '지원 버전', options: '등록된 최신 트레이너 옵션 수', categories: '장르 및 태그', translation: '등록된 최신 트레이너 번역 상태', translated: '승인 번역', original: '영문 원문 제공', unavailable: '정보 없음' },
-  en: { title: 'Game-specific support details', description: 'Game overview', versions: 'Supported versions', options: 'Latest listed trainer options', categories: 'Genres and tags', translation: 'Latest listed trainer translation', translated: 'Approved translations', original: 'English source available', unavailable: 'Not available' },
-  ja: { title: 'ゲーム別サポート情報', description: 'ゲーム概要', versions: '対応バージョン', options: '登録済み最新トレーナーのオプション数', categories: 'ジャンルとタグ', translation: '登録済み最新トレーナーの翻訳状況', translated: '承認済み翻訳', original: '英語原文を提供', unavailable: '情報なし' },
-  de: { title: 'Spielspezifische Unterstützung', description: 'Spielübersicht', versions: 'Unterstützte Versionen', options: 'Optionen des neuesten gelisteten Trainers', categories: 'Genres und Tags', translation: 'Übersetzung des neuesten gelisteten Trainers', translated: 'Bestätigte Übersetzungen', original: 'Englischer Originaltext verfügbar', unavailable: 'Keine Angaben' },
-  es: { title: 'Compatibilidad específica del juego', description: 'Descripción del juego', versions: 'Versiones compatibles', options: 'Opciones del último trainer registrado', categories: 'Géneros y etiquetas', translation: 'Traducción del último trainer registrado', translated: 'Traducciones aprobadas', original: 'Texto original en inglés disponible', unavailable: 'Sin información' },
+  ko: { title: '게임별 지원 정보', englishTitle: '영문 원제', description: '게임 소개', versions: '지원 버전', options: '등록된 최신 트레이너 옵션 수', categories: '장르 및 태그', translation: '등록된 최신 트레이너 번역 상태', translated: '승인 번역', original: '영문 원문 제공', unavailable: '정보 없음' },
+  en: { title: 'Game-specific support details', englishTitle: 'English title', description: 'Game overview', versions: 'Supported versions', options: 'Latest listed trainer options', categories: 'Genres and tags', translation: 'Latest listed trainer translation', translated: 'Approved translations', original: 'English source available', unavailable: 'Not available' },
+  ja: { title: 'ゲーム別サポート情報', englishTitle: '原題', description: 'ゲーム概要', versions: '対応バージョン', options: '登録済み最新トレーナーのオプション数', categories: 'ジャンルとタグ', translation: '登録済み最新トレーナーの翻訳状況', translated: '承認済み翻訳', original: '英語原文を提供', unavailable: '情報なし' },
+  de: { title: 'Spielspezifische Unterstützung', englishTitle: 'Originaltitel', description: 'Spielübersicht', versions: 'Unterstützte Versionen', options: 'Optionen des neuesten gelisteten Trainers', categories: 'Genres und Tags', translation: 'Übersetzung des neuesten gelisteten Trainers', translated: 'Bestätigte Übersetzungen', original: 'Englischer Originaltext verfügbar', unavailable: 'Keine Angaben' },
+  es: { title: 'Compatibilidad específica del juego', englishTitle: 'Título original', description: 'Descripción del juego', versions: 'Versiones compatibles', options: 'Opciones del último trainer registrado', categories: 'Géneros y etiquetas', translation: 'Traducción del último trainer registrado', translated: 'Traducciones aprobadas', original: 'Texto original en inglés disponible', unavailable: 'Sin información' },
 };
 
 export default function PatcherUniqueContent({
@@ -68,7 +70,11 @@ export default function PatcherUniqueContent({
     de: { source: 'Originale FLiNG-Veröffentlichung', guides: 'Anleitungen', privacy: 'Datenschutz' },
     es: { source: 'Página original de FLiNG', guides: 'Guías de uso', privacy: 'Privacidad' },
   }[locale];
-  const categories = [...new Set([...genres, ...tags])].slice(0, 12);
+  const rawCategories = [...genres, ...tags].filter(Boolean);
+  const localizedCategories = locale !== 'en'
+    ? rawCategories.map((category) => translateGenre(category, locale))
+    : rawCategories;
+  const categories = [...new Set(localizedCategories)].slice(0, 12);
   // 게임 설명은 등록 원문에 HTML이 포함될 수 있으므로, 서버 렌더링 정보 영역에는 텍스트만 노출합니다.
   const plainDescription = description?.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -81,7 +87,7 @@ export default function PatcherUniqueContent({
           </div>
           <div>
             <h2 className="text-lg sm:text-xl font-bold text-slate-100 font-outfit">{gameTitle} — {labels.title}</h2>
-            {gameTitle !== gameTitleEn && <p className="text-xs text-slate-500 mt-1">English title: {gameTitleEn}</p>}
+            {gameTitle !== gameTitleEn && <p className="text-xs text-slate-500 mt-1">{labels.englishTitle}: {gameTitleEn}</p>}
           </div>
         </div>
 

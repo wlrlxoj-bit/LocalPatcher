@@ -17,6 +17,15 @@ type Game = Pick<SourceGame,
   'slug' | 'cover_image_url' | 'anti_cheat' | 'fling_url'
 >;
 
+/** 게임 배너 하단 원제 표기에 사용하는 로케일별 라벨입니다. */
+const ORIGINAL_GAME_LABEL: Record<Locale, string> = {
+  ko: '영문 원제',
+  ja: '原題',
+  de: 'Originaltitel',
+  es: 'Título original',
+  en: 'Original Game',
+};
+
 interface Trainer {
   id: number;
   version_str: string;
@@ -573,7 +582,11 @@ export default function PatcherClient({
             </div>
             <div className="pt-1">
               <h1 className="text-xl md:text-2xl font-bold text-white font-outfit">{displayTitle}</h1>
-              <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-mono">Original Game: {game.title_en}</p>
+              {displayTitle !== game.title_en && (
+                <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-mono">
+                  {ORIGINAL_GAME_LABEL[locale]}: {game.title_en}
+                </p>
+              )}
               {playerCountSlot}
             </div>
           </div>
@@ -616,13 +629,13 @@ export default function PatcherClient({
         </div>
 
         {/* Supported Trainer Builds */}
-        <div className="hidden md:block p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.05)]">
+        <div className="p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.05)]">
           <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent"></div>
           
-          <h5 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
+          <h3 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
             {pt.supportedBuilds}
-          </h5>
+          </h3>
           
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -743,7 +756,11 @@ export default function PatcherClient({
           </div>
           <div className="pt-1 flex-1">
             <h1 className="text-xl md:text-2xl font-bold text-white font-outfit">{displayTitle}</h1>
-            <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-mono mb-3">Original Game: {game.title_en}</p>
+            {displayTitle !== game.title_en && (
+              <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-mono mb-3">
+                {ORIGINAL_GAME_LABEL[locale]}: {game.title_en}
+              </p>
+            )}
             
             {playerCountSlot}
 
@@ -835,7 +852,7 @@ export default function PatcherClient({
                   </div>
                 ) : (
                   <>
-                    <section aria-labelledby="patcher-start-guide-title" className="hidden md:block rounded-2xl border border-cyan-500/35 bg-gradient-to-br from-cyan-950/35 via-slate-900/70 to-indigo-950/30 p-5 sm:p-6 shadow-[0_0_30px_rgba(6,182,212,0.12)]">
+                    <section aria-labelledby="patcher-start-guide-title" className="rounded-2xl border border-cyan-500/35 bg-gradient-to-br from-cyan-950/35 via-slate-900/70 to-indigo-950/30 p-5 sm:p-6 shadow-[0_0_30px_rgba(6,182,212,0.12)]">
                       <div className="grid grid-cols-1 gap-5 md:grid-cols-[3fr_2fr] md:items-center">
                         <div>
                           <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-400">{startGuide.eyebrow}</p>
@@ -902,13 +919,13 @@ export default function PatcherClient({
                 )}
 
                 {/* Supported Trainer Builds */}
-                <div className="hidden md:block p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.05)]">
+                <div className="p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.05)]">
                   <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent"></div>
                   
-                  <h5 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <h3 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
                     {pt.supportedBuilds}
-                  </h5>
+                  </h3>
                   
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
@@ -1177,10 +1194,10 @@ function TrainerUIPreview({ game, trainer, mappings, locale }: TrainerUIPreviewP
     <div className="mt-6 p-6 rounded-xl border border-slate-800 bg-slate-900/40 backdrop-blur-md relative overflow-hidden shadow-[0_0_25px_rgba(6,182,212,0.05)]">
       <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent"></div>
       
-      <h5 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
+      <h3 className="font-bold text-sm text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
         {pt.cheatPreviewHeading}
-      </h5>
+      </h3>
       
       <p className="text-xs text-slate-400 mb-6 leading-relaxed">
         {pt.cheatPreviewSub}
